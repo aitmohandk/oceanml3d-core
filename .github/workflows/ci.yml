@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - 'feat/qg-*'
+      - 'feat/l96-*'
+      - master
+  push:
+    branches:
+      - 'feat/qg-*'
+      - 'feat/l96-*'
+
+jobs:
+  lint:
+    name: ruff lint (informational)
+    runs-on: ubuntu-latest
+    # Non-blocking (continue-on-error) as a second line of defense, but the
+    # real fix is scope: lint only the Python files this PR/push actually
+    # changed, so pre-existing ruff debt elsewhere in the repo doesn't show
+    # as a failure on every unrelated PR. Fix lint progressively; gate = pytest.
+    continue-on-error: true
+    env:
+      PYTHON_VERSION: "3.10"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint changed Python files
+        run: |
+          BASE_SHA="${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            BASE_SHA=$(git rev-list --max-parents=0 HEAD)
+          fi
+          CHANGED=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" HEAD -- '*.py' 2>/dev/null || true)
+          if [ -n "$CHANGED" ]; then
+            echo "Linting changed files:"
+            echo "$CHANGED"
+            echo "$CHANGED" | xargs ruff check
+          else
+            echo "No changed Python files to lint."
+          fi
+
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    env:
+      PYTHON_VERSION: "3.10"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install hydra-core omegaconf pytorch-lightning
+      - name: Run fast test suite
+        run: |
+          pytest \
+            tests/test_lorenz96_training.py \
+            tests/test_direct_unet.py \
+            tests/test_vanilla_cfm.py \
+            tests/test_neural_inference.py \
+            tests/test_hydra_config.py \
+            tests/test_baselines_hydra.py \
+            tests/test_metrics.py \
+            tests/test_estimate_metrics.py \
+            tests/test_joint_estimation_l96_neural.py \
+            tests/test_joint_estimation_l96.py \
+            tests/test_qg_dynamics.py \
+            tests/test_qg_data.py \
+            tests/test_qg_baselines.py \
+            tests/test_qg_s0s1.py \
+            tests/test_qg_random_columns.py \
+            tests/test_qg1l_dynamics.py \
+            tests/test_qg_psi_state.py \
+            tests/test_qg_baselines_4dvar.py \
+            tests/test_qg_neural.py \
+            -m "not slow" -q

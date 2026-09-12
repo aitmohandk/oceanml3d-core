@@ -1,0 +1,238 @@
+import os
+import sys
+import json
+import time
+import subprocess
+import torch
+import numpy as np
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from data.lorenz63 import Lorenz63Config
+from evaluation.baselines import Weak4DVar, Strong4DVar, EnKF, ETKF
+from models.lorenz63_dynamics import Lorenz63Dynamics
+
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+EXP_DIR = os.path.join(BASE, "experiments")
+os.makedirs(EXP_DIR, exist_ok=True)
+
+_BASELINE_METHODS = ["Weak-4DVar", "Strong-4DVar", "EnKF", "ETKF"]
+_BASELINE_CASES = [
+    ("s0", "test_s0", 1, 0.0, "S0", 1.6),
+    ("s1", "test_s1", 1, 0.15, "S1", 1.0),
+]
+
+
+def _baseline_traj_path(case_name, method_name, dws_suffix="", param_suffix=""):
+    key = f"{case_name}_{method_name.replace('-', '_').replace(' ', '_')}"
+    return os.path.join(EXP_DIR, f"baselines_trajs{dws_suffix}{param_suffix}_{key}.npz")
+
+
+def fmt_rmse(mean_arr, std_arr):
+    return {
+        "X": {"mean": float(mean_arr[0]), "std": float(std_arr[0])},
+        "Y": {"mean": float(mean_arr[1]), "std": float(std_arr[1])},
+        "Z": {"mean": float(mean_arr[2]), "std": float(std_arr[2])},
+        "mean": float(np.mean(mean_arr)),
+    }
+
+
+def evaluate_baseline(method, dataset, cfg, device, return_trajs=False, batch_size=1):
+    sig, rho, bet = cfg.da_params
+    rmse_list = []
+    results_list = []
+    all_sq_err = []
+    all_ref = []
+
+    use_corrupted = getattr(cfg, 'use_corrupted_forcing', True)
+    force_key = "forcing_corrupted" if use_corrupted else "forcing_true"
+    has_per_window_params = "sigma" in dataset[0]
+
+    if batch_size > 1 and hasattr(method, 'assimilate_batch'):
+        for i in range(0, len(dataset), batch_size):
+            batch = [dataset[j] for j in range(i, min(i + batch_size, len(dataset)))]
+            obs = torch.stack([w["obs"].to(device) for w in batch], dim=0)
+            mask = torch.stack([w["obs_mask"].to(device) for w in batch], dim=0)
+            truth = torch.stack([w["true_state"] for w in batch], dim=0)
+            force = torch.stack([w[force_key].to(device) for w in batch], dim=0)
+            if has_per_window_params:
+                sigma = torch.tensor([w["sigma"] for w in batch], device=device)
+                rho = torch.tensor([w["rho"] for w in batch], device=device)
+                beta = torch.tensor([w["beta"] for w in batch], device=device)
+                c1 = torch.tensor([w.get("c1", 1.0) for w in batch], device=device)
+            else:
+                sigma, rho, beta = sig, rho, bet
+                c1 = 1.0
+            results = method.assimilate_batch(obs, mask, force, truth, sigma=sigma, rho=rho, beta=beta, c1=c1)
+            for result_idx, result in enumerate(results):
+                analysis = result.trajectory
+                ref = truth[result_idx].detach().cpu().numpy()
+                all_sq_err.append((analysis - ref) ** 2)
+                all_ref.append(ref)
+                rmse_list.append(result.rmse)
+                results_list.append(result)
+    else:
+        for i in range(len(dataset)):
+            w = dataset[i]
+            obs = w["obs"].to(device)
+            mask = w["obs_mask"].to(device)
+            truth = w["true_state"]
+            force = w[force_key].to(device)
+            s = w.get("sigma", sig)
+            r = w.get("rho", rho)
+            b = w.get("beta", bet)
+            c1_val = w.get("c1", 1.0)
+            result = method.assimilate(obs, mask, force, truth, sigma=s, rho=r, beta=b, c1=c1_val)
+            analysis = result.trajectory
+            ref = truth.numpy()
+            all_sq_err.append((analysis - ref) ** 2)
+            all_ref.append(ref)
+            rmse_list.append(result.rmse)
+            results_list.append(result)
+
+    all_rmse = np.stack(rmse_list, axis=0)
+    rmse_stats = (np.mean(all_rmse, axis=0), np.std(all_rmse, axis=0))
+    all_sq_err = np.concatenate(all_sq_err, axis=0)
+    all_ref = np.concatenate(all_ref, axis=0)
+    pooled_mse = np.mean(all_sq_err, axis=0)
+    pooled_var = np.var(all_ref, axis=0)
+    pooled_var = np.maximum(pooled_var, 1e-12)
+    expvar = 1 - pooled_mse / pooled_var
+    expvar_stats = (expvar, np.zeros_like(expvar))
+    if return_trajs:
+        return (rmse_stats, expvar_stats), results_list
+    return rmse_stats, expvar_stats
+
+
+def _compose_suffixes(da_window_steps=None, suffix="", enkf_config=None, etkf_config=None):
+    N = int(3.0 / 0.01) if da_window_steps is None else da_window_steps
+    dws_suffix = f"_dws{N}"
+    param_suffix = suffix
+    if enkf_config and enkf_config.get("inflation", 1.0) != 1.0:
+        param_suffix += f"_inf{enkf_config['inflation']}"
+    if etkf_config and etkf_config.get("inflation", 1.0) != 1.0:
+        param_suffix += f"_etkf_inf{etkf_config['inflation']}"
+    return N, dws_suffix, param_suffix
+
+
+def baselines_paths(da_window_steps: "int | None" = None, suffix: str = "",
+                    enkf_config: "dict | None" = None,
+                    etkf_config: "dict | None" = None) -> "tuple[str, str]":
+    """The results JSON and the combined trajectories NPZ that `run_and_cache_baselines` writes.
+
+    Both are keyed only on the DA window length, the inflations and `suffix`. Anything else that
+    changes the numbers -- the window count above all -- has to be encoded in `suffix` by the
+    caller, or a stale file will be resumed in place of the run that was asked for.
+    """
+    _, dws_suffix, param_suffix = _compose_suffixes(
+        da_window_steps, suffix, enkf_config, etkf_config)
+    return (os.path.join(EXP_DIR, f"baselines{dws_suffix}{param_suffix}.json"),
+            os.path.join(EXP_DIR, f"baselines_trajectories{dws_suffix}{param_suffix}.npz"))
+
+
+def run_and_cache_baselines(datasets, device, batch_size=1, da_window_steps=None,
+                             weak_config=None, strong_config=None, enkf_config=None,
+                             etkf_config=None, suffix=""):
+    N, dws_suffix, param_suffix = _compose_suffixes(
+        da_window_steps, suffix, enkf_config, etkf_config)
+    cache_path, _ = baselines_paths(da_window_steps, suffix, enkf_config, etkf_config)
+
+    partial = {}
+    if os.path.exists(cache_path):
+        with open(cache_path) as f:
+            partial = json.load(f)
+        print(f"  Found partial results ({cache_path}), resuming...")
+    else:
+        print(f"  Running baselines (da_window_steps={N})...")
+
+    weak_cfg = weak_config or {}
+    strong_cfg = strong_config or {}
+    enkf_cfg = enkf_config or {}
+    etkf_cfg = etkf_config or {}
+
+    dynamics_pool = {}
+    for expo in {c[5] for c in _BASELINE_CASES}:
+        dynamics_pool[expo] = Lorenz63Dynamics(dt=0.01, coupling_exponent=expo)
+    baseline_pool = {}
+    for expo in {c[5] for c in _BASELINE_CASES}:
+        dynamics = dynamics_pool[expo]
+        baseline_pool[expo] = {
+            "Weak-4DVar": Weak4DVar(dt=0.01, da_window_steps=N, device=device,
+                                     coupling_exponent=expo, dynamics=dynamics, **weak_cfg),
+            "Strong-4DVar": Strong4DVar(dt=0.01, da_window_steps=N, device=device,
+                                         coupling_exponent=expo, dynamics=dynamics, **strong_cfg),
+            "EnKF": EnKF(dt=0.01, device=device, coupling_exponent=expo, dynamics=dynamics, **enkf_cfg),
+            "ETKF": ETKF(dt=0.01, device=device, coupling_exponent=expo, dynamics=dynamics, **etkf_cfg),
+        }
+
+    cfg_s0 = Lorenz63Config(param_bias=0.0, forcing_state_bias=0.0, T_max=3.0, seed=123)
+    cfg_s1 = Lorenz63Config(param_bias=0.15, forcing_state_bias=0.1, T_max=3.0, seed=131)
+    cfg_map = {"s0": cfg_s0, "s1": cfg_s1}
+
+    if "config" not in partial:
+        partial["config"] = {"T_max": 3.0, "da_window_steps": N}
+
+    total_t0 = time.time()
+
+    for case_name, ds_key, case_val, bias, label, coupling_exponent in _BASELINE_CASES:
+        if ds_key not in datasets:
+            continue
+        ds = datasets[ds_key]
+        cfg = cfg_map[case_name]
+        method_map = baseline_pool[coupling_exponent]
+        for name in _BASELINE_METHODS:
+            if partial.get(case_name, {}).get(name) is not None:
+                print(f"    {label}/{name:<15} already done, skipping")
+                continue
+
+            method = method_map[name]
+            print(f"    {label}/{name:<15} ...", end=" ", flush=True)
+            t1 = time.time()
+            ((m, s), _), bl_results = evaluate_baseline(method, ds, cfg, device, return_trajs=True, batch_size=batch_size)
+            elapsed = time.time() - t1
+
+            if case_name not in partial:
+                partial[case_name] = {}
+            partial[case_name][name] = fmt_rmse(m, s)
+            partial["total_time_seconds"] = time.time() - total_t0
+            with open(cache_path, "w") as f:
+                json.dump(partial, f, indent=2)
+
+            trajs = np.stack([r.trajectory for r in bl_results], axis=0)
+            truths = np.stack([ds[i]["true_state"].numpy() for i in range(len(ds))], axis=0)
+            traj_data = {"trajectories": trajs, "truths": truths}
+            if bl_results[0].ensemble_variance is not None:
+                traj_data["ensemble_variance"] = np.stack(
+                    [r.ensemble_variance for r in bl_results], axis=0)
+            np.savez_compressed(_baseline_traj_path(case_name, name, dws_suffix, param_suffix), **traj_data)
+
+            print(f"X={m[0]:.4f} Y={m[1]:.4f} Z={m[2]:.4f}"
+                  f"  mean={np.mean(m):.4f} [{elapsed:.1f}s]")
+
+    # Combine per-method trajectory files into final .npz
+    _, traj_path = baselines_paths(da_window_steps, suffix, enkf_config, etkf_config)
+    all_present = all(
+        os.path.exists(_baseline_traj_path(case_name, name, dws_suffix, param_suffix))
+        for case_name, _, _, _, _, _ in _BASELINE_CASES
+        for name in _BASELINE_METHODS
+    )
+
+    if all_present:
+        print("  Combining trajectories...")
+        traj_arrays = {}
+        for case_name, _, _, _, _, _ in _BASELINE_CASES:
+            for name in _BASELINE_METHODS:
+                src = _baseline_traj_path(case_name, name, dws_suffix, param_suffix)
+                data = np.load(src)
+                prefix = f"{case_name}_{name.replace('-', '_').replace(' ', '_')}"
+                for key in data.files:
+                    traj_arrays[f"{prefix}_{key}"] = data[key]
+                data.close()
+                os.remove(src)
+        np.savez_compressed(traj_path, **traj_arrays)
+        print(f"    Saved: {traj_path}")
+    else:
+        print("    (incomplete — skipping trajectory combination)")
+
+    report_script = os.path.join(BASE, "reports", "generate_report.py")
+    subprocess.run([sys.executable, report_script,
+                    "--baselines", cache_path], capture_output=True)
+    return partial

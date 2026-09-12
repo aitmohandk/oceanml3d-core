@@ -1,0 +1,21 @@
+{
+  "branch": "refactor/hydra-lightning",
+  "last_updated": "2026-06-29",
+  "phase_1_extract_run_module": "completed",
+  "phase_2_create_eval_baselines_script": "completed",
+  "phase_3_update_configs": "completed",
+  "phase_3a_lorenz63_default_yaml": "completed",
+  "phase_3b_baselines_dws20_yaml": "completed",
+  "phase_3b_baselines_dws50_yaml": "completed",
+  "phase_3b_baselines_dws100_yaml": "completed",
+  "phase_3b_baselines_dws500_yaml": "completed",
+  "phase_4_wire_structured_configs": "completed",
+  "phase_5_update_sbatch_scripts": "completed",
+  "phase_5a_run_baselines_batched": "completed",
+  "phase_5b_run_baselines_batched_dws": "completed",
+  "phase_5c_run_baselines": "completed",
+  "phase_5d_run_baselines_hydra": "completed",
+  "phase_6_deprecation_and_tests": "completed",
+  "phase_7_end_to_end_validation": "completed",
+  "notes": "All phases complete. Key changes: (1) Fixed dws configs to inherit from /lorenz63_default via defaults list. (2) Created dws500.yaml. (3) Updated all sbatch scripts with hydra.run.dir/output_subdir overrides. (4) Synced lorenz63_default.yaml with schema (data, model, training, paths, baselines, cs1, cs2 sections). (5) Updated train.py to construct Lorenz63Config manually (removed to_lorenz63_config dependency). (6) Added defaults lists to all experiment configs. (7) Added visible deprecation warning for run_experiments.py --baselines-only. Validated: all 17 Hydra/baseline tests pass, all DWS config scenarios verified, all experiment configs inherit correctly."
+}

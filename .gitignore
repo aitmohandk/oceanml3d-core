@@ -1,0 +1,93 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.pyd
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+.cache/
+.mplcache/
+.ipynb_checkpoints/
+
+# Notebooks
+*/.ipynb_checkpoints/*
+
+# Environment
+.venv/
+/env/
+venv/
+*.env
+.python-version
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data (large generated files)
+data/raw/
+data/processed/
+*.nc
+*.h5
+*.hdf5
+
+# Outputs
+outputs/
+!reports/*/outputs/
+results/
+lightning_logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# LaTeX build artifacts
+*.aux
+*.out
+
+# Generated data & checkpoints
+experiments/
+checkpoint_stage*.pt
+checkpoints/
+*.pt
+
+# QG dataset spinup cache (large generated tensors; not committed)
+reports/qg_cache/
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Generated figures
+all_figures.pdf
+
+# SLURM logs
+logs/
+sbatch_logs/
+batch/logs/
+slurm-*.out
+*.err
+# Strong-4DVar tuning scratch probes (single-window; not in the report)
+reports/qg/outputs/qg_tune_4dvar/
+
+# Secrets / credentials (never commit)
+.reviewer-token
+reviewer-token
+*.pem
+*.key
+.netrc

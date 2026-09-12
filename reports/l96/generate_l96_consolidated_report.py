@@ -1,0 +1,764 @@
+#!/usr/bin/env python3
+"""Consolidated L96 benchmark report: full metric tables + Hovmöller reconstructions.
+
+Consumes only cached artifacts of the DA-parity benchmark (Obs30, dws=500,
+200 shared test windows):
+
+- DA metric cache  ``experiments/l96_baselines_dws500_s0c_*_obsj2_int100_fw.json``
+- DA trajectories  ``experiments/l96_baselines_trajectories_dws500_s0c_*_int100_fw.npz``
+- Test dataset     ``experiments/l96_datasets_obsj2_int100_nwin200.pt``
+- Neural estimates ``experiments/L*/estimates_{s0,s1}.npz``
+
+Outputs ``reports/l96/outputs/l96_consolidated_benchmark.md`` with RMSE/EV/ES tables
+over the all/slow/fast variable groups, a consistency-check section (cached
+metrics recomputed from stored arrays), and Hovmöller reconstruction figures
+(state + |error| maps, slow/fast blocks) for the worst/median/best test windows
+ranked by the best DA scheme (Strong-4DVar per-window RMSE).
+"""
+import argparse
+import json
+import logging
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+
+from evaluation.estimate_metrics import evaluate_estimates
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+
+ROOT = Path(__file__).resolve().parents[2]
+
+DA_JSON_CANDIDATES = [
+    "experiments/l96_baselines_dws500_s0c_inf2.0_etkf_inf2.0_obsj2_int100_fw.json",
+    "experiments/l96_baselines_dws500_inf2.0_etkf_inf2.0_obsj2_int100_fw.json",
+    "experiments/l96_baselines_dws500_inf2.0_etkf_inf2.0_obsj2_int100.json",
+]
+DA_TRAJ_CANDIDATES = [
+    "experiments/l96_baselines_trajectories_dws500_s0c_inf2.0_etkf_inf2.0_obsj2_int100_fw.npz",
+    "experiments/l96_baselines_trajectories_dws500_inf2.0_etkf_inf2.0_obsj2_int100_fw.npz",
+]
+DATASET_CANDIDATES = [
+    "experiments/l96_datasets_obsj2_int100_nwin200.pt",
+]
+NEURAL_EXP_DIRS = [
+    "L1b_direct_unet_s0s1",
+    "L2b_vanilla_cfm_s0s1",
+    "L3_vanilla_cfm_s0s1",
+    "L4_direct_unet_s0s1_small",
+    "L5_vanilla_cfm_s0s1_small_tau0",
+    "L6_vanilla_cfm_s0s1_forcing_cond",
+    "V2_tweedie_cfm_l96",
+    "V3_predict_state_cfm_l96",
+    "SDA1_prior_l96",
+    "SDA2_cond_mixed_l96",
+    "SDA2_cond_nominal_l96",
+    "FDV1_unrolled_unet_l96",
+    "FDV1CFM_predict_state_l96",
+    "FDV1_SDA1_hybrid_l96",
+    "FDV1_SDA2_hybrid_l96",
+    "FDV1_FDV1CFM_hybrid_l96",
+]
+
+# ES convention: methods evaluated as N=30 ensembles use the proper ensemble ES
+# (MAE - 0.5*pairwise spread); deterministic N=1 methods use per-dim MAE.
+# N1_ES_METHODS = methods whose ES is the N=1 MAE proxy (marked with * in the table).
+# DA ensemble methods (EnKF/ETKF) and L3-ens30 use the proper scoring rule.
+N1_ES_METHODS = {"Strong-4DVar", "L1b_direct_unet_s0s1", "L2b_vanilla_cfm_s0s1",
+                 "L4_direct_unet_s0s1_small", "L5_vanilla_cfm_s0s1_small_tau0",
+                 "L6_vanilla_cfm_s0s1_forcing_cond", "FDV1_unrolled_unet_l96"}
+
+# Methods evaluated as N=30 ensembles (proper ensemble ES, not the N=1 MAE
+# proxy). L3, V2 and V3 run ens30x10; RMSE/EV/ES are taken from the ens30 subdir.
+ENS30_DIRS = {
+    "L3_vanilla_cfm_s0s1": {
+        "s0": "L3_vanilla_cfm_s0s1/ens30_no10",
+        "s1": "L3_vanilla_cfm_s0s1/ens30_s1_no10",
+    },
+    "V2_tweedie_cfm_l96": {
+        "s0": "V2_tweedie_cfm_l96_kinner1/ens30_no10",
+        "s1": "V2_tweedie_cfm_l96_kinner1/ens30_no10",
+    },
+    "V3_predict_state_cfm_l96": {
+        "s0": "V3_predict_state_cfm_l96/ens30_no10",
+        "s1": "V3_predict_state_cfm_l96/ens30_no10",
+    },
+    "SDA1_prior_l96": {
+        "s0": "SDA1_prior_l96/ens30_no10",
+        "s1": "SDA1_prior_l96/ens30_no10",
+    },
+    "SDA2_cond_mixed_l96": {
+        "s0": "SDA2_cond_mixed_l96/ens30_no10",
+        "s1": "SDA2_cond_mixed_l96/ens30_no10",
+    },
+    "SDA2_cond_nominal_l96": {
+        "s0": "SDA2_cond_nominal_l96/ens30_no10",
+        "s1": "SDA2_cond_nominal_l96/ens30_no10",
+    },
+    "FDV1CFM_predict_state_l96": {
+        "s0": "FDV1CFM_predict_state_l96/ens30_no10",
+        "s1": "FDV1CFM_predict_state_l96/ens30_no10",
+    },
+    "FDV1_SDA1_hybrid_l96": {
+        "s0": "FDV1_SDA1_hybrid_l96/ens30_no10",
+        "s1": "FDV1_SDA1_hybrid_l96/ens30_no10",
+    },
+    "FDV1_SDA2_hybrid_l96": {
+        "s0": "FDV1_SDA2_hybrid_l96/ens30_no10",
+        "s1": "FDV1_SDA2_hybrid_l96/ens30_no10",
+    },
+    "FDV1_FDV1CFM_hybrid_l96": {
+        "s0": "FDV1_FDV1CFM_hybrid_l96/ens30_no10",
+        "s1": "FDV1_FDV1CFM_hybrid_l96/ens30_no10",
+    },
+}
+
+# L3 uses the ens30 (N=30, 10-step) evaluation for both RMSE and ES, per case.
+# S0 was the original ens30 study (dual-convention JSON); S1 the bug-fixed
+# single-ES follow-up (see PLAN.md "L3 ens30 on S1").
+L3_ENS30_DIR = ENS30_DIRS["L3_vanilla_cfm_s0s1"]
+DEFAULT_FIGURE_METHODS = [
+    "Strong-4DVar",
+    "EnKF",
+    "ETKF",
+    "L4_direct_unet_s0s1_small",
+    "L2b_vanilla_cfm_s0s1",
+]
+DA_METHODS = ["ETKF", "EnKF", "Strong-4DVar"]
+RANKS = ["worst", "median", "best"]
+CASES = ["s0", "s1"]
+GROUPS = ("all_obs", "slow", "obs_fast")
+NO = 8
+
+SCHEME_DESCRIPTIONS: list[tuple[str, str, str]] = [
+    ("Strong-4DVar", "Variational",
+     ("Strong-constraint 4D-Var over the dws=500 window (`B_var=2.0`, `R_var=0.5`, `max_iter=10`, "
+      "`lr=0.2`, autodiff minimization); assimilates the full window trajectory.")),
+    ("EnKF", "Ensemble KF",
+     ("Stochastic ensemble Kalman filter, `N_ens=30`, inflation=2.0, no localization; sequential "
+      "observation updates.")),
+    ("ETKF", "Ensemble KF",
+     "Deterministic ensemble square-root filter, `N_ens=30`, inflation=2.0, no localization."),
+    ("L1b_direct_unet_s0s1", "Neural (DirectUNet)",
+     "Single-pass regression obs → state, hidden [64,128,256]; obs-only conditioning; 200 epochs."),
+    ("L2b_vanilla_cfm_s0s1", "Neural (CFM, τ=0)",
+     ("Conditional flow matching trained at τ=0 only; sampled with a single Euler step (deterministic, "
+      "conditional-mean-like); hidden [64,128,256]; 400 epochs.")),
+    ("L3_vanilla_cfm_s0s1", "Neural (CFM, multi-τ)",
+     ("Standard multi-τ CFM training; evaluated as a 30-member ensemble with 10 Euler steps "
+      "(`ens30×10`, N=30, deterministic τ-schedule 0→1, fresh x₀ per member); hidden [64,128,256]; 400 epochs.")),
+    ("L4_direct_unet_s0s1_small", "Neural (DirectUNet)", "As L1b with small backbone [32,64,128]."),
+    ("L5_vanilla_cfm_s0s1_small_tau0", "Neural (CFM, τ=0)", "As L2b with small backbone [32,64,128]."),
+    ("L6_vanilla_cfm_s0s1_forcing_cond", "Neural (CFM, τ=0)",
+     ("As L2b plus corrupted-forcing conditioning (`cond_extra_dim=1`); tests the robustness value of "
+      "forcing input.")),
+    ("V2_tweedie_cfm_l96", "Neural (TweedieCFM)",
+     ("Two-stage Tweedie CFM: stage-1 MeanEstimatorCell (obs → mean), stage-2 residual velocity UNet; "
+      "hidden [64,128,256]; 100+400 epochs; multi-τ, **K_inner=1 (kinner1 variant)**; evaluated as a "
+      "30-member ensemble with 10 Euler steps (`ens30×10`, N=30); N_outer=10. The V2 row reports the "
+      "**K_inner=1 ablation** (see the dedicated `l96_tweediecfm_benchmark.md` for the full V2 family).")),
+    ("V3_predict_state_cfm_l96", "Neural (PredictStateCFM)",
+     ("Single-stage CFM predicting the final-state mean μ = E[x₁|x_τ,y]; hidden [64,128,256]; "
+      "400 epochs; evaluated as a 30-member ensemble with 10 Euler steps (`ens30×10`, N=30); "
+      "N_outer=10.")),
+    ("SDA1_prior_l96", "Neural (SDA prior + DPS guidance)",
+     ("Unconditional flow-matching prior p(x₁) -- no obs, params, or forcing conditioning at all, "
+      "trained on the same S0/S1 mix (`forcing_state_bias=0.1` in train/val, same as every other "
+      "L-series/V2/V3 config); hidden [64,128,256]; 400 epochs. State estimated at inference time "
+      "only, via DPS/Pi-GDM-style observation guidance (normalized-gradient step on the Tweedie "
+      "posterior-mean estimate, `evaluation/sda_sampler.py`) with N_outer=10 Euler steps, "
+      "guidance_weight=40 (picked by an S0 RMSE sweep over {0.3..400}), R_var=0.5 (matches "
+      "`data.R_var`); evaluated as a 30-member ensemble (fresh x₀ per member, `ens30×10`, N=30), "
+      "same convention as L3/V2/V3.")),
+    ("SDA2_cond_mixed_l96", "Neural (SDA prior, params+forcing cond. + DPS guidance)",
+     ("As SDA1 but the prior is additionally conditioned on the per-window physical params (F, c1, "
+      "hx, eps, w1-w4) and the corrupted forcing signal (`ConditionalPriorCFM`, `models/sda.py`) -- "
+      "obs is still never a network input, only the guidance term at inference conditions on it. "
+      "Trained on the identical S0/S1 mix as SDA1 (`forcing_state_bias=0.1`); hidden [64,128,256]; "
+      "400 epochs; guidance_weight=40, N_outer=10, R_var=0.5; evaluated as a 30-member ensemble "
+      "(`ens30×10`, N=30).")),
+    ("SDA2_cond_nominal_l96", "Neural (SDA prior, params+forcing cond., nominal-only train)",
+     ("Identical architecture/inference to SDA2-mixed but trained with `forcing_state_bias=0.0` "
+      "(genuinely nominal-only train/val -- never sees the S1-level forcing corruption at training "
+      "time, unlike every other row in this table); hidden [64,128,256]; 400 epochs; "
+      "guidance_weight=40, N_outer=10, R_var=0.5; evaluated as a 30-member ensemble (`ens30×10`, "
+      "N=30). Tests whether the amortized S1/S0 resilience seen elsewhere in this table survives "
+      "when training-time exposure to model error is removed entirely.")),
+    ("FDV1_unrolled_unet_l96", "Neural (4DVarNet-style unrolled solver)",
+     ("Unrolled solver: the update at each of N_outer=10 iterations is the output of a weight-tied "
+      "UNet1D fed `concat(state, obs)` (`update_input='obs+state'`, no gradient/cost term at all -- "
+      "see `models/fourdvarnet.py::FourDVarNetSolver`), `x_{k+1} = x_k - (1/N_outer)*UNet(x_k, obs)`, "
+      "zero-initialized; hidden [64,128,256]; 400 epochs; loss = final-iteration MSE only. "
+      "Fully deterministic (no ensemble, no randomness anywhere) -- evaluated as a single pass (N=1), "
+      "same convention as Strong-4DVar/L1b/L2b. Design taxonomy (`update_input` string) traced to "
+      "CIA-Oceanix/4dvarnet-global-mapping's `ronan_devs` branch (`GradSolver_withStep`); "
+      "gradient-conditioned modes (`grad-only`/`grad+state`/`subgrad+state`) reserved for a future FDV2.")),
+    ("FDV1CFM_predict_state_l96", "Neural (4DVarNet-CFM, PredictStateCFM + FDV1 backbone)",
+     ("V3 (`PredictStateCFM`) CFM parameterization -- predicts μ = E[x1|x_τ,y] at a randomly-sampled "
+      "outer flow-time τ, trained via MSE(μ,x1), sampled by forward ODE integration "
+      "`x += dt*(μ-x)/(1-τ)` over N_outer=10 steps -- but μ is computed by FDV1's own K_inner=5-step "
+      "weight-tied unrolled `obs+state` refinement (`models/fourdvarnet.py::FourDVarNetPredictStateCFM`), "
+      "started from the current x_τ, instead of a single UNet1D forward pass as plain V3 uses. "
+      "Total NFE per sample = N_outer×K_inner = 50 (5x V3's 10, 5x FDV1's 10). hidden [64,128,256]; "
+      "400 epochs, single random τ per training batch (cheaper to train than FDV1 itself, which "
+      "backprops through its full 10-step unroll every batch). A rare (~1-in-several-thousand ens30 "
+      "samples) divergence of the inner unroll on out-of-distribution x_τ is guarded with a "
+      "`clip_range=50.0` clamp after each inner step (same convention as this codebase's L96/QG "
+      "dynamics integrators) -- inactive for in-distribution trajectories (|x|<10). Evaluated as a "
+      "30-member ensemble with 10 Euler steps (`ens30×10`, N=30).")),
+    ("FDV1_SDA1_hybrid_l96", "Neural (FDV1 mean + SDA1 warm-started guidance)",
+     ("No retraining: FDV1's frozen point estimate warm-starts SDA1's guided sampling trajectory "
+      "(`evaluation/sda_sampler.py`'s `mean_estimate`/`tau0`, a \"SDEdit\"-style warm start -- "
+      "`x_τ0 = (1-τ0)·noise + τ0·FDV1_estimate`, Euler-integrated only from τ0 to 1) instead of "
+      "starting from pure noise; `guided_obs_cost`/the Tweedie x_hat_1 machinery are unchanged. "
+      "Hyperparameters (`tau0=0.7`, `guidance_weight=2`) picked by an S0-only grid sweep over "
+      "`tau0∈{0,0.3,0.5,0.7,0.8}×guidance_weight∈{0,1,2,5,10,40,100}` -- any guidance stronger than "
+      "~2 actively hurts once warm-started (the DPS step size calibrated for pure-noise starts is "
+      "too aggressive here); evaluated as a 30-member ensemble (`ens30×10`, N=30).")),
+    ("FDV1_SDA2_hybrid_l96", "Neural (FDV1 mean + SDA2-nominal warm-started guidance)",
+     ("As FDV1+SDA1 but warm-starting SDA2-nominal (params+forcing-conditioned prior) instead of "
+      "SDA1; `tau0=0.5`, `guidance_weight=2` (own S0-only grid sweep -- SDA2's conditioning makes "
+      "more remaining Euler steps useful than SDA1's fully-unconditional prior, hence the lower "
+      "`tau0`); evaluated as a 30-member ensemble (`ens30×10`, N=30). **New best neural scheme in "
+      "this table on RMSE/EV** (FDV1CFM above still has the best ES).")),
+    ("FDV1_FDV1CFM_hybrid_l96", "Neural (FDV1 mean + FDV1-CFM warm-started sampling)",
+     ("No retraining: FDV1's frozen point estimate warm-starts FDV1-CFM's own sampling trajectory "
+      "via the same `mean_estimate`/`tau0` SDEdit-style mechanism as the FDV1+SDA hybrids "
+      "(`models/fourdvarnet.py::FourDVarNetPredictStateCFM.sample`) -- "
+      "`x_τ0 = (1-τ0)·noise + τ0·FDV1_estimate`, Euler-integrated only from τ0 to 1. A literal "
+      "τ0=0 warm start (recentering the τ=0 noise on FDV1's estimate, still running the full "
+      "N_outer steps) was tried first and made things *worse* (single-sample RMSE 0.897 vs. 0.555 "
+      "unwarm-started): CFM training pairs τ=0 with near-zero-magnitude noise only, so injecting a "
+      "real-state-scale mean there is an out-of-training-distribution (τ, |x_τ|) combination that "
+      "confuses the first refinement step, and that confusion compounds since no steps are skipped. "
+      "`tau0=0.7` (picked by an S0-only sweep over `tau0∈{0,0.2,...,0.9}`, single-sample RMSE, "
+      "plateauing over `tau0∈[0.6,0.8]`) avoids this the same way the FDV1+SDA hybrids do. "
+      "Evaluated as a 30-member ensemble (`ens30×10`, N=30); no clamp activations observed in this "
+      "evaluation (unlike FDV1CFM alone) since the shorter, better-anchored trajectory has much less "
+      "room to diverge.")),
+]
+
+
+def make_obs_j_indices(no: int, j_truth: int, j_obs: int) -> np.ndarray:
+    x_idx = list(range(no))
+    y_idx = [no + k * j_truth + j for k in range(no) for j in range(j_obs)]
+    return np.array(x_idx + y_idx)
+
+
+def _first_existing(patterns: list[str]) -> Path:
+    for p in patterns:
+        path = ROOT / p
+        if path.exists():
+            return path
+    raise FileNotFoundError(f"None of the candidates exist: {patterns}")
+
+
+def short_name(name: str) -> str:
+    if name.startswith("V2_"):
+        variant = name.replace("V2_tweedie_cfm_l96", "")
+        if variant:
+            return "V2" + variant.replace("_", "-").strip("-")
+        return "V2"
+    if name == "SDA2_cond_mixed_l96":
+        return "SDA2-mixed"
+    if name == "SDA2_cond_nominal_l96":
+        return "SDA2-nominal"
+    if name == "FDV1_SDA1_hybrid_l96":
+        return "FDV1+SDA1"
+    if name == "FDV1_SDA2_hybrid_l96":
+        return "FDV1+SDA2"
+    if name == "FDV1_FDV1CFM_hybrid_l96":
+        return "FDV1+FDV1CFM"
+    return name.split("_")[0] if "_" in name else name
+
+
+def load_truth(dataset_path: Path, obs_idx: np.ndarray) -> dict[str, np.ndarray]:
+    ds = torch.load(dataset_path, map_location="cpu", weights_only=False)
+    return {
+        case: np.stack([w["true_state"][..., obs_idx].numpy() for w in ds[f"test_{case}"]])
+        for case in CASES
+    }
+
+
+def load_da_trajectories(path: Path, case: str, method: str, obs_idx: np.ndarray) -> np.ndarray:
+    data = np.load(path)
+    traj = data[f"{case}_{method.replace('-', '_')}_trajectories"]
+    if traj.shape[-1] > len(obs_idx):
+        traj = traj[..., obs_idx]
+    return traj.astype(np.float64)
+
+
+def load_neural_trajectories(exp_dir: Path, case: str) -> np.ndarray | None:
+    npz_path = exp_dir / f"estimates_{case}.npz"
+    if not npz_path.exists():
+        return None
+    return np.load(npz_path)["trajectories"].astype(np.float64)
+
+
+def stored_truth_npz(name: str, case: str) -> Path:
+    """Resolve the estimates_*.npz path (ens30 subdir for ens30 methods) that
+    carries the stored truth, so the truth-consistency check reads from the
+    same directory the trajectories came from."""
+    if name in ENS30_DIRS:
+        return ROOT / "experiments" / ENS30_DIRS[name][case] / f"estimates_{case}.npz"
+    return ROOT / "experiments" / name / f"estimates_{case}.npz"
+
+
+def collect_estimates(
+    da_traj_path: Path,
+    obs_idx: np.ndarray,
+    neural_dirs: list[str],
+) -> dict[str, dict[str, np.ndarray | None]]:
+    est: dict[str, dict[str, np.ndarray | None]] = {}
+    for method in DA_METHODS:
+        est[method] = {case: load_da_trajectories(da_traj_path, case, method, obs_idx) for case in CASES}
+    for dirname in neural_dirs:
+        if dirname in ENS30_DIRS:
+            regular_dir = ROOT / "experiments" / dirname
+            est[dirname] = {}
+            for case in CASES:
+                ens30_dir = ROOT / "experiments" / ENS30_DIRS[dirname][case]
+                ens30_est = load_neural_trajectories(ens30_dir, case)
+                est[dirname][case] = ens30_est if ens30_est is not None else load_neural_trajectories(regular_dir, case)
+        else:
+            exp_dir = ROOT / "experiments" / dirname
+            est[dirname] = {case: load_neural_trajectories(exp_dir, case) for case in CASES}
+    return est
+
+
+def per_window_rmse(traj: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    return np.sqrt(np.mean((traj - ref) ** 2, axis=(1, 2)))
+
+
+def select_windows(traj: np.ndarray, ref: np.ndarray) -> dict[str, tuple[int, float]]:
+    rw = per_window_rmse(traj, ref)
+    order = np.argsort(rw)
+    mid = len(order) // 2
+    return {
+        "best": (int(order[0]), float(rw[order[0]])),
+        "median": (int(order[mid]), float(rw[order[mid]])),
+        "worst": (int(order[-1]), float(rw[order[-1]])),
+    }
+
+
+def resolve_figure_methods(names: list[str], available: dict[str, dict[str, np.ndarray | None]]) -> list[str]:
+    resolved = []
+    for name in names:
+        if name not in available:
+            raise FileNotFoundError(f"Unknown method '{name}' (not a DA scheme or known experiment dir)")
+        missing = [c for c in CASES if available[name][c] is None]
+        if missing:
+            raise FileNotFoundError(f"Missing estimates for '{name}' cases {missing}")
+        resolved.append(name)
+    return resolved
+
+
+def _run_l96_convention_groups(traj: np.ndarray, ref: np.ndarray) -> dict[str, dict[str, float]]:
+    """Replicate evaluation/run_l96.py metric conventions.
+
+    RMSE = mean over windows of per-window RMSE; EV = pooled; ES = pooled MAE
+    (only valid for deterministic schemes, i.e. Strong-4DVar).
+    """
+    err_sq = (traj - ref) ** 2
+    rmse_dim = np.mean(np.sqrt(np.mean(err_sq, axis=1)), axis=0)
+    ev_dim = 1.0 - np.mean(err_sq, axis=(0, 1)) / np.maximum(np.var(ref, axis=(0, 1)), 1e-12)
+    es_dim = np.mean(np.abs(traj - ref), axis=(0, 1))
+
+    def grouped(arr: np.ndarray) -> dict[str, float]:
+        return {"slow": float(np.mean(arr[:NO])), "obs_fast": float(np.mean(arr[NO:])), "all_obs": float(np.mean(arr))}
+
+    return {"rmse": grouped(rmse_dim), "ev": grouped(ev_dim), "es": grouped(es_dim)}
+
+
+def check_da_consistency(
+    da_json_path: Path,
+    est: dict[str, dict[str, np.ndarray | None]],
+    truth: dict[str, np.ndarray],
+) -> tuple[float, int]:
+    with open(da_json_path) as f:
+        cached = json.load(f)
+    max_diff = 0.0
+    n_checked = 0
+    for case in CASES:
+        for method, metrics in cached.get(case, {}).items():
+            conv = _run_l96_convention_groups(est[method][case], truth[case])
+            pairs = [("rmse", metrics["groups"], conv["rmse"]), ("ev", metrics["ev"]["groups"], conv["ev"])]
+            if method == "Strong-4DVar":
+                pairs.append(("es", metrics["es"]["groups"], conv["es"]))
+            for _, cache_groups, new_groups in pairs:
+                for group in GROUPS:
+                    max_diff = max(max_diff, abs(cache_groups[group] - new_groups[group]))
+                    n_checked += 1
+    return max_diff, n_checked
+
+
+def check_neural_truth(
+    est: dict[str, dict[str, np.ndarray | None]],
+    truth: dict[str, np.ndarray],
+) -> tuple[float, list[str]]:
+    max_diff = 0.0
+    problems: list[str] = []
+    for name in NEURAL_EXP_DIRS:
+        for case in CASES:
+            traj = est.get(name, {}).get(case)
+            if traj is None:
+                continue
+            expected = truth[case]
+            if traj.shape != expected.shape:
+                problems.append(f"{name}/{case}: estimates shape {traj.shape} != truth shape {expected.shape}")
+                continue
+            stored_truth = np.load(stored_truth_npz(name, case))["truth"].astype(np.float64)
+            max_diff = max(max_diff, float(np.max(np.abs(stored_truth - expected))))
+    return max_diff, problems
+
+
+def collect_metric_values(
+    est: dict[str, dict[str, np.ndarray | None]],
+    truth: dict[str, np.ndarray],
+    row_order: list[str],
+    da_json_path: Path,
+) -> dict[str, dict[tuple[str, str], dict[str, float | None]]]:
+    """Compute RMSE/EV from trajectories for all methods; ES from JSON for DA
+    ensembles + ens30 methods (L3, V3), from trajectories (MAE) for the rest."""
+    values: dict[str, dict[tuple[str, str], dict[str, float | None]]] = {"rmse": {}, "ev": {}, "es": {}}
+    da_cache = json.load(open(da_json_path))
+    n1_cells: set[tuple[str, str]] = set()
+
+    def _ens30_es(row: str, case: str) -> dict[str, float] | None:
+        """Proper (N=30, textbook) ensemble ES for an ens30 method from its
+        ens30 JSON. Handles the S0 study's dual-convention schema
+        (``ensemble.es_textbook``) and the single-convention schema
+        (``ensemble.es``). Returns None when the JSON / block is unavailable.
+        """
+        ens30_json = ROOT / "experiments" / ENS30_DIRS[row][case] / "neural_eval.json"
+        if not ens30_json.exists():
+            return None
+        blk = json.load(open(ens30_json)).get("metrics", {}).get(case, {}).get("ensemble", {})
+        for key in ("es_textbook", "es"):
+            e = blk.get(key, {}).get("groups")
+            if e:
+                return e
+        return None
+
+    for row in row_order:
+        for case in CASES:
+            traj = est[row][case]
+            if traj is None:
+                none_groups = {g: None for g in GROUPS}
+                values["rmse"][(row, case)] = dict(none_groups)
+                values["ev"][(row, case)] = dict(none_groups)
+                values["es"][(row, case)] = dict(none_groups)
+                continue
+            m = evaluate_estimates(traj, truth[case])
+            values["rmse"][(row, case)] = m["groups"]
+            values["ev"][(row, case)] = m["ev"]["groups"]
+            if row in DA_METHODS:
+                da_blk = da_cache.get(case, {}).get(row, {})
+                es_blk = da_blk.get("es")
+                if es_blk and "groups" in es_blk:
+                    values["es"][(row, case)] = es_blk["groups"]
+                else:
+                    values["es"][(row, case)] = {g: None for g in GROUPS}
+            elif row in ENS30_DIRS:
+                ens_es = _ens30_es(row, case)
+                if ens_es:
+                    values["es"][(row, case)] = ens_es
+                else:
+                    values["es"][(row, case)] = m["es"]["groups"]
+                    n1_cells.add((row, case))
+            else:
+                values["es"][(row, case)] = m["es"]["groups"]
+    return values, n1_cells
+
+
+def fmt_block_table(
+    title: str,
+    block: dict[tuple[str, str], dict[str, float | None]],
+    row_order: list[str],
+    higher_better: bool,
+    include_degradation: bool,
+    n1_methods: set[str] | None = None,
+    n1_cells: set[tuple[str, str]] | None = None,
+    is_es: bool = False,
+) -> str:
+    agg = max if higher_better else min
+    best = {
+        f"{case}_{group}": agg(block[(r, case)][group] for r in row_order if block[(r, case)][group] is not None)
+        for case in CASES
+        for group in GROUPS
+    }
+    header = "| Method | S0 all | S0 slow | S0 fast | S1 all | S1 slow | S1 fast |"
+    sep = "|---|---|---|---|---|---|---|"
+    if include_degradation:
+        header += " S1/S0 |"
+        sep += "---|"
+    lines = [f"### {title}", "", header, sep]
+    for row in row_order:
+        cells = []
+        for case in CASES:
+            for group in GROUPS:
+                v = block[(row, case)][group]
+                if v is None:
+                    cell = "  —  "
+                else:
+                    cell = f"{v:.4f}"
+                    if abs(v - best[f"{case}_{group}"]) < 5e-5:
+                        cell = f"**{cell}**"
+                if is_es:
+                    is_n1 = (n1_methods and row in n1_methods) or (n1_cells and (row, case) in n1_cells)
+                    if is_n1:
+                        cell = f"{cell}*"
+                cells.append(cell)
+        line = f"| {short_name(row)} | " + " | ".join(cells) + " |"
+        if include_degradation:
+            s0 = block[(row, "s0")]["all_obs"]
+            s1 = block[(row, "s1")]["all_obs"]
+            if s0 is not None and s1 is not None and s0 > 0:
+                line += f" {s1 / s0:.3f} |"
+            else:
+                line += " n/a |"
+        lines.append(line)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def fmt_scheme_table() -> str:
+    lines = [
+        "| ID | Type | Description |",
+        "|---|---|---|",
+    ]
+    for scheme_id, family, description in SCHEME_DESCRIPTIONS:
+        lines.append(f"| {short_name(scheme_id)} | {family} | {description} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def plot_hovmoller(
+    fig_path: Path,
+    case: str,
+    rank: str,
+    win_idx: int,
+    sel_rmse: float,
+    method_names: list[str],
+    est_win: dict[str, np.ndarray],
+    truth_win: np.ndarray,
+    obs_times: np.ndarray,
+    dt: float,
+) -> None:
+    labels = ["Truth"] + [short_name(m) for m in method_names]
+    n_rows = len(labels)
+    fig, axes = plt.subplots(n_rows, 4, figsize=(15, 1.35 * n_rows + 1.0), constrained_layout=True)
+    t = np.arange(truth_win.shape[0]) * dt
+
+    state_data: list[list[np.ndarray]] = [[truth_win[:, :NO], truth_win[:, NO:]]]
+    for m in method_names:
+        state_data.append([est_win[m][:, :NO], est_win[m][:, NO:]])
+    err_data = [[np.abs(d - truth_block) for d, truth_block in zip(row, [truth_win[:, :NO], truth_win[:, NO:]])] for row in state_data]
+
+    flat_state = [d for row in state_data for d in row]
+    s_vmin = min(d.min() for d in flat_state)
+    s_vmax = max(d.max() for d in flat_state)
+    e_vmax = float(np.percentile(np.concatenate([d.ravel() for row in err_data for d in row]), 99.5))
+    cmap_state = plt.get_cmap("viridis")
+    cmap_err = plt.get_cmap("inferno")
+
+    im_state = None
+    im_err = None
+    for r, label in enumerate(labels):
+        win_rmse = float(np.sqrt(np.mean(np.concatenate(err_data[r], axis=1) ** 2)))
+        row_label = label if r == 0 else f"{label}\nRMSE {win_rmse:.3f}"
+        for c in range(4):
+            ax = axes[r, c]
+            data, cmap, vmin, vmax = (
+                (state_data[r][c % 2], cmap_state, s_vmin, s_vmax)
+                if c < 2
+                else (np.minimum(err_data[r][c % 2], e_vmax), cmap_err, 0.0, e_vmax)
+            )
+            mesh = ax.pcolormesh(t, np.arange(data.shape[1]), data.T, cmap=cmap, vmin=vmin, vmax=vmax, shading="auto", rasterized=True)
+            if c < 2:
+                im_state = mesh
+                if r == 0:
+                    for ot in obs_times:
+                        ax.axvline(ot * dt, color="w", lw=0.5, ls=":", alpha=0.85)
+            else:
+                im_err = mesh
+            if r == n_rows - 1:
+                ax.set_xlabel("time (tu)", fontsize=8)
+            else:
+                ax.tick_params(labelbottom=False)
+            if c == 0:
+                ax.set_ylabel(row_label, fontsize=7)
+            if r > 0:
+                ax.set_yticks([])
+            ax.tick_params(labelsize=6)
+
+    col_titles = ["state: slow X", "state: fast Y", "|error|: slow X", "|error|: fast Y"]
+    for c, ttl in enumerate(col_titles):
+        axes[0, c].set_title(ttl, fontsize=9)
+    ylabels_fast = [f"Y{j + 1}^{k}" for k in range(1, NO + 1) for j in range(2)]
+    for c in (1, 3):
+        axes[0, c].set_yticks(np.arange(len(ylabels_fast))[::2])
+        axes[0, c].set_yticklabels(ylabels_fast[::2], fontsize=5)
+
+    cb_state = fig.colorbar(im_state, ax=list(axes[:, :2].ravel()), shrink=0.9, pad=0.01)
+    cb_state.set_label("state", fontsize=8)
+    cb_err = fig.colorbar(im_err, ax=list(axes[:, 2:].ravel()), shrink=0.9, pad=0.01)
+    cb_err.set_label(f"|error| (vmax={e_vmax:.2f}, q99.5)", fontsize=8)
+    fig.suptitle(
+        f"L96 {case.upper()} — {rank} window #{win_idx} (Strong-4DVar window RMSE {sel_rmse:.3f}); dotted lines = obs times",
+        fontsize=10,
+    )
+    fig.savefig(fig_path, dpi=160)
+    plt.close(fig)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--methods", nargs="+", default=DEFAULT_FIGURE_METHODS,
+                        help="Methods for the reconstruction figures (DA schemes and/or experiment dir names)")
+    parser.add_argument("--ranks", nargs="+", default=RANKS, choices=RANKS)
+    parser.add_argument("--out-dir", default="reports/l96/outputs")
+    parser.add_argument("--tolerance", type=float, default=1e-3)
+    args = parser.parse_args()
+
+    out_dir = ROOT / args.out_dir
+    figs_dir = out_dir / "figs"
+    figs_dir.mkdir(parents=True, exist_ok=True)
+
+    da_json_path = _first_existing(DA_JSON_CANDIDATES)
+    da_traj_path = _first_existing(DA_TRAJ_CANDIDATES)
+    dataset_path = _first_existing(DATASET_CANDIDATES)
+    logger.info("DA json: %s | DA trajs: %s | dataset: %s", da_json_path, da_traj_path, dataset_path)
+
+    obs_idx = make_obs_j_indices(NO, 4, 2)
+    truth = load_truth(dataset_path, obs_idx)
+    est = collect_estimates(da_traj_path, obs_idx, NEURAL_EXP_DIRS)
+    figure_methods = resolve_figure_methods(args.methods, est)
+    table_rows = DA_METHODS + NEURAL_EXP_DIRS
+
+    values, n1_cells = collect_metric_values(est, truth, table_rows, da_json_path)
+    with open(da_json_path) as f:
+        cfg = json.load(f)["config"]
+
+    da_max_diff, n_checked = check_da_consistency(da_json_path, est, truth)
+    truth_max_diff, problems = check_neural_truth(est, truth)
+    da_ok = da_max_diff <= args.tolerance
+    truth_ok = truth_max_diff <= args.tolerance and not problems
+
+    md: list[str] = [
+        "# L96 Consolidated Benchmark — DA baselines vs neural models",
+        "",
+        (
+            "Setup: two-scale L96, Obs30 (`obs_interval=100`, `obs_j=2` → 24D observed space), "
+            f"dws={cfg.get('da_window_steps', 500)}, 200 shared cached test windows; "
+            "S1 = ±20% params + ±10% bias (DA forward model uses biased `*_da`)."
+        ),
+        "",
+        (
+            "RMSE/EV are recomputed from the stored trajectory arrays via "
+            "`evaluation/estimate_metrics.py`; ES for DA ensemble methods (EnKF/ETKF) "
+            "and L3 (ens30×10) are proper ensemble scores (N=30, MAE − 0.5·pairwise spread) "
+            "read from cached run outputs; ES for deterministic methods is the N=1 per-dim "
+            "MAE proxy. **bold** marks the best value per column."
+        ),
+        "",
+        "## Benchmarked schemes",
+        "",
+        fmt_scheme_table(),
+        (
+            "Shared setup: all L-series neural models are trained and evaluated on the identical DA-parity "
+            "benchmark (all-5 params ±20% randomized per window; S1 adds a ±10% bias; models operate in the "
+            "24D observed subspace with obs-only inputs unless noted). DA baselines receive the same per-window "
+            "parameters as the truth generation (S0) or their biased `*_da` counterparts (S1), which is what "
+            "makes the DA-vs-neural comparison apples-to-apples."
+        ),
+        "",
+        "## RMSE (pooled, lower is better)",
+        "",
+        fmt_block_table("RMSE by variable group", values["rmse"], table_rows, False, True),
+        (
+            "Note on conventions: the DA metric cache stores the **mean of per-window RMSEs** "
+            "(evaluation/run_l96.py), while this table uses the **pooled** convention "
+            "(`sqrt(mean sq err)` over all windows/timesteps) for every method — the same convention as the "
+            "neural evaluation. Pooled RMSE is ≤ mean-of-window RMSE, so DA values here are slightly lower "
+            "(more favorable) than in the legacy cache; both orderings agree."
+        ),
+        "",
+        "## Explained Variance (higher is better)",
+        "",
+        fmt_block_table("EV by variable group", values["ev"], table_rows, True, False),
+        "## Energy Score (lower is better)",
+        "",
+        fmt_block_table("ES by variable group", values["es"], table_rows, False, False,
+                        n1_methods=N1_ES_METHODS, n1_cells=n1_cells, is_es=True),
+        (
+            "`*` = ES from a one-member ensemble (N=1, deterministic; ES = per-dim MAE). "
+            "Unmarked = proper ensemble ES (N=30, MAE − 0.5·pairwise spread). "
+            "EnKF/ETKF ES are read from the bug-fixed DA cache; L3 ES from the ens30×10 run; "
+            "Strong-4DVar and other neural models are deterministic (N=1)."
+        ),
+        "",
+        "## Consistency checks",
+        "",
+        f"- DA cached metrics vs recomputed-from-npz ({n_checked} values): max |Δ| = {da_max_diff:.2e} → "
+        + ("PASS" if da_ok else f"FAIL (tolerance {args.tolerance})"),
+        f"- Neural stored truth vs dataset true_state[:, obs_var_indices]: max |Δ| = {truth_max_diff:.2e} → "
+        + ("PASS" if truth_ok else f"FAIL (tolerance {args.tolerance})"),
+    ]
+    for problem in problems:
+        md.append(f"- WARNING: {problem}")
+
+    md += [
+        "",
+        "## Reconstruction examples (Hovmöller)",
+        "",
+        (
+            "Windows ranked by per-window pooled 24D RMSE of Strong-4DVar (best DA scheme); "
+            "each figure shows rows = Truth/methods and columns = state / |error| maps for the slow X (8D) and "
+            "fast Y (16D) blocks. State colors share one scale per figure; error maps share one scale across all "
+            "rows/methods (99.5th-percentile cap, noted on the colorbar). Dotted vertical lines on the truth row "
+            "mark observation times."
+        ),
+        "",
+    ]
+    header = "| Case | Rank | Window | 4DVar win-RMSE | " + " | ".join(short_name(n) for n in figure_methods) + " |"
+    md += [header, "|---|---|---|---|" + "---|" * len(figure_methods)]
+
+    for case in CASES:
+        sel = select_windows(est["Strong-4DVar"][case], truth[case])
+        for rank in args.ranks:
+            win_idx, sel_rmse = sel[rank]
+            w = torch.load(dataset_path, map_location="cpu", weights_only=False)[f"test_{case}"][win_idx]
+            obs_times = np.where(w["obs_mask"].numpy())[0]
+            est_win = {name: est[name][case][win_idx] for name in figure_methods}
+            truth_win = truth[case][win_idx]
+            fig_path = figs_dir / f"l96_hovm_{case}_{rank}.png"
+            plot_hovmoller(fig_path, case, rank, win_idx, sel_rmse, figure_methods, est_win, truth_win, obs_times, float(cfg.get("dt", 0.001)))
+            logger.info("Figure saved: %s", fig_path)
+            cells = [f"{per_window_rmse(est[n][case][win_idx:win_idx + 1], truth_win[None])[0]:.3f}" for n in figure_methods]
+            md.append(f"| {case.upper()} | {rank} | {win_idx} | {sel_rmse:.3f} | " + " | ".join(cells) + " |")
+
+    md += [""]
+    for case in CASES:
+        for rank in args.ranks:
+            md += [f"![{case}-{rank}](figs/l96_hovm_{case}_{rank}.png)", ""]
+
+    report_path = out_dir / "l96_consolidated_benchmark.md"
+    report_path.write_text("\n".join(md))
+    logger.info("Report saved: %s", report_path)
+
+    if not da_ok or not truth_ok or problems:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
