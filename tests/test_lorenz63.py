@@ -8,11 +8,12 @@ Tests cover:
 - Observation sparsity and noise
 - Dataset structure
 """
-import torch
 import numpy as np
-from data.lorenz63 import (
-    generate_long_trajectory,
+import torch
+
+from oceanml3d.data.lorenz63 import (
     generate_corrupted_forcing,
+    generate_long_trajectory,
     generate_observations,
 )
 

@@ -1,0 +1,3 @@
+# @package _global_
+# ABLATION architecture: explicit temporal mixing (3D conv stem/head) instead of time-as-channels.
+model: {time_mode: conv3d, temporal_channels: 16}

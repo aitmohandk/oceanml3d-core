@@ -3,15 +3,17 @@
 Run DA baselines with the NaN-fixed code and save results with '_nancheck' suffix.
 Compares against the old baselines_dws300.json and generates a PDF report.
 """
+import json
 import os
 import sys
-import json
 import time
+
 import torch
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from evaluation.run import run_and_cache_baselines, EXP_DIR
+from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.evaluation.run import EXP_DIR, run_and_cache_baselines
 
 # Match defaults from config/lorenz63_default.yaml
 base_cfg = Lorenz63Config(
@@ -80,6 +82,7 @@ print("============================================")
 report_dir = os.path.join(os.path.dirname(__file__), "..", "reports", "outputs")
 os.makedirs(report_dir, exist_ok=True)
 import subprocess
+
 report_script = os.path.join(os.path.dirname(__file__), "..", "reports", "generate_baseline_report.py")
 pdf_path = os.path.join(report_dir, "synthesis_nancheck.pdf")
 traj_path = os.path.join(EXP_DIR, "baselines_trajectories_dws300_nancheck.npz")

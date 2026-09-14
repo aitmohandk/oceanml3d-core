@@ -5,9 +5,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from data.dataloader import collate_fm, make_collate_fm
-from data.normalization import compute_channel_stats, denormalize, normalize
-from evaluation.neural_inference import (
+from oceanml3d.data.dataloader import collate_fm, make_collate_fm
+from oceanml3d.data.normalization import compute_channel_stats, denormalize, normalize
+from oceanml3d.evaluation.neural_inference import (
     collate_eval,
     collate_joint_eval,
     make_collate_eval,

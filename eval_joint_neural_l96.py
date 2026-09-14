@@ -17,14 +17,14 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from evaluation.estimate_metrics import (
+from oceanml3d.evaluation.estimate_metrics import (
     evaluate_ensemble_estimates,
     evaluate_estimates,
     nrmse_param,
     trajectory_forecast_skill,
 )
-from evaluation.metrics import param_rmse
-from evaluation.neural_inference import (
+from oceanml3d.evaluation.metrics import param_rmse
+from oceanml3d.evaluation.neural_inference import (
     L96_JOINT_PARAM_NAMES,
     load_model,
     prepare_dataset,
@@ -92,7 +92,7 @@ def main():
     # Truth L96 dynamics (full J=4) used for the parameter-sensitivity forecast
     # metric: both the true-param and estimated-param rollouts use the SAME
     # dynamics so the divergence isolates the effect of parameter error.
-    from models.lorenz96_dynamics import Lorenz96Dynamics
+    from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
     truth_dyn = Lorenz96Dynamics(
         dt=0.001, coupling_exponent=1.6, NO=8, J=4,
         h=1.0, hx=1.0, eps=0.1, fast_weights=[1.0, 1.0, 0.1, 0.1],

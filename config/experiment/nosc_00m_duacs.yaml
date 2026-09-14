@@ -1,0 +1,5 @@
+# @package _global_
+defaults:
+  - override /data: surface_currents_00m
+  - override /model: nosc_unet
+export: {depth_m: 0}

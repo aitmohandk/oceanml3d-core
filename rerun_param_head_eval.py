@@ -20,7 +20,7 @@ import numpy as np
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from evaluation.run_l96 import make_obs_j_indices
+from oceanml3d.evaluation.run_l96 import make_obs_j_indices
 from train import evaluate_model, model_factory
 
 EXPERIMENTS = [

@@ -1,5 +1,118 @@
 # Changelog
 
+## 2026-09-14: `oceanml3d/` namespace, the NOSC transplant, and an installable package
+
+**Summary:** three changes that had to happen in this order. (1) Everything importable moved under a
+single `oceanml3d/` package, making the project installable. (2) The NOSC port was transplanted out
+of the sibling `donor-prototype` directory and into this tree. (3) `docs/feature_inventory.md` was
+rewritten against the result. Gate: `pytest -q -m "not slow"` → **779 passed, 11 skipped,
+45 deselected, 0 failed** (13 min 26 s), `ruff check .` clean.
+
+### 1. The namespace move
+
+`models/`, `data/`, `training/`, `evaluation/` and `conf/` became subpackages of `oceanml3d/`;
+**455 import statements rewritten across 128 files**. Acceptance was the import-smoke test written
+beforehand for exactly this purpose (`tests/test_import_smoke.py`, one test per module via
+`pkgutil.walk_packages`, plus a guard so a wrong root cannot make them vacuously pass), then the
+full suite: **661 passed, 8 skipped, 44 deselected** against a 609/7/44 baseline — the +52/+1 is
+precisely the new smoke file.
+
+The move surfaced the one import that could never have survived an install:
+`evaluation/neural_inference.py` imported `model_factory` **from the root script `train.py`**, which
+resolves only with the repository root on `sys.path`. It is now `oceanml3d/models/factory.py`, and
+`train.py` re-exports it — so a model registered for training is usable from a checkpoint, which was
+not structurally guaranteed before.
+
+`config/` and the driver scripts stay at the root **on purpose**: `@hydra.main(config_path=…)`
+resolves relative to the file carrying the decorator, so they cannot move without moving the
+decorator with them. The wheel ships the library; the drivers run from a clone.
+
+### 2. The NOSC transplant
+
+**120 files copied, 36 import paths rewritten, 79 tests added**, plus 42 modules newly covered by
+import smoke — 121 new tests in total, which is exactly the 668 → 789 selected-test delta. Zero
+regressions.
+
+The structural decision: the port's registry-based family landed at `oceanml3d/models/ocean/`, not
+directly in `oceanml3d/models/`. This tree already has `models/fourdvarnet.py` (the 620-line L96
+`FourDVarNetSolver`); the port has `models/fourdvarnet/` (the 149-line gridded `FourDVarNet`). A
+module cannot coexist with a package of the same name, and the two classes are not interchangeable.
+Moving the whole family one level down removed that collision and every other one at once, left
+`models/__init__.py` empty so no pre-existing import changed behaviour, and names a distinction that
+is real: `models/*.py` is the toy/Lorenz/QG family on `factory.py`, `models/ocean/` is the
+gridded-ocean family on `@register_model`.
+
+Three collisions were merged by hand rather than resolved by a path: `training/losses.py` (two
+scales of one concept, now one module with the distinction in its docstring), `tests/conftest.py`
+(the port's synthetic-ocean session fixtures appended to the Lorenz-63 ones), and
+`tests/test_hydra_config.py` (the port's copy became `test_hydra_config_ocean.py` — the two test
+different config roots).
+
+`lightning` was normalised to `pytorch_lightning` throughout, **including the seven
+`pytest.importorskip` guards**, which the import-statement regex had missed. Both packages are
+installed and contain the same code, but they are distinct module objects: a `lightning` module
+handed to a `pytorch_lightning.Trainer` fails an isinstance check. Those guards were passing while
+protecting the wrong package — a false green, not a crash.
+
+`product_contract.py` survived with its pinned SHA-256 intact
+(`dd44f0e198d0122b88207509801ed5c60a7e2fa36172151d89d78a622fe88846`), so the cross-repo contract
+with `oceanml3d-eval` still holds.
+
+### 3. Packaging
+
+`xarray`, `pandas`, `netCDF4` and `dask` promoted to hard dependencies (half the tree is
+xarray-native now); `zarr` and `prepare` extras added; the `oceanml3d` console script and the seven
+`oceanml3d.models` entry points declared. A wheel builds, contains only `oceanml3d/`, and all 94
+modules are in it — verified, along with every entry-point target resolving to the class the
+registry registers. The entry-point *group* name stayed `oceanml3d.models` even though the
+implementations moved to `oceanml3d.models.ocean`: that string is a published contract, and the
+transplant script was written to rewrite the module paths without touching it.
+
+Dropped: the prototype's `[tool.setuptools.package-data]` glob `models/*/config/**/*.yaml`. There is
+not one YAML file under `oceanml3d/`, and the convention in `docs/adding_a_model.md` puts a model's
+defaults in the root `config/model/`. It matched nothing in the prototype either.
+
+Ruff: `select = ["E4", "E7", "E9", "F", "I"]` with documented ignores. The full
+`["E", "F", "I", "B", "UP"]` that `oceanml3d-eval` runs reports 148 pre-existing violations in the
+imported scientific code, so it is recorded in `pyproject.toml` as a backlog with counts rather than
+switched on. 105 I001/F401 fixes were applied mechanically; UP006/UP045 deliberately were **not**,
+because they rewrite type annotations that OmegaConf introspects at runtime.
+
+### 4. The one red test, and the document that was describing another repository
+
+The graft brought exactly one failure, `test_enkf_beats_the_raw_observations`. Running it inside
+`donor-prototype` gave the identical assertion with the identical numbers, so it was inherited, not
+caused. **The filter is correct; the window was ten steps.** Each patch restarts the filter from an
+ensemble seeded off a frame that is 70 % NaN, with `N(0, 1)` fill where the true L96 state has a
+spread of ~3.6 — so the analysis starts off the attractor and has to be pulled back. Measured, same
+data, window length the only variable:
+
+| Window | err(obs) | err(EnKF) |
+|---|---|---|
+| T=10 | 0.0966 | 0.1637 |
+| T=80 | 0.0893 | 0.0796, reaching 0.04 by the end of the window |
+
+Repaired, not quarantined — the quarantine stays empty. Full adjudication in
+`tests/KNOWN_FAILURES.md`.
+
+`docs/feature_inventory.md` was rewritten. It had been inherited byte-for-byte from the porting
+prototype, where `oceanml3d/` was a greenfield package that genuinely did not contain the
+`4dvarnet-fm-opencode` science — so it listed QG dynamics, conditional flow matching, SDA, the
+parameter head, ETKF, Strong/Weak 4D-Var and the joint filters as **planned**. In this repository
+all of them are, and always were, **done**: this tree *is* that code. Sixteen lines flipped. It now
+also carries a §4 naming what the transplant genuinely duplicated — two config schemas with disjoint
+importers and two Hydra roots, and two dynamics abstractions — as PLAN items rather than accidents.
+
+**Rationale:** items 2, 3 and 4 of the project audit. The order was forced: transplanting before the
+namespace move would have meant transplanting twice, and rewriting the inventory before the
+transplant would have meant describing a tree that was about to change.
+
+**Verification:** `pytest -q -m "not slow"` 779/11/45 (baseline before this work 609/7/44, and
+661/8/44 after the rename alone); `ruff check .` clean; `pip wheel --no-deps` builds and its
+contents were inspected; all 8 entry points resolved by import; `product_contract.py` hash
+re-verified. `donor-prototype` is snapshotted at `../donor-prototype-snapshot-2026-09-14.tar.gz`
+and is no longer a dependency of anything.
+
 ## 2026-09-11: Rename the three projects to `oceanml3d` / `projetml3d`
 
 **Summary:** `oceanml/` → `projetml3d/`, `oceanml-core/` → `oceanml3d-core/`,

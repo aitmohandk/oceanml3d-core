@@ -2,31 +2,34 @@
 import os
 import sys
 
+import numpy as np
 import pytest
 import torch
-import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from conf.schema import DataConfig
-from data.lorenz96 import (
+from oceanml3d.conf.schema import DataConfig
+from oceanml3d.data.dataloader import FlowMatchingBatch, FlowMatchingDataset
+from oceanml3d.data.lorenz96 import (
     Lorenz96Config,
-    RandomParamLorenz96Dataset,
     RandomBiasLorenz96Dataset,
-    make_l96_s0_s1_trainval,
-    _make_lorenz96_dynamics,
+    RandomParamLorenz96Dataset,
     _draw_l96_params,
+    _make_lorenz96_dynamics,
+    make_l96_s0_s1_trainval,
 )
-from data.dataloader import FlowMatchingBatch, FlowMatchingDataset
-from models.direct_unet import DirectUNet
-from models.vanilla_cfm import VanillaCFM
-from evaluation.baselines import ObsOperator
-
+from oceanml3d.evaluation.baselines import ObsOperator
+from oceanml3d.evaluation.run_l96 import (
+    _fast_weights_active,
+    _per_group_ev,
+    _per_window_params,
+    evaluate_baseline,
+    fmt_ev,
+    make_obs_j_indices,
+)
+from oceanml3d.models.direct_unet import DirectUNet
+from oceanml3d.models.vanilla_cfm import VanillaCFM
 from train import _make_eval_batch, _per_group_rmse
-from evaluation.run_l96 import (
-    make_obs_j_indices, fmt_ev, _per_group_ev, evaluate_baseline,
-    _per_window_params, _fast_weights_active,
-)
 
 
 @pytest.fixture
@@ -542,7 +545,7 @@ def test_fast_weights_active():
 
 class TestMethodTruth:
     def test_slices_to_method_state_dim(self):
-        from evaluation.run_l96 import _method_truth
+        from oceanml3d.evaluation.run_l96 import _method_truth
 
         class M:
             state_dim = 24
@@ -554,7 +557,7 @@ class TestMethodTruth:
         torch.testing.assert_close(out, truth[..., ovi])
 
     def test_full_dim_and_unknown_method_unchanged(self):
-        from evaluation.run_l96 import _method_truth
+        from oceanml3d.evaluation.run_l96 import _method_truth
 
         class Full:
             state_dim = 40
@@ -570,12 +573,15 @@ class TestMethodTruth:
 class TestEsfixGateMissingES:
     def test_validate_missing_es_in_original_passes(self, tmp_path):
         import json
+
         from rerun_l96_esfix import validate
         orig = {"s0": {"EnKF": {"mean": 0.90, "ev": {"groups": {"all_obs": 0.50, "slow": 0.80, "obs_fast": 0.30}}}}}
         new = {"s0": {"EnKF": {"mean": 0.905, "ev": {"groups": {"all_obs": 0.505, "slow": 0.805, "obs_fast": 0.305}},
                               "es": {"groups": {"all_obs": 0.45, "slow": 0.30, "obs_fast": 0.50}}}}}
-        op = tmp_path / "orig.json"; json.dump(orig, open(op, "w"))
-        np = tmp_path / "new.json"; json.dump(new, open(np, "w"))
+        op = tmp_path / "orig.json"
+        json.dump(orig, open(op, "w"))
+        np = tmp_path / "new.json"
+        json.dump(new, open(np, "w"))
         rep = validate(str(op), str(np))
         assert rep["ok"] is True
         assert rep["checks"]["s0/EnKF"]["status"] == "OK"
@@ -596,7 +602,7 @@ class TestBatchedGeneration:
     def test_dynamics_seeded_bitwise_identical_F_only(self, batch_cfg):
         """Batched dynamics with per-window seeds matches per-window path bitwise
         when only F varies (no param that triggers float-op-order divergence)."""
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
         dyn = Lorenz96Dynamics(NO=8, J=4, dt=batch_cfg.dt)
         seeds = [42 + i * 100 for i in range(4)]
         F = torch.tensor([8.0, 7.6, 8.4, 8.2])
@@ -655,7 +661,7 @@ class TestBatchedGeneration:
     def test_test_splits_use_slow_path_by_default(self, batch_cfg):
         """make_l96_s0_s1_trainval uses slow path for test splits by default
         so the eval cache stays bitwise-reproducible."""
-        from evaluation.run_l96 import make_obs_j_indices
+        from oceanml3d.evaluation.run_l96 import make_obs_j_indices
         ov = make_obs_j_indices(8, 4, 2)
         cfg = Lorenz96Config(
             T_max=0.3, dt=0.001, obs_interval=100, num_windows=4,
@@ -674,8 +680,8 @@ class TestBatchedGeneration:
 
     def test_make_l96_s0_s1_datasets_fast_flag(self, batch_cfg):
         """make_l96_s0_s1_datasets respects fast_generation for test windows."""
-        from data.lorenz96 import make_l96_s0_s1_datasets
-        from evaluation.run_l96 import make_obs_j_indices
+        from oceanml3d.data.lorenz96 import make_l96_s0_s1_datasets
+        from oceanml3d.evaluation.run_l96 import make_obs_j_indices
         ov = make_obs_j_indices(8, 4, 2)
         cfg = Lorenz96Config(
             T_max=0.3, dt=0.001, obs_interval=100, num_windows=2,
@@ -691,7 +697,7 @@ class TestBatchedGeneration:
     def test_cached_datasets_reuse_test_splits(self, batch_cfg):
         """cached_datasets with test_s0/test_s1 reuses the supplied windows
         (by identity) while train/val are generated fresh."""
-        from evaluation.run_l96 import make_obs_j_indices
+        from oceanml3d.evaluation.run_l96 import make_obs_j_indices
         ov = make_obs_j_indices(8, 4, 2)
         cfg = Lorenz96Config(
             T_max=0.3, dt=0.001, obs_interval=100, num_windows=4,

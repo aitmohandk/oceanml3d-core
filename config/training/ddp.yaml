@@ -1,0 +1,12 @@
+# @package training
+defaults:
+  - default
+  - _self_
+batch_size: 2
+num_workers: 4
+trainer:
+  accelerator: gpu
+  devices: 4
+  strategy: ddp
+  precision: 16-mixed
+  sync_batchnorm: true

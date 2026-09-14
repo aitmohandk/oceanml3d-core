@@ -1,0 +1,3 @@
+# @package _global_
+# Learned per-target log-variance weighting (Kendall et al. 2018), supersedes grouping.
+training: {loss_combine: uncertainty}

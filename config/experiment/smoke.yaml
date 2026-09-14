@@ -1,0 +1,23 @@
+# @package _global_
+# 1-epoch CPU run on the synthetic dataset created by `python scripts/make_synthetic_data.py`
+defaults:
+  - override /data: surface_currents_15m
+  - override /model: nosc_unet
+  - override /training: debug
+paths:
+  root: ${oc.env:OCEANML3D_DATA,./data/synthetic}
+  datasets:
+    ssh_l4_duacs_4th: {path: synthetic_surface.nc}
+    era5_daily_4th:   {path: synthetic_surface.nc}
+    bathy_4th:        {path: synthetic_static.nc}
+    drifters_aoml_15m_4th: {path: synthetic_surface.nc}
+data:
+  domain: {lat: [-10, 10], lon: [-10, 10]}
+  splits:
+    train: {time: ["2019-01-01", "2019-01-31"]}
+    val:   {time: ["2019-02-01", "2019-02-14"]}
+    test:  {time: ["2019-02-15", "2019-02-28"]}
+  patch:  {time: 5, lat: 32, lon: 32}
+  stride: {time: 1, lat: 24, lon: 24}
+model: {widths: [8, 16, 32]}
+export: {time: null, depth_m: 15}

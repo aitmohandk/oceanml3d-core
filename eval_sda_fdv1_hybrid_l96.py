@@ -29,15 +29,14 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from omegaconf import OmegaConf
 
-from evaluation.estimate_metrics import (
+from oceanml3d.evaluation.estimate_metrics import (
     evaluate_ensemble_estimates,
     evaluate_estimates,
     save_estimates,
 )
-from evaluation.neural_inference import BatchDict, load_model, prepare_dataset
-from evaluation.sda_sampler import sda_guided_sample
+from oceanml3d.evaluation.neural_inference import BatchDict, load_model, prepare_dataset
+from oceanml3d.evaluation.sda_sampler import sda_guided_sample
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -125,7 +124,7 @@ def main():
             dataset_path = str(candidates[0])
             logger.info(f"Auto-detected dataset: {dataset_path}")
 
-    from models.sda import ConditionalPriorCFM
+    from oceanml3d.models.sda import ConditionalPriorCFM
     is_conditioned = isinstance(sda_model, ConditionalPriorCFM)
     dataset, dataloaders, obs_var_indices = prepare_dataset(
         sda_cfg, dataset_path, args.num_windows, args.obs_interval,

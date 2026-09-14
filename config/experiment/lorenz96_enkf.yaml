@@ -1,0 +1,6 @@
+# @package _global_
+# The classical reference on the same task: an EnKF that knows the true dynamics.
+defaults:
+  - lorenz96_unet
+  - override /model: enkf
+model: {dynamics: lorenz96, n_members: 20, inflation: 1.02, obs_noise: 1.0, localization_radius: 4}

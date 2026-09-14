@@ -1,11 +1,13 @@
 import os
 import sys
-import torch
+
 import numpy as np
+import torch
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from data.lorenz63 import Lorenz63Config, make_s0_s1_trainval
-from evaluation.run import run_and_cache_baselines
+from oceanml3d.data.lorenz63 import Lorenz63Config, make_s0_s1_trainval
+from oceanml3d.evaluation.run import run_and_cache_baselines
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Device: {device}")

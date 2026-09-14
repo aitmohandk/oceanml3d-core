@@ -1,0 +1,29 @@
+# @package training
+batch_size: 1
+num_workers: 8
+loss: mae
+loss_combine: flat_sum      # flat_sum | group_mean | uncertainty
+loss_group_weights: {}
+grad_loss_weight: 0.0
+save_top_k: 3
+moving_patches: false      # random window offsets on the train split (NOSC moving_patches)
+cache: false               # zarr cache of the stacked array under <paths.root>/cache/
+stages: null               # null = the model's own `stages`; e.g. [prior, conditional] for a 2-stage pipeline
+stage_trainer: {}          # per-stage trainer overrides, e.g. {prior: {max_epochs: 50}}
+optimizer:
+  name: cosine_adam
+  lr: 1.0e-4
+  t_max: ${training.trainer.max_epochs}
+rec_weight:
+  kind: triangular          # constant | triangular
+  crop: {time: 0, lat: 4, lon: 4}
+  kw: {offset: 1}
+trainer:
+  accelerator: auto
+  devices: 1
+  max_epochs: 150
+  gradient_clip_val: 0.5
+  limit_train_batches: 102
+  precision: 32
+  inference_mode: false
+  log_every_n_steps: 10

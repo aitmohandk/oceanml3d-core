@@ -6,16 +6,17 @@ Usage:
     python batch/cs567_sweep.py --method enkf --inflation 1.2
     python batch/cs567_sweep.py --method etkf --inflation 1.6
 """
+import argparse
 import os
 import sys
-import argparse
 import time
+
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from evaluation.run import run_and_cache_baselines
+from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.evaluation.run import run_and_cache_baselines
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXP_DIR = os.path.join(BASE, "experiments")

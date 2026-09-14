@@ -28,9 +28,9 @@ import logging
 
 import torch
 
-from data.normalization import compute_channel_stats, save_norm_stats
-from data.qg import QGConfig
-from data.qg_neural import (
+from oceanml3d.data.normalization import compute_channel_stats, save_norm_stats
+from oceanml3d.data.qg import QGConfig
+from oceanml3d.data.qg_neural import (
     ensure_truth_cache,
     layer_split,
     psi_daily,

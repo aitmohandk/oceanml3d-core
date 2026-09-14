@@ -1,6 +1,7 @@
 """Tests for UNet1D and components."""
 import torch
-from models.unet import SinusoidalEmbedding, ConvBlock, Down, Up, ConditionEncoder, UNet1D
+
+from oceanml3d.models.unet import ConditionEncoder, ConvBlock, Down, SinusoidalEmbedding, UNet1D, Up
 
 
 def test_sinusoidal_embedding_shape():

@@ -1,0 +1,6 @@
+input: ${OCEANML3D_RAW}/era5/era5_*.nc
+output: ${OCEANML3D_DATA}/era5/era5_2010-01-01_2022-01-01_4th.nc
+variables: {u10: u10, v10: v10}
+reference: ${OCEANML3D_DATA}/ssh_l4/SSH_L4_CMEMS_2010-01-01-2024-01-01_4th.nc
+time: ["2010-01-01", "2022-01-01"]
+method: linear

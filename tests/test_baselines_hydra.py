@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from conf.schema import BaselinesConfig, Weak4DVarConfig, Strong4DVarConfig, EnKFConfig
+from oceanml3d.conf.schema import BaselinesConfig, EnKFConfig, Strong4DVarConfig, Weak4DVarConfig
 
 
 class TestBaselinesConfigDefaults:

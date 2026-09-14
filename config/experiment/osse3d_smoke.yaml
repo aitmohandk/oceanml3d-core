@@ -1,0 +1,44 @@
+# @package _global_
+# CPU smoke test of the OSSE-3D path on the synthetic dataset (`python scripts/make_synthetic_data.py --osse`).
+defaults:
+  - override /data: osse3d_gs21
+  - override /model: nosc_unet
+  - override /training: debug
+paths:
+  root: ${oc.env:OCEANML3D_DATA,./data/synthetic}
+  datasets:
+    glorys_gs_surface:   {path: synthetic_osse_surface.nc}
+    glorys_gs_multidepth: {path: synthetic_osse_multidepth.nc}
+    bathy_gs:            {path: synthetic_static.nc}
+    pseudo_obs_ssh_gs:   {path: synthetic_pseudo_obs.nc}
+    pseudo_obs_sst_gs:   {path: synthetic_pseudo_obs_sst.nc}
+    argo_virtual_thetao_gs21: {path: synthetic_argo_virtual.nc}
+data:
+  depth_indices: &d3 [0, 1, 2]
+  variables:
+    mask_sentinel6: null
+    mask_sentinel3b: null
+    mask_saral: null
+    mask_hy2b: null
+    argo_thetao: {depth_indices: *d3}
+    argo_mask: {depth_indices: *d3}
+    thetao: {depth_indices: *d3}
+    uo: {depth_indices: *d3}
+    vo: {depth_indices: *d3}
+  domain: {lat: [-10, 10], lon: [-10, 10]}
+  splits:
+    train: {time: ["2019-01-01", "2019-01-31"]}
+    val:   {time: ["2019-02-01", "2019-02-14"]}
+    test:  {time: ["2019-02-15", "2019-02-28"]}
+  patch:  {time: 5, lat: 32, lon: 32}
+  stride: {time: 1, lat: 24, lon: 24}
+  augment:
+    mission_dropout: {missions: [mask_jason3, mask_sentinel3a], n_drop: [1, 1]}
+  prepare:
+    pseudo_obs:
+      ssh: {missions: [jason3, sentinel3a]}
+      sst: {clouds: {coverage: 0.7, scale_cells: 4}}
+    virtual_argo: {depth_indices: *d3}
+training: {loss_combine: group_mean, grad_loss_weight: 20.0}
+model: {widths: [8, 16, 32]}
+export: {time: null, depth_m: null}

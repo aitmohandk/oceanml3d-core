@@ -6,28 +6,32 @@ Usage:
     python run_experiments.py --experiment A1          # Run specific
     python run_experiments.py --baselines-only         # Cache baselines only
 """
-import os
-import sys
-import json
-import time
 import argparse
-import traceback
+import json
+import os
 import subprocess
-import torch
+import sys
+import time
+import traceback
+
 import numpy as np
+import torch
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE)
-from data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from data.dataloader import ConcatFMDataset, collate_fm
 from torch.utils.data import DataLoader
-from models.solver import TweedieSolver
-from training.stage1 import train_stage1
-from training.stage2 import train_stage2
-from evaluation.metrics import rmse
-from evaluation.run import (
-    fmt_rmse, run_and_cache_baselines,
+
+from oceanml3d.data.dataloader import ConcatFMDataset, collate_fm
+from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.evaluation.metrics import rmse
+from oceanml3d.evaluation.run import (
     EXP_DIR,
+    fmt_rmse,
+    run_and_cache_baselines,
 )
+from oceanml3d.models.solver import TweedieSolver
+from oceanml3d.training.stage1 import train_stage1
+from oceanml3d.training.stage2 import train_stage2
 
 EXPERIMENTS = [
     {

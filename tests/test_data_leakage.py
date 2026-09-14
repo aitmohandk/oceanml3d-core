@@ -7,12 +7,13 @@ Verifies:
 - DA baselines (Weak-4DVar, Strong-4DVar) produce finite, reasonable RMSE
   when running on datasets where obs at unobserved steps is NaN
 """
+import numpy as np
 import pytest
 import torch
-import numpy as np
-from data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from models.lorenz63_dynamics import Lorenz63Dynamics
-from evaluation.baselines import Weak4DVar, Strong4DVar
+
+from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.evaluation.baselines import Strong4DVar, Weak4DVar
+from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
 
 
 @pytest.fixture

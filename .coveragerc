@@ -1,5 +1,5 @@
 [run]
-source = data,evaluation
+source = oceanml3d
 omit = */tests/*,*/__init__.py
 
 [report]

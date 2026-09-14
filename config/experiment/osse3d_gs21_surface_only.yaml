@@ -1,0 +1,4 @@
+# @package _global_
+defaults:
+  - osse3d_gs21_multivar_unet
+  - override /data: osse3d_gs21_surface_only

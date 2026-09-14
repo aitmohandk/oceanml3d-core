@@ -1,0 +1,2 @@
+# @package _global_
+training: {grad_loss_weight: 0.0}

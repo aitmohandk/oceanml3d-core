@@ -24,8 +24,8 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from data.qg import QGConfig
-from models.qg_dynamics import QGDynamics
+from oceanml3d.data.qg import QGConfig
+from oceanml3d.models.qg_dynamics import QGDynamics
 
 TEST_DRAWS = {
     "high": (1.15, 1.15, 1.15),

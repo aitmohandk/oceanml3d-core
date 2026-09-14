@@ -1,0 +1,15 @@
+# @package _global_
+# Classic 4DVarNet SSH mapping OSSE (zos observed along tracks, reconstructed), Gulf Stream domain.
+defaults:
+  - override /data: osse3d_gs21
+  - override /model: fourdvarnet
+data:
+  variables:
+    argo_thetao: null
+    argo_mask: null
+    thetao: null
+    uo: null
+    vo: null
+model: {obs_map: {zos: ssh_obs}, n_step: 15}
+training: {loss_combine: flat_sum, grad_loss_weight: 20.0, batch_size: 4}
+export: {time: ["2019-01-01", "2019-12-31"], depth_m: null}

@@ -1,20 +1,20 @@
 import numpy as np
 import pytest
 
-from evaluation.baselines import (
+from oceanml3d.evaluation.baselines import (
     JointEnKFL96,
     JointETKFL96,
     JointStrong4DVarL96,
 )
-from evaluation.metrics import param_rmse
+from oceanml3d.evaluation.metrics import param_rmse
 
 
 @pytest.fixture
 def l96_ctx(device):
     import torch
 
-    from evaluation.baselines import ObsOperator
-    from models.lorenz96_dynamics import Lorenz96Dynamics
+    from oceanml3d.evaluation.baselines import ObsOperator
+    from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
     torch.manual_seed(0)
     dyn = Lorenz96Dynamics(dt=0.001, coupling_exponent=1.6)
     op = ObsOperator(40, list(range(24)))
@@ -68,8 +68,8 @@ class TestJointEnKFL96:
         """Inflation must apply only to the state block, not the param block."""
         import torch
 
-        from evaluation.baselines import ObsOperator
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.evaluation.baselines import ObsOperator
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
         torch.manual_seed(0)
         dyn = Lorenz96Dynamics(dt=0.001, coupling_exponent=1.6)
         op = ObsOperator(40, list(range(24)))
@@ -91,8 +91,8 @@ class TestJointEnKFL96:
     def _seq_vs_batch(self, device, J):
         import torch
 
-        from evaluation.baselines import ObsOperator
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.evaluation.baselines import ObsOperator
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
         torch.manual_seed(7)
         dyn = Lorenz96Dynamics(dt=0.001, NO=8, J=J, h=1.0, hx=1.0, eps=0.1,
                                coupling_exponent=1.0)
@@ -136,9 +136,9 @@ class TestJointEnKFL96:
     def test_batch_matches_sequential_s0(self, device):
         import torch
 
-        from evaluation.baselines import ObsOperator
-        from evaluation.run_l96 import make_obs_j_indices
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.evaluation.baselines import ObsOperator
+        from oceanml3d.evaluation.run_l96 import make_obs_j_indices
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
         torch.manual_seed(7)
         ovi = make_obs_j_indices(8, 4, 2)
         dyn = Lorenz96Dynamics(dt=0.001, coupling_exponent=1.6)
@@ -202,8 +202,8 @@ class TestJointETKFL96:
     def test_s1_shape_w3w4_default(self, device):
         import torch
 
-        from evaluation.baselines import ObsOperator
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.evaluation.baselines import ObsOperator
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
         torch.manual_seed(0)
         J = 2
         dyn = Lorenz96Dynamics(dt=0.001, NO=8, J=J, h=1.0, hx=1.0, eps=0.1,
@@ -229,8 +229,8 @@ class TestJointETKFL96:
     def _seq_vs_batch(self, device, J):
         import torch
 
-        from evaluation.baselines import ObsOperator
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.evaluation.baselines import ObsOperator
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
         torch.manual_seed(7)
         dyn = Lorenz96Dynamics(dt=0.001, NO=8, J=J, h=1.0, hx=1.0, eps=0.1,
                                coupling_exponent=1.0)
@@ -274,9 +274,9 @@ class TestJointETKFL96:
     def test_batch_matches_sequential_s0(self, device):
         import torch
 
-        from evaluation.baselines import ObsOperator
-        from evaluation.run_l96 import make_obs_j_indices
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.evaluation.baselines import ObsOperator
+        from oceanml3d.evaluation.run_l96 import make_obs_j_indices
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
         torch.manual_seed(7)
         ovi = make_obs_j_indices(8, 4, 2)
         dyn = Lorenz96Dynamics(dt=0.001, coupling_exponent=1.6)
@@ -317,8 +317,8 @@ class TestJointETKFL96:
     def test_etkf_ridge_applied(self, device):
         import torch
 
-        from evaluation.baselines import ObsOperator
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.evaluation.baselines import ObsOperator
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
         torch.manual_seed(0)
         dyn = Lorenz96Dynamics(dt=0.001, coupling_exponent=1.6)
         op = ObsOperator(40, list(range(24)))
@@ -343,8 +343,8 @@ class TestJointETKFL96:
     def test_nan_safety(self, device, monkeypatch, l96_ctx):
         import torch
 
-        from evaluation.baselines import ObsOperator
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.evaluation.baselines import ObsOperator
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
         torch.manual_seed(0)
         dyn = Lorenz96Dynamics(dt=0.001, coupling_exponent=1.6)
         op = ObsOperator(40, list(range(24)))
@@ -393,8 +393,8 @@ class TestJointStrong4DVarL96:
     def _assim_s1(self, J, device, fw):
         import torch
 
-        from evaluation.baselines import ObsOperator
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.evaluation.baselines import ObsOperator
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
         torch.manual_seed(7)
         dyn = Lorenz96Dynamics(dt=0.001, NO=8, J=J, h=1.0, hx=1.0, eps=0.1,
                                coupling_exponent=1.0)
@@ -419,7 +419,7 @@ class TestJointStrong4DVarL96:
         np.testing.assert_allclose(r.params[:, 7], 0.1)
 
     def test_batched_method_estimates_params(self, l96_ctx, device):
-        from evaluation.baselines import Strong4DVar
+        from oceanml3d.evaluation.baselines import Strong4DVar
 
         m = JointStrong4DVarL96(dt=0.001, device=device,
                                 dynamics=l96_ctx["dyn"], obs_operator=l96_ctx["op"],
@@ -431,9 +431,9 @@ class TestJointStrong4DVarL96:
     def test_batched_adam_assimilate_batch_finite(self, device):
         import torch
 
-        from evaluation.baselines import ObsOperator
-        from evaluation.run_l96 import make_obs_j_indices
-        from models.lorenz96_dynamics import Lorenz96Dynamics
+        from oceanml3d.evaluation.baselines import ObsOperator
+        from oceanml3d.evaluation.run_l96 import make_obs_j_indices
+        from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
 
         ovi = make_obs_j_indices(8, 4, 2)
         dyn = Lorenz96Dynamics(dt=0.001, coupling_exponent=1.6)
@@ -468,8 +468,8 @@ class TestJointStrong4DVarL96:
             assert r.params[:, 0].max() <= hi
 
     def test_evaluate_baseline_routes_batched(self, l96_ctx, device):
-        from data.lorenz96 import Lorenz96Config
-        from evaluation.run_l96 import evaluate_baseline, make_obs_j_indices
+        from oceanml3d.data.lorenz96 import Lorenz96Config
+        from oceanml3d.evaluation.run_l96 import evaluate_baseline, make_obs_j_indices
 
         ovi = make_obs_j_indices(8, 4, 2)
         cfg = Lorenz96Config(obs_interval=100, obs_var_indices=tuple(ovi))
@@ -491,8 +491,8 @@ class TestJointStrong4DVarL96:
         assert np.isfinite(stats[0][0].mean())
 
     def test_sequential_fallback_still_finite(self, l96_ctx, device):
-        from data.lorenz96 import Lorenz96Config
-        from evaluation.run_l96 import evaluate_baseline, make_obs_j_indices
+        from oceanml3d.data.lorenz96 import Lorenz96Config
+        from oceanml3d.evaluation.run_l96 import evaluate_baseline, make_obs_j_indices
 
         ovi = make_obs_j_indices(8, 4, 2)
         cfg = Lorenz96Config(obs_interval=100, obs_var_indices=tuple(ovi))
@@ -513,9 +513,9 @@ class TestJointStrong4DVarL96:
         assert np.isfinite(stats[0][0].mean())
 
     def test_nan_window_skipped(self, l96_ctx, device, monkeypatch):
-        from data.lorenz96 import Lorenz96Config
-        from evaluation.baselines import BaselineResult
-        from evaluation.run_l96 import evaluate_baseline, make_obs_j_indices
+        from oceanml3d.data.lorenz96 import Lorenz96Config
+        from oceanml3d.evaluation.baselines import BaselineResult
+        from oceanml3d.evaluation.run_l96 import evaluate_baseline, make_obs_j_indices
 
         ovi = make_obs_j_indices(8, 4, 2)
         cfg = Lorenz96Config(obs_interval=100, obs_var_indices=tuple(ovi))

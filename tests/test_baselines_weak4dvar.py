@@ -9,11 +9,12 @@ Tests cover:
 - Model error estimation
 - Output format
 """
+import numpy as np
 import pytest
 import torch
-import numpy as np
-from models.lorenz63_dynamics import Lorenz63Dynamics
-from evaluation.baselines import Weak4DVar, BaselineResult
+
+from oceanml3d.evaluation.baselines import BaselineResult, Weak4DVar
+from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
 
 
 def test_weak4dvar_initialization(device):
@@ -107,7 +108,7 @@ def test_weak4dvar_perfect_obs_low_rmse(device):
     torch.manual_seed(42)
     np.random.seed(42)
     
-    from data.lorenz63 import Lorenz63Config, Lorenz63Dataset
+    from oceanml3d.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
     
     # Create config with dense observations
     cfg_dense = Lorenz63Config(

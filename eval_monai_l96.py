@@ -14,13 +14,12 @@ import json
 import logging
 from pathlib import Path
 
-import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from evaluation.estimate_metrics import evaluate_estimates, save_estimates
-from evaluation.neural_inference import prepare_dataset, run_inference
-from models.monai_unet_adapter import MonaiDirectUNet
+from oceanml3d.evaluation.estimate_metrics import evaluate_estimates, save_estimates
+from oceanml3d.evaluation.neural_inference import prepare_dataset, run_inference
+from oceanml3d.models.monai_unet_adapter import MonaiDirectUNet
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -97,7 +96,7 @@ def main():
     # weights tuned for normalized-scale obs, producing meaningless RMSE.
     norm_stats = None
     if cfg.data.get("normalize", False):
-        from data.normalization import load_norm_stats
+        from oceanml3d.data.normalization import load_norm_stats
         # args.checkpoint is <exp_dir>/checkpoints/stage1.pt -- parents[2] of
         # its resolved path is the shared "experiments" directory itself.
         norm_stats_path = cfg.data.get(
@@ -119,7 +118,7 @@ def main():
     estimates = run_inference(model, dataloaders, device, obs_var_indices)
 
     if norm_stats is not None:
-        from data.normalization import denormalize
+        from oceanml3d.data.normalization import denormalize
         for est in estimates.values():
             est["trajectories"] = denormalize(est["trajectories"], norm_stats)
 

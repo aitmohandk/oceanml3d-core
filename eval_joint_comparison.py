@@ -1,21 +1,28 @@
 #!/usr/bin/env python3
 """Joint state-parameter estimation: S0/S1 benchmark with vanilla vs joint DA."""
+import argparse
+import json
 import os
 import sys
-import json
-import argparse
-import torch
+
 import numpy as np
+import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from evaluation.baselines import (
-    Weak4DVar, Strong4DVar, EnKF, ETKF,
-    JointWeak4DVar, JointStrong4DVar, JointEnKF, JointETKF,
+from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.evaluation.baselines import (
+    ETKF,
+    EnKF,
+    JointEnKF,
+    JointETKF,
+    JointStrong4DVar,
+    JointWeak4DVar,
+    Strong4DVar,
+    Weak4DVar,
 )
-from evaluation.metrics import param_rmse
-from evaluation.run import evaluate_baseline
+from oceanml3d.evaluation.metrics import param_rmse
+from oceanml3d.evaluation.run import evaluate_baseline
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 EXP_DIR = os.path.join(BASE, "experiments")

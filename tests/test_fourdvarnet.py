@@ -3,7 +3,7 @@ from unittest.mock import patch
 import torch
 import torch.nn.functional as F
 
-from models.fourdvarnet import (
+from oceanml3d.models.fourdvarnet import (
     FourDVarNetPredictStateCFM,
     FourDVarNetSolver,
     _build_update_input,
@@ -681,7 +681,7 @@ class TestGradientCheckpointing:
 
     def _assert_checkpoint_matches_reference(self, model, forward_fn):
         out_ckpt, grads_ckpt = _forward_backward_grads(model, forward_fn, seed=42)
-        with patch("models.fourdvarnet.checkpoint", _bypass_checkpoint):
+        with patch("oceanml3d.models.fourdvarnet.checkpoint", _bypass_checkpoint):
             out_plain, grads_plain = _forward_backward_grads(model, forward_fn, seed=42)
         assert torch.allclose(out_ckpt, out_plain, atol=1e-5), "checkpointed output diverged"
         assert grads_ckpt.keys() == grads_plain.keys()

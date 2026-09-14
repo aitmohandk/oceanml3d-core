@@ -19,7 +19,7 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from data.qg import QGConfig, QGS01Dataset
+from oceanml3d.data.qg import QGConfig, QGS01Dataset
 
 # Distinct seed bases per split so train/val/test occupy disjoint index
 # spaces even though each internally indexes windows 0..n_total-1. Offsets

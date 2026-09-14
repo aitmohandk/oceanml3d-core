@@ -1,6 +1,7 @@
 """Tests for TweedieSolver."""
 import torch
-from models.solver import TweedieSolver
+
+from oceanml3d.models.solver import TweedieSolver
 
 
 def test_solver_creation():

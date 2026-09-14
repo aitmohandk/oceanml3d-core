@@ -1,0 +1,5 @@
+# @package model
+name: nosc_unet
+widths: [64, 128, 256, 512, 1024]
+dropout: 0.1
+bilinear: true

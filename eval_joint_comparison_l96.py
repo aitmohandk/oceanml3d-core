@@ -15,8 +15,8 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from data.lorenz96 import Lorenz96Config, make_l96_s0_s1_trainval
-from evaluation.baselines import (
+from oceanml3d.data.lorenz96 import Lorenz96Config, make_l96_s0_s1_trainval
+from oceanml3d.evaluation.baselines import (
     ETKF,
     EnKF,
     JointEnKFL96,
@@ -24,8 +24,8 @@ from evaluation.baselines import (
     JointStrong4DVarL96,
     Strong4DVar,
 )
-from evaluation.metrics import param_rmse
-from evaluation.run_l96 import evaluate_baseline, make_obs_j_indices
+from oceanml3d.evaluation.metrics import param_rmse
+from oceanml3d.evaluation.run_l96 import evaluate_baseline, make_obs_j_indices
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 EXP_DIR = os.path.join(BASE, "experiments")
@@ -156,8 +156,8 @@ def main():
             raise SystemExit(f"Unknown method(s): {sorted(missing)}")
         method_factories = {k: v for k, v in method_factories.items() if k in keep}
 
-    from evaluation.baselines import ObsOperator
-    from models.lorenz96_dynamics import Lorenz96Dynamics
+    from oceanml3d.evaluation.baselines import ObsOperator
+    from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
     s0_dyn = Lorenz96Dynamics(dt=0.001, coupling_exponent=1.6)
     s0_obs_op = ObsOperator(NO + NO * J_truth, obs_var_indices)
     s1_dyn = Lorenz96Dynamics(dt=0.001, NO=NO, J=s1_j, h=1.0, hx=1.0, eps=0.1,

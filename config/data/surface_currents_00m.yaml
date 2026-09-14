@@ -1,0 +1,7 @@
+# @package data
+defaults:
+  - surface_currents_15m
+  - _self_
+variables:
+  u_drifter: {source: drifters_aoml_00m_4th, var_name: u_drifter, role: target}
+  v_drifter: {source: drifters_aoml_00m_4th, var_name: v_drifter, role: target}

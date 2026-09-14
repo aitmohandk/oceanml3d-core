@@ -1,0 +1,7 @@
+# @package data
+# Same OSSE without the in-situ (virtual ARGO) inputs: the per-depth skill gap quantifies their value.
+defaults:
+  - osse3d_gs21
+  - _self_
+variables:
+  argo_thetao: null

@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-import models.fourdvarnet as fdv_mod
-from models.fourdvarnet import FourDVarNetSolver
+import oceanml3d.models.fourdvarnet as fdv_mod
+from oceanml3d.models.fourdvarnet import FourDVarNetSolver
 
 N_OUTER_VALUES = (5, 10, 20, 40)
 UPDATE_INPUT_MODES = ("obs+state", "grad+state")

@@ -1,0 +1,14 @@
+# @package _global_
+# Requires the EOF bases: `oceanml3d command=eofs experiment=<xp>` (writes <paths.root>/eofs/<var>_gs21.npz).
+model:
+  head: vertical_modes
+  mode_specs:
+    temperature:
+      npz: ${paths.root}/eofs/thetao_gs21.npz
+      n_modes: 8
+    currents_u:
+      npz: ${paths.root}/eofs/uo_gs21.npz
+      n_modes: 8
+    currents_v:
+      npz: ${paths.root}/eofs/vo_gs21.npz
+      n_modes: 8

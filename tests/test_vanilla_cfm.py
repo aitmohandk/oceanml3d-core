@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from models.vanilla_cfm import PredictStateCFM, TweedieCFM, VanillaCFM
+from oceanml3d.models.vanilla_cfm import PredictStateCFM, TweedieCFM, VanillaCFM
 
 
 class _MockBatch:

@@ -1,0 +1,16 @@
+# @package data
+# Toy task (4dvarnet-fm-opencode heritage): reconstruct the Lorenz-96 state from sparse noisy
+# observations. Same pipeline as an ocean task - the state is stored as a 1 x 40 'grid'.
+variables:
+  obs:      {source: lorenz96, var_name: obs, role: input}
+  obs_mask: {source: lorenz96, var_name: obs_mask, role: input}
+  state:    {source: lorenz96, var_name: state, role: target, group: state}
+
+domain: {lat: [-1, 1], lon: [0, 40]}
+splits:
+  train: {time: ["2000-01-01", "2005-01-01"]}
+  val:   {time: ["2005-01-02", "2006-01-01"]}
+  test:  {time: ["2006-01-02", "2007-01-01"]}
+patch:  {time: 20, lat: 1, lon: 40}
+stride: {time: 4, lat: 1, lon: 40}
+norm_stats: null

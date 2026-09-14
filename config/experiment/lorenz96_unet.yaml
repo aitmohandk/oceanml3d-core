@@ -1,0 +1,16 @@
+# @package _global_
+# Method development on a toy system (CPU, seconds): `python scripts/make_toy_data.py` first.
+defaults:
+  - override /data: lorenz96
+  - override /model: nosc_unet
+paths:
+  root: ${oc.env:OCEANML3D_DATA,./data/toy}
+  datasets: {lorenz96: {path: lorenz96.nc}}
+model: {widths: [16, 32], bilinear: true}
+training:
+  batch_size: 16
+  num_workers: 0
+  loss: mse
+  rec_weight: {kind: constant, crop: {time: 2, lat: 0, lon: 0}, kw: {}}
+  trainer: {accelerator: cpu, max_epochs: 5, limit_train_batches: 20}
+export: {enabled: true, split: test, time: null, depth_m: null}

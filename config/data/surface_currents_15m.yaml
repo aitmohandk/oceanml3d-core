@@ -1,0 +1,26 @@
+# @package data
+# Task: reconstruct 15 m currents from surface observations (NOSC setting).
+variables:
+  ssh:       {source: ssh_l4_duacs_4th, var_name: zos,  role: input}
+  ugos:      {source: ssh_l4_duacs_4th, var_name: ugos, role: input}
+  vgos:      {source: ssh_l4_duacs_4th, var_name: vgos, role: input}
+  u10:       {source: era5_daily_4th,   var_name: u10,  role: input}
+  v10:       {source: era5_daily_4th,   var_name: v10,  role: input}
+  lat:       {source: ssh_l4_duacs_4th, var_name: lat,  role: static}
+  bathy:     {source: bathy_4th,        var_name: deptho, role: static}
+  u_drifter: {source: drifters_aoml_15m_4th, var_name: u_drifter, role: target, standard_name: eastward_sea_water_velocity, units: m s-1}
+  v_drifter: {source: drifters_aoml_15m_4th, var_name: v_drifter, role: target, standard_name: northward_sea_water_velocity, units: m s-1}
+
+domain:
+  lat: [-70, 70]
+  lon: [-180, 180]
+
+splits:
+  train: {time: ["2010-01-01", "2017-12-31"]}
+  val:   {time: ["2018-01-01", "2018-12-31"]}
+  test:  {time: ["2018-12-20", "2020-01-10"]}
+
+patch:  {time: 11, lat: 560, lon: 1440}
+stride: {time: 1,  lat: 552, lon: 1432}
+chunks: {time: 32}
+norm_stats: null        # null = computed on the train split at setup (then cached in the run dir)

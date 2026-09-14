@@ -1,0 +1,6 @@
+# @package training
+defaults:
+  - default
+  - _self_
+num_workers: 0
+trainer: {accelerator: cpu, devices: 1, max_epochs: 1, limit_train_batches: 2, limit_val_batches: 2, limit_test_batches: 2}

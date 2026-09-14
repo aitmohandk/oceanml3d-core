@@ -10,14 +10,15 @@ Usage:
 import os
 import sys
 import time
-import torch
+
 import hydra
+import torch
 from omegaconf import DictConfig, OmegaConf
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from evaluation.run import run_and_cache_baselines, EXP_DIR
+from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.evaluation.run import EXP_DIR, run_and_cache_baselines
 
 
 @hydra.main(config_path="config", config_name="lorenz63_default", version_base="1.3")

@@ -1,0 +1,7 @@
+# @package model
+name: optimal_interpolation
+obs_map: {}          # {target: observed input}; role: both targets are mapped automatically
+length_scale: 4.0    # grid cells
+time_scale: 2.0      # time steps
+obs_var: 0.05
+bg_var: 1.0
