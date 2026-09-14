@@ -4,3 +4,5 @@ matplotlib>=3.8.0
 pytest>=7.4.0
 pytest-cov>=4.1.0
 pyyaml>=6.0
+# default trunk of the gridded models; `<1.6` keeps torch where it is (monai 1.6 needs torch>=2.8)
+monai>=1.5,<1.6

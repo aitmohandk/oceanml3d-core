@@ -338,7 +338,7 @@ once with it.
 
 | Registered name | Class | What it is |
 |---|---|---|
-| `nosc_unet` | `models/ocean/nosc/model.py::NOSCUNet` | residual 2D U-Net, time folded into channels or a 3D stem; the workhorse |
+| `nosc_unet` | `models/ocean/nosc/model.py::NOSCUNet` | 2D U-Net trunk (MONAI `DiffusionModelUNet` by default, the historical `UNetNosc` via `ablation=trunk_nosc`), time folded into channels or a 3D stem; the workhorse |
 | `fourdvarnet` | `models/ocean/fourdvarnet/model.py::FourDVarNet` | iterative variational solver, learned prior (bilinear AE) + learned gradient step (ConvLSTM) |
 | `enkf` | `models/ocean/assimilation/model.py` | EnKF with inflation and Gaspari–Cohn localisation, as a registered model so it exports products |
 | `optimal_interpolation` | idem | real OI (length/time scales, obs and background variance) |
@@ -353,7 +353,10 @@ once with it.
 name: nosc_unet
 widths: [64, 128, 256, 512, 1024]   # U-Net level widths; 3 levels is the OSSE-3D setting
 dropout: 0.1
-bilinear: true
+bilinear: true                      # `trunk: nosc` only
+trunk: monai                        # monai | nosc
+num_res_blocks: 2                   # `trunk: monai` only
+norm_num_groups: null               # `trunk: monai` only; null -> min(32, gcd(widths))
 head: single                        # single | grouped | vertical_modes
 neck_channels: 64                   # `grouped`/`vertical_modes`: trunk output width
 head_hidden: 32
@@ -364,6 +367,39 @@ attention_heads: 4
 time_mode: channels                 # channels (NOSC default) | conv3d
 temporal_channels: 16               # `conv3d` only
 ```
+
+#### The two trunks
+
+`trunk: monai` builds `monai.networks.nets.DiffusionModelUNet` (`spatial_dims=2`), wrapped by
+`models/ocean/nn/unet_monai.py::MonaiUNet2d`. `trunk: nosc` builds the repository's own residual
+U-Net, `models/ocean/nn/unet_nosc.py::UNetNosc`, which was the default until MONAI replaced it —
+`ablation=trunk_nosc` is the reproduction path for every run published before the switch, and the
+only way to reload their checkpoints.
+
+They are not interchangeable at equal cost. **At identical `widths`, the MONAI trunk has ~12–13×
+more parameters** (measured, 50 in / 10 out channels):
+
+| `widths` | `trunk: monai` (`num_res_blocks: 2`) | `num_res_blocks: 1` | `trunk: nosc` |
+|---|---|---|---|
+| `[64, 128, 256]` (OSSE-3D) | 14.4 M | 10.2 M | 1.10 M |
+| `[64, 128, 256, 512, 1024]` (the default) | **223.7 M** | 157.0 M | 17.8 M |
+| `[8, 16, 32]` (smoke) | 0.23 M | 0.16 M | 0.02 M |
+
+MONAI stacks `num_res_blocks` blocks per level (one more per level on the way up), adds a mid block
+with attention, and never narrows the bottleneck — `UNetNosc` halves it when `bilinear: true`. The
+defaults are left at the historical `widths` rather than silently rescaled, so **a nosc-vs-monai
+comparison must equalise the budget first** (drop a level, or `num_res_blocks: 1`), and the
+full-width default is a 224 M-parameter model: size it against your GPU before launching.
+
+Three behavioural differences, all deliberate:
+
+* `bilinear` has **no MONAI equivalent** (it upsamples by nearest interpolation + convolution). It is
+  accepted and ignored, with a one-per-process notice.
+* MONAI needs every spatial dimension to halve exactly `len(widths) - 1` times. `MonaiUNet2d` pads
+  up to the next multiple and crops back, so odd patch sizes work as they did before.
+* MONAI zero-initialises the output convolution and every residual block's second convolution, so a
+  freshly built MONAI trunk **outputs exactly zero**. That is the diffusion-model convention, not a
+  bug; training proceeds normally from the first step.
 
 The heads matter for 3D targets. With 21 depth levels × 3 variables + SSH, `head: single` asks one
 convolution to produce 64 × 11 channels at once; `head: grouped` gives each physical quantity its own
@@ -649,6 +685,9 @@ is a **published contract**; do not change it.
 | Blank border stripes in the exported field | patch overlap smaller than `2 × rec_weight.crop` — **not** caught by `validate` |
 | Run directory named `null` | no `experiment=` was given; `experiment_name` resolves from the Hydra choice |
 | `isinstance` failures around Lightning | you installed `lightning` instead of `pytorch_lightning`; this tree uses `pytorch_lightning` throughout, including the `importorskip` guards |
+| `this checkpoint was trained with the NOSC trunk ...` | a pre-MONAI checkpoint: it has no `trunk` hyper-parameter, so it is rebuilt as MONAI. Add `ablation=trunk_nosc` |
+| `[oceanml3d] trunk 'monai' ignores 'bilinear'` | informational; `bilinear` has no MONAI equivalent (§6.1) |
+| Out of memory right after the switch to MONAI | at equal `widths` the MONAI trunk is ~12–13× larger (§6.1); drop a level or set `num_res_blocks: 1` |
 
 ---
 

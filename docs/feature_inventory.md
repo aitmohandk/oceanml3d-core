@@ -57,7 +57,7 @@ the same name, and a module cannot coexist with a package of the same name.
 
 | Capability | Original | Status | Where / why |
 |---|---|---|---|
-| Direct U-Net | `models/direct_unet.py`, `unet.py` | **done** | both kept (`oceanml3d/models/direct_unet.py`, `unet.py`); the registry equivalent is `nosc_unet` (`models/ocean/nn/unet2d.py`) with heads/attention options |
+| Direct U-Net | `models/direct_unet.py`, `unet.py` | **done** | both kept (`oceanml3d/models/direct_unet.py`, `unet.py`); the registry equivalent is `nosc_unet` (`models/ocean/nn/unet_monai.py`, MONAI `DiffusionModelUNet`; `unet_nosc.py` is the pre-MONAI trunk) with heads/attention options |
 | 4DVarNet solver (grad solver + learned prior) | `models/fourdvarnet.py`, `solver.py`, `residual.py` | **done** | all three kept; gridded counterpart `models/ocean/fourdvarnet/model.py` (`ablation=gradsolver`) |
 | Conditional flow matching (vanilla, joint, coupled, Tweedie, predict-state) | `models/vanilla_cfm.py`, `interpolant.py` | **done** | `oceanml3d/models/vanilla_cfm.py` carries `VanillaCFM`, `JointCFM`, `JointCFMCoupled`, `PredictStateCFM`, `TweedieCFM`; `interpolant.py` alongside. `tests/test_vanilla_cfm.py`, `test_joint_estimation*.py`, `test_interpolant.py` |
 | Score-based data assimilation (SDA) | `models/sda.py`, `evaluation/sda_sampler.py` | **done** | both kept; `UnconditionalPriorCFM` / `ConditionalPriorCFM`; `tests/test_sda.py`, `test_sda_sampler.py`, `test_eval_sda_l96.py` |
@@ -107,7 +107,7 @@ so the right-hand column below is what this tree contains, not a diff against th
 | GLORYS / ERA5 readers, ocean grid | **done** | `oceanml3d/data/open.py` + `oceanml3d/catalog.py`; `scripts/prepare/` recipes |
 | Dataset / dataloader | **done** | `oceanml3d/data/{patches,datamodule}.py` |
 | Synthetic observation operators (nadir SSH, SST, Argo) | **done (superseded)** | `oceanml3d/obs/`: real repeat orbits, per-mission masks, cloud masks, virtual Argo — strictly richer than the 1-file original |
-| 2D U-Net backbone | **done** | `oceanml3d/models/ocean/nn/unet2d.py` |
+| 2D U-Net backbone | **done** | `oceanml3d/models/ocean/nn/unet_monai.py` (default), `unet_nosc.py` (`ablation=trunk_nosc`) |
 | Surface model (per-cell MLP) | **done (equivalent)** | the `linear` baseline (per-pixel map) and `nosc_unet`; a per-cell MLP is a ~20-line registry plugin |
 | Interior model + sinusoidal depth embedding | **planned** | PLAN 3.7 — `depth_indices` gives the levels; the depth *embedding* variant is not ported |
 | Weighted-depth MSE, SSH spectral loss | **partly done** | `oceanml3d/training/{loss_grouping,weights}.py` cover per-depth weighting; the spectral loss is PLAN 3.5 |

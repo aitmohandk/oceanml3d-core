@@ -13,8 +13,11 @@ pip install -e '.[dev]'      # + pytest, ruff
 pip install -e '.[plots]'    # + matplotlib, for the report scripts
 pip install -e '.[zarr]'     # + zarr, if your catalog points at .zarr stores
 pip install -e '.[prepare]'  # + copernicusmarine, cdsapi, xesmf, for scripts/prepare/
-pip install -e '.[monai]'    # the MONAI backbone; pulls torch forward, give it its own environment
 ```
+
+MONAI is a plain dependency (`monai>=1.5,<1.6`): `DiffusionModelUNet` is the default trunk of the
+gridded models. The `<1.6` ceiling is deliberate — monai 1.6 requires torch>=2.8, while 1.5.x
+installs next to torch 2.4 without moving it.
 
 The wheel ships the `oceanml3d/` package and the `oceanml3d` console script. The Hydra YAML tree
 (`config/`) and the driver scripts (`train.py`, `eval_*.py`, `run_experiment*.py`) stay at the

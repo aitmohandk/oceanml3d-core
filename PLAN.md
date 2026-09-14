@@ -89,9 +89,12 @@ plan is kept as `PLAN_upstream.md`.
       `oceanml3d/dynamics/base.py`, seven models declared in `pyproject.toml` and verified to
       resolve. They cover the gridded family only; the toy/L96/QG models still go through
       `models/factory.py`.
-- [ ] one U-Net in `oceanml3d/models/nn/` — now **three**: `models/unet.py`, `models/direct_unet.py`
-      and `models/ocean/nn/unet2d.py` (the last has heads and attention). Merging them needs the
-      toy path and the gridded path to agree on a channel convention first.
+- [ ] one U-Net in `oceanml3d/models/nn/` — now **four**: `models/unet.py`, `models/direct_unet.py`,
+      `models/ocean/nn/unet_nosc.py` (heads and attention; the pre-MONAI trunk, kept for
+      reproduction) and `models/ocean/nn/unet_monai.py` (MONAI `DiffusionModelUNet`, the default
+      gridded trunk since 2026-09-14). The MONAI wrapper is the plausible convergence point — the
+      1-D adapter (`models/monai_unet_adapter.py`) already shares its resblock patch — but merging
+      still needs the toy and gridded paths to agree on a channel convention.
 - [ ] `oceanml3d/evaluation/baselines.py`: `Joint*` = 1 646 of 3 014 lines → `EnsembleFilter` +
       `JointEstimationMixin`, −800/−1 000 lines. **Unblocked**: filter tests green, reference values
       trustworthy. This is now the next structural task.

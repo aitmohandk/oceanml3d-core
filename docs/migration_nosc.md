@@ -14,7 +14,7 @@ the framework as follows.
 | `contrib/multivar/multivar_utils.py::MultivarBatchSelector`, `get_multivar_*_dims_*` | `VariableSet.inputs/targets`, `BaseOceanModel.inputs()/targets()` | no more channel arithmetic in configs |
 | `get_multivar_mapping_wei`, `src.utils.get_constant_crop` | `oceanml3d/training/weights.py` | |
 | `contrib/multivar/multivar_models_unet_mae.py::MultivarUNet_mae` | `oceanml3d/models/ocean/nosc/model.py::NOSCUNet` | `weighted_mae` → `training/losses.py` |
-| `contrib/multivar/parts_drop.py`, `contrib/4dvarnet_latent/unet.py::UNetModel` | `oceanml3d/models/ocean/nn/unet2d.py` | one residual U-Net, configurable widths |
+| `contrib/multivar/parts_drop.py`, `contrib/4dvarnet_latent/unet.py::UNetModel` | `oceanml3d/models/ocean/nn/unet_nosc.py` | one residual U-Net, configurable widths; no longer the default trunk (MONAI's `DiffusionModelUNet` is), kept as `ablation=trunk_nosc` |
 | `cosanneal_lr_adam_unet` | `training/optim.py::cosine_adam` | |
 | `src/versioning_cb.py` | `training/callbacks.py::VersioningCallback` | also dumps config + norm stats |
 | `src/train.py::base_training(only_rec=…)`, `concat_rec*.py`, `launch_rec*.sh` | `oceanml3d command=predict` → `inference/predict.py` + `export.py` | one command, one output format |
@@ -57,7 +57,7 @@ to the values of the original YAML.
 | `multivar_models_unet_uncertainty.py` | `training.loss_combine: uncertainty` (`BaseOceanModel.log_vars`) | optimiser covers it automatically (`self.parameters()`) |
 | `multivar_models_unet_heads.py` | `model.head: grouped` (`models/ocean/nn/heads.GroupedHeads`) | |
 | `contrib/multivar/vertical_modes.py` | `training/vertical_modes.py` (EOF) + `models/ocean/nn/heads.VerticalModesHead`, `oceanml3d command=eofs` | |
-| `attention_resolutions` of `UNetModel` | `model.attention_levels` (`nn/unet2d.SelfAttention2d`) | |
+| `attention_resolutions` of `UNetModel` | `model.attention_levels` (MONAI `SpatialAttentionBlock`, or `nn/unet_nosc.SelfAttention2d`) | |
 | `config/ablation/*.yaml` | `config/ablation/*.yaml` (same names) | deltas from the experiment body |
 | `config/xp/osse3d_gs21_{multivar_unet,surface_only,cpu_smoke}.yaml` | `config/experiment/osse3d_gs21_multivar_unet`, `osse3d_gs21_surface_only`, `osse3d_smoke` + `config/data/osse3d_gs21*.yaml` | |
 | `paths:` block with `NOSC_DATA_ROOT` | `config/paths/<site>.yaml` + `OCEANML3D_DATA` | |

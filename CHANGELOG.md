@@ -1,5 +1,88 @@
 # Changelog
 
+## 2026-09-14: MONAI `DiffusionModelUNet` becomes the default gridded trunk
+
+**Summary:** the 2D U-Net behind `nosc_unet` is now MONAI's `DiffusionModelUNet`. The previous
+architecture is unchanged and still reachable: it was renamed `UNet2d` → `UNetNosc`, moved to
+`nn/unet_nosc.py`, and is selected by `trunk: nosc` / `ablation=trunk_nosc`. MONAI became a hard
+dependency, pinned `>=1.5,<1.6`.
+
+**Files modified:**
+- `oceanml3d/models/ocean/nn/unet2d.py` → `unet_nosc.py` — `git mv` + class rename `UNet2d` →
+  `UNetNosc`; the layers are byte-for-byte what they were
+- `oceanml3d/models/ocean/nn/unet2d.py` (new) — three-line deprecation shim re-exporting `UNet2d`,
+  kept because out-of-tree notebooks and checkpoints may name it
+- `oceanml3d/models/ocean/nn/unet_monai.py` (new) — `MonaiUNet2d`, call-compatible with `UNetNosc`,
+  plus the shared `patch_diffusion_resblock()` and `default_norm_num_groups()`
+- `oceanml3d/models/ocean/nosc/model.py` — `trunk` / `num_res_blocks` / `norm_num_groups`
+  parameters, trunk dispatch, and an `on_load_checkpoint` guard
+- `oceanml3d/models/monai_unet_adapter.py` — its private `_patch_resblock_for_1d()` is gone; it
+  imports the shared patch. Stale header about MONAI/torch corrected
+- `config/model/nosc_unet.yaml`, `config/ablation/trunk_nosc.yaml` (new)
+- `pyproject.toml`, `requirements.txt`, `requirements-monai.txt`, `README.md` — MONAI as a hard
+  dependency; the `[monai]` extra is gone
+- `tests/test_monai_unet2d.py` (new, 17 tests), `tests/test_model_smoke.py`
+- `docs/gridded_models.md` (§6, §6.1, §13), `docs/migration_nosc.md`, `docs/feature_inventory.md`,
+  `oceanml3d/models/ocean/nosc/README.md`, `PLAN.md` §3
+
+**Rationale:** `DiffusionModelUNet` is the only U-Net MONAI ships that carries per-level
+self-attention natively, which the repo's own trunk already exposed through `attention_levels`, and
+it is already used on the 1-D side — so one backbone now serves both, and one monkeypatch with it.
+
+Four gaps between the two had to be closed rather than discovered at run time:
+
+* **Dropout.** `DiffusionUNetResnetBlock` has none — no argument, no layer. The shared patch teaches
+  its `forward` to honour a `dropout` submodule and the wrapper attaches one, so `dropout: 0.1` is
+  real regularisation instead of a silently dropped key.
+* **Spatial size.** MONAI concatenates skips, so every dimension must halve exactly `len(widths)-1`
+  times; 30×30 on three levels fails deep inside MONAI. `UNetNosc` padded inside its `Up` block. The
+  wrapper restores that by padding to the next multiple and cropping back.
+* **`norm_num_groups`.** MONAI defaults to 32, which rejects `widths: [8, 16, 32]` — the profile the
+  smoke tests and `experiment=smoke` use. Default is now `min(32, gcd(widths))`.
+* **`bilinear`.** No MONAI equivalent (it upsamples nearest + conv). Accepted and ignored, with one
+  notice per process, so the existing configs keep composing.
+
+**The measurement the plan asked for — the two trunks are not the same size.** At identical `widths`
+(50 in / 10 out channels):
+
+| `widths` | `trunk: monai` (`num_res_blocks: 2`) | `num_res_blocks: 1` | `trunk: nosc` |
+|---|---|---|---|
+| `[64, 128, 256]` (OSSE-3D) | 14.4 M | 10.2 M | 1.10 M |
+| `[64, 128, 256, 512, 1024]` (the shipped default) | **223.7 M** | 157.0 M | 17.8 M |
+| `[8, 16, 32]` (smoke) | 0.23 M | 0.16 M | 0.02 M |
+
+**~12–13× more parameters**, because MONAI stacks `num_res_blocks` blocks per level (one more per
+level going up), adds an attention mid-block, and never narrows the bottleneck the way `UNetNosc`
+does when `bilinear: true`. The defaults were **not** silently rescaled: `config/model/nosc_unet.yaml`
+still ships `[64, 128, 256, 512, 1024]`, which is now a 224 M-parameter model. Two consequences,
+documented in `docs/gridded_models.md` §6.1 and in the config itself: size it against your GPU before
+launching, and any nosc-vs-monai comparison must equalise the budget first (drop a level, or
+`num_res_blocks: 1`).
+
+**Two further behaviours worth knowing.** MONAI `zero_module`s the output convolution *and* every
+residual block's second convolution, so a freshly built MONAI trunk outputs exactly zero and dropout
+changes nothing at step 0. That is the diffusion convention and training proceeds normally; it is
+left as upstream has it, pinned by a test, and documented — several of the new tests deliberately
+break the zero-init before asserting on output values. And old checkpoints carry no `trunk`
+hyper-parameter, so Lightning would rebuild them as MONAI and die on a size mismatch;
+`NOSCUNet.on_load_checkpoint` now detects a `net.inc.*` key (only `UNetNosc` has one) and says
+`ablation=trunk_nosc` instead.
+
+**Verification:** `pytest -q -m "not slow"` → **811 passed, 9 skipped, 45 deselected, 0 failed**
+(6 min 39 s). Collection measured against `HEAD` with the same interpreter: 799 → 820 non-slow tests,
+and the node-ID diff is exactly the +21 expected — 17 new in `test_monai_unet2d.py`,
+`test_nosc_forward_shapes` parametrised over both trunks (+1), the checkpoint-guard test (+1), and
+`test_import_smoke::test_module_imports` picking up `unet_monai` and `unet_nosc` (+2). Nothing else
+moved. (The earlier `779 passed, 11 skipped` reference in `PLAN.md` predates MONAI being installed in
+this environment, so it is not directly comparable; the 9 remaining skips are all pre-existing —
+missing golden files, missing checkpoints, absent `pyqg`.) `ruff check` clean on every touched file.
+`command=list-models` → the same 7 names. `command=show-config experiment=osse3d_gs21_multivar_unet`
+resolves with `trunk: monai`. End to end on synthetic data, both trunks train, test and export:
+`experiment=smoke training=debug` → `test/loss` 1.4724, and with `ablation=trunk_nosc` → 1.4712.
+`monai 1.5.2` installed into the project env left `torch` at 2.4.1, as predicted from the PyPI
+metadata (`monai 1.5.x` pins `torch>=2.4.1,<2.7.0`; only 1.6.0 requires `torch>=2.8`) — that is what
+made the hard dependency possible, and what the `<1.6` ceiling protects.
+
 ## 2026-09-14: `oceanml3d/` namespace, the NOSC transplant, and an installable package
 
 **Summary:** three changes that had to happen in this order. (1) Everything importable moved under a

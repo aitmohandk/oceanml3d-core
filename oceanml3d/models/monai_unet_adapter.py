@@ -1,16 +1,15 @@
 """Adapter exposing MONAI's DiffusionModelUNet with the same call signature as
 models.unet.UNet1D, for prototyping (see /homes/rfablet/.claude/plans/monai-diffunet-prototype.md).
 
-monai is intentionally NOT in requirements.txt: monai==1.6.0 requires
-torch==2.8.0+cu126, newer than this project's standard torch==2.4.1+cu121 (a
-prior attempt to add monai to the shared env broke CUDA for everything else).
-This module -- and anything importing it -- must run in a separate env built
-from requirements-monai.txt (e.g. `fdv-monai-proto`), not the project's
-default `fdv` env. Every other importer of this module already guards the
-import (see evaluation/neural_inference.py's try/except) so the rest of the
-codebase keeps working with the default env.
+monai is now a hard dependency, pinned `>=1.5,<1.6`. The torch conflict this
+module's header used to describe is real but belongs to monai==1.6.0, which
+requires torch>=2.8.0; monai 1.5.x pins torch>=2.4.1,<2.7.0 and installs into
+the project env without moving torch off 2.4.1 (measured, 2026-09-14).
+requirements-monai.txt is kept only to reproduce this 1-D prototype on the
+1.6/torch-2.8 combination.
 
-Verified directly against the installed monai==1.6.0 wheel:
+Verified directly against the installed monai==1.6.0 wheel, and re-checked
+against 1.5.2:
 - DiffusionModelUNet.forward(x, timesteps, context=None, class_labels=None, ...)
   takes a raw (N,) float tensor for `timesteps` and embeds it with a plain
   sinusoidal encoding (args = timesteps * freqs, max_period=10000) -- the same
@@ -25,8 +24,9 @@ broadcast as `[:, :, None, None]` for spatial_dims == 2 and unconditionally
 `[:, :, None, None, None]` otherwise -- there is no spatial_dims == 1 branch,
 so with spatial_dims=1 the addition broadcasts incorrectly and corrupts the
 output shape (confirmed: forward crashes/produces garbage without this
-patch). We monkeypatch only this one method, only when spatial_dims == 1 is
-requested, rather than editing the installed package.
+patch). The patch itself now lives with the 2-D trunk
+(oceanml3d.models.ocean.nn.unet_monai.patch_diffusion_resblock) because both
+need it -- it also teaches the block the `dropout` submodule attached below.
 """
 
 import torch
@@ -34,47 +34,7 @@ import torch.nn as nn
 from monai.networks.nets import DiffusionModelUNet
 from monai.networks.nets import diffusion_model_unet as _dmu
 
-_PATCHED_1D_RESBLOCK = False
-
-
-def _patch_resblock_for_1d() -> None:
-    global _PATCHED_1D_RESBLOCK
-    if _PATCHED_1D_RESBLOCK:
-        return
-
-    def patched_forward(self, x: torch.Tensor, emb: torch.Tensor) -> torch.Tensor:
-        h = x
-        h = self.norm1(h)
-        h = self.nonlinearity(h)
-        if self.upsample is not None:
-            x = self.upsample(x)
-            h = self.upsample(h)
-        elif self.downsample is not None:
-            x = self.downsample(x)
-            h = self.downsample(h)
-        h = self.conv1(h)
-        if self.spatial_dims == 1:
-            temb = self.time_emb_proj(self.nonlinearity(emb))[:, :, None]
-        elif self.spatial_dims == 2:
-            temb = self.time_emb_proj(self.nonlinearity(emb))[:, :, None, None]
-        else:
-            temb = self.time_emb_proj(self.nonlinearity(emb))[:, :, None, None, None]
-        h = h + temb
-        h = self.norm2(h)
-        h = self.nonlinearity(h)
-        h = self.conv2(h)
-        # MONAI's own DiffusionUNetResnetBlock has no dropout mechanism at all
-        # (no constructor arg, no layer) -- unlike UNet1D.ConvBlock, which
-        # applies real nn.Dropout before its residual add. `dropout` is
-        # attached as a submodule post-construction (see MonaiUNet1D.__init__)
-        # so this comparison isn't silently missing regularization.
-        if hasattr(self, "dropout"):
-            h = self.dropout(h)
-        output: torch.Tensor = self.skip_connection(x) + h
-        return output
-
-    _dmu.DiffusionUNetResnetBlock.forward = patched_forward
-    _PATCHED_1D_RESBLOCK = True
+from oceanml3d.models.ocean.nn.unet_monai import patch_diffusion_resblock
 
 
 class MonaiUNet1D(nn.Module):
@@ -100,7 +60,7 @@ class MonaiUNet1D(nn.Module):
         dropout: float = 0.1,
     ):
         super().__init__()
-        _patch_resblock_for_1d()
+        patch_diffusion_resblock()
 
         if hidden_channels is None:
             hidden_channels = [32, 64, 128]

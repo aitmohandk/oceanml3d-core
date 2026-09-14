@@ -21,12 +21,14 @@ dependencies = [
     "pandas>=2.0",
     "netCDF4>=1.6",
     "dask>=2023.1",
+    # the default trunk of the gridded models is MONAI's DiffusionModelUNet
+    # (`models/ocean/nn/unet_monai.py`). The `<1.6` ceiling is load-bearing: monai 1.6.0 requires
+    # torch>=2.8, 1.5.x pins torch>=2.4.1,<2.7.0 and leaves this project's torch alone.
+    "monai>=1.5,<1.6",
 ]
 
 [project.optional-dependencies]
 plots = ["matplotlib>=3.8"]
-# monai pulls torch forward (see requirements-monai.txt); install it in its own environment.
-monai = ["monai>=1.6"]
 # `data/open.py` reads `.zarr` stores and `data/datamodule.py` writes its stacked cache as one;
 # NetCDF alone works without it.
 zarr = ["zarr>=2.16"]

@@ -1,5 +1,10 @@
 # @package model
+# NB: at these widths the MONAI trunk is ~224M parameters, the nosc trunk ~18M (docs/gridded_models.md
+# §6.1 has the full table). Size this against your GPU; num_res_blocks: 1 cuts it to ~157M.
 name: nosc_unet
 widths: [64, 128, 256, 512, 1024]
 dropout: 0.1
-bilinear: true
+bilinear: true          # trunk: nosc only -- the MONAI trunk upsamples by nearest + conv
+trunk: monai            # monai (DiffusionModelUNet) | nosc (the historical U-Net, ablation=trunk_nosc)
+num_res_blocks: 2       # trunk: monai only
+norm_num_groups: null   # trunk: monai only; null -> min(32, gcd(widths))
