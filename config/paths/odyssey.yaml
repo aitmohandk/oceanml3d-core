@@ -1,0 +1,11 @@
+# @package paths
+root: /Odyssey/private/t22picar/data
+datasets:
+  ssh_l4_duacs_4th:     {path: ssh_L4/SSH_L4_CMEMS_2010-01-01-2024-01-01_4th.nc}
+  ssh_l4_neurost_4th:   {path: ssh_L4/NeurOST_SSH_4th.nc}
+  era5_daily_4th:       {path: era5/era5_2010-01-01_2022-01-01_4th.nc}
+  bathy_4th:            {path: bathy/bathymetry_4th.nc}
+  sst_l4_odyssea_4th:   {path: sst/SST_L4_4th.nc}
+  drifters_aoml_15m_4th: {path: drifters/daily_uv/drifters_uv_aoml_15m_4th.nc}
+  drifters_aoml_00m_4th: {path: drifters/daily_uv/drifters_uv_aoml_00m_4th.nc}
+  drifters_cmems_15m_4th: {path: drifters/daily_uv/drifters_uv_cmems_15m_4th.nc}

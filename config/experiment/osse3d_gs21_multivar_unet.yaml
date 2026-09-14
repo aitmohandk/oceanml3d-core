@@ -1,0 +1,14 @@
+# @package _global_
+# Reference OSSE-3D run = baseline (group_mean loss + Sobel gradient). Ablations are deltas:
+#   oceanml3d experiment=osse3d_gs21_multivar_unet ablation=<flat_sum_loss|no_grad_loss|uncertainty|heads|attention|vertical_modes>
+defaults:
+  - override /data: osse3d_gs21
+  - override /model: nosc_unet
+model: {widths: [64, 128, 256], dropout: 0.1}
+training:
+  loss_combine: group_mean
+  grad_loss_weight: 20.0
+  batch_size: 4
+  num_workers: 2
+  trainer: {max_epochs: 100, limit_train_batches: null}
+export: {time: ["2019-01-01", "2019-12-31"], depth_m: null, split: test}

@@ -1,0 +1,2 @@
+# @package _global_
+training: {loss_combine: flat_sum}

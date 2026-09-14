@@ -1,0 +1,6 @@
+# @package _global_
+# NOSC reference run: DUACS SSH + ERA5 winds + bathy -> AOML 15 m drifters (no SST)
+defaults:
+  - override /data: surface_currents_15m
+  - override /model: nosc_unet
+export: {depth_m: 15}

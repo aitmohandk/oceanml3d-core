@@ -1,0 +1,10 @@
+# @package model
+name: enkf
+dynamics: lorenz96   # a known dynamics is required (oceanml3d.dynamics)
+dynamics_kw: {}
+n_members: 20
+inflation: 1.02
+obs_noise: 1.0
+localization_radius: 4.0
+steps_per_window: 1
+return_ensemble: false   # true -> predict returns members, exported as an ensemble product (v2)

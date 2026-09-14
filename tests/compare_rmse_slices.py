@@ -7,6 +7,7 @@ Usage: python tests/compare_rmse_slices.py
 """
 import os
 import sys
+
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))

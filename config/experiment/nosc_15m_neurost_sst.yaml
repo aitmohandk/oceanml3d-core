@@ -1,0 +1,11 @@
+# @package _global_
+defaults:
+  - override /data: surface_currents_15m
+  - override /model: nosc_unet
+data:
+  variables:
+    ssh:  {source: ssh_l4_neurost_4th, var_name: ssh, role: input}
+    ugos: {source: ssh_l4_neurost_4th, var_name: ugos, role: input}
+    vgos: {source: ssh_l4_neurost_4th, var_name: vgos, role: input}
+    sst:  {source: sst_l4_odyssea_4th, var_name: analysed_sst, role: input, transform: log_grad}
+export: {depth_m: 15}

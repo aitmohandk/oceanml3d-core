@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from data.qg import QGConfig, expand_obs_to_grid, make_qg_s0_s1_datasets
+from oceanml3d.data.qg import QGConfig, expand_obs_to_grid, make_qg_s0_s1_datasets
 
 
 def _cfg(**kw):

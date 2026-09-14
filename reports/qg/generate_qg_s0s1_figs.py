@@ -40,9 +40,9 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 
-from data.qg import QGConfig, make_qg_s0_s1_datasets
-from evaluation.baselines import ETKF, _build_qg_col_loc_matrices
-from evaluation.run_qg_baselines import (
+from oceanml3d.data.qg import QGConfig, make_qg_s0_s1_datasets
+from oceanml3d.evaluation.baselines import ETKF, _build_qg_col_loc_matrices
+from oceanml3d.evaluation.run_qg_baselines import (
     _build_dyn,
     _da_nx_for_window,
     _ensemble_from_init,
@@ -51,7 +51,7 @@ from evaluation.run_qg_baselines import (
     _sample_init_state,
     _upsample_to_truth,
 )
-from models.qg_dynamics import QGDynamics
+from oceanml3d.models.qg_dynamics import QGDynamics
 
 CMAP = "RdBu_r"
 STEPS_PER_DAY_LABEL = "day"
@@ -103,7 +103,7 @@ def run_single_window(cfg, scenario, device, N_ensemble, inflation,
     production report. Returns arrays (upsampled to the truth grid) needed for
     the figures plus the raw window.
     """
-    from evaluation.run_qg_baselines import _downsample_to_da, _evaluate_window
+    from oceanml3d.evaluation.run_qg_baselines import _downsample_to_da, _evaluate_window
     if ds is None:
         ds = make_qg_s0_s1_datasets(
             cfg, cache_dir=os.path.join(ROOT, "reports/qg_cache"))

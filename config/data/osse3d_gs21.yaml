@@ -1,0 +1,78 @@
+# @package data
+# Task: 3D multivariate OSSE, Gulf Stream, GLORYS12 truth (native 1/12 deg), 21 depth levels
+# (NOSC branch first_implementation, config osse3d_gs21_multivar_unet). Protocol after arXiv:2512.22152.
+# Inputs = pseudo-obs SSH along simulated 6-nadir tracks + mask channel + dense SST + virtual ARGO
+# + static priors. Targets = zos + thetao/uo/vo x 21 GLORYS levels (64 outputs).
+depth_indices: &gs21 [0, 2, 4, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+
+variables:
+  ssh_obs:  {source: pseudo_obs_ssh_gs, var_name: zos_obs,  role: input}
+  obs_mask: {source: pseudo_obs_ssh_gs, var_name: obs_mask, role: input}
+  sst_in:   {source: pseudo_obs_sst_gs, var_name: thetao_obs, role: input}      # cloud-masked SST pseudo-obs
+  sst_mask: {source: pseudo_obs_sst_gs, var_name: obs_mask, role: input}
+  argo_thetao: {source: argo_virtual_thetao_gs21, var_name: thetao, role: input, depth_indices: *gs21, group: argo}
+  argo_mask:   {source: argo_virtual_thetao_gs21, var_name: thetao_mask, role: input, depth_indices: *gs21, group: argo_mask}
+  mask_jason3:     {source: pseudo_obs_ssh_gs, role: aux}
+  mask_sentinel6:  {source: pseudo_obs_ssh_gs, role: aux}
+  mask_sentinel3a: {source: pseudo_obs_ssh_gs, role: aux}
+  mask_sentinel3b: {source: pseudo_obs_ssh_gs, role: aux}
+  mask_saral:      {source: pseudo_obs_ssh_gs, role: aux}
+  mask_hy2b:       {source: pseudo_obs_ssh_gs, role: aux}
+  lat:      {source: glorys_gs_surface, var_name: lat, role: static}
+  bathy:    {source: bathy_gs, var_name: deptho, role: static}
+  zos:      {source: glorys_gs_surface, var_name: zos, role: target, group: ssh, standard_name: sea_surface_height_above_geoid, units: m}
+  thetao:   {source: glorys_gs_multidepth, var_name: thetao, role: target, depth_indices: *gs21, group: temperature, units: degC}
+  uo:       {source: glorys_gs_multidepth, var_name: uo, role: target, depth_indices: *gs21, group: currents_u, units: m s-1}
+  vo:       {source: glorys_gs_multidepth, var_name: vo, role: target, depth_indices: *gs21, group: currents_v, units: m s-1}
+
+domain: {lat: [32, 44], lon: [-66, -54]}
+eval_domain: {lat: [33, 43], lon: [-65, -55]}        # 1-degree rim excluded from metrics
+
+splits:
+  train: {time: ["2010-01-01", "2017-12-31"]}
+  val:   {time: ["2018-01-01", "2018-12-31"]}
+  test:  {time: ["2018-12-20", "2020-01-10"]}
+
+patch:  {time: 11, lat: 144, lon: 144}
+stride: {time: 1,  lat: 136, lon: 136}
+chunks: {time: 32}
+norm_stats: null
+
+# Training-time augmentations (train split only)
+augment:
+  mission_dropout:
+    obs: [ssh_obs]
+    mask: obs_mask
+    missions: [mask_jason3, mask_sentinel6, mask_sentinel3a, mask_sentinel3b, mask_saral, mask_hy2b]
+    n_drop: [1, 2]
+    p: 0.5
+  obs_noise: null             # e.g. {channels: {ssh_obs: 0.02}} to re-draw instrument noise each sample
+
+# Observation-system simulation, run by `oceanml3d command=prepare-obs` (or automatically before training)
+prepare:
+  pseudo_obs:
+    ssh:
+      truth: glorys_gs_surface
+      truth_var: zos
+      output: pseudo_obs_ssh_gs
+      missions: [jason3, sentinel6, sentinel3a, sentinel3b, saral, hy2b]
+      historical: false         # true: activity windows -> non-stationary constellation (use HISTORICAL list)
+      per_mission: true         # stores mask_<mission> (needed by mission_dropout)
+      real_mask: null           # catalog key of a dated L3 mask NetCDF to use real tracks instead
+      noise_std: 0.02
+      seed: 1234
+    sst:
+      truth: glorys_gs_multidepth
+      truth_var: thetao
+      depth_index: 0
+      output: pseudo_obs_sst_gs
+      clouds: {coverage: 0.6, scale_cells: 8, seed: 7}   # synthetic clear-sky mask; or real_mask: <L3 cloud mask>
+      noise_std: 0.2
+      seed: 4321
+  virtual_argo:
+    truth: glorys_gs_multidepth
+    truth_var: thetao
+    profiles: argo_profiles_gs          # table (time, lat, lon, d00..d25 coverage) from scripts/prepare/argo_profiles.py
+    output: argo_virtual_thetao_gs21
+    depth_indices: *gs21
+    noise_std: 0.05                     # instrument + representativeness noise (degC)

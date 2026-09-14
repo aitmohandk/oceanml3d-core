@@ -11,12 +11,12 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from data.lorenz96 import (
+from oceanml3d.data.lorenz96 import (
     Lorenz96Config,
     _generate_observations,
     make_l96_s0_s1_trainval,
 )
-from evaluation.run_l96 import (
+from oceanml3d.evaluation.run_l96 import (
     _BASELINE_CASES,
     _BASELINE_METHODS,
     make_obs_j_indices,

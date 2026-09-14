@@ -1,0 +1,2 @@
+# @package _global_
+model: {attention_levels: [2], attention_heads: 4}

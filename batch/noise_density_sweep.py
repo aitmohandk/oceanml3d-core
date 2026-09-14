@@ -9,16 +9,17 @@ Usage:
     python batch/noise_density_sweep.py --rvar 0.5
     python batch/noise_density_sweep.py --obs-interval 20
 """
+import argparse
 import os
 import sys
-import argparse
 import time
+
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from evaluation.run import run_and_cache_baselines, BASE
+from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.evaluation.run import BASE, run_and_cache_baselines
 
 EXP_DIR = os.path.join(BASE, "experiments")
 os.makedirs(EXP_DIR, exist_ok=True)

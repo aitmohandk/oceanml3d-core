@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 import os
-import torch
+
 import numpy as np
-from data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from data.dataloader import make_dataloaders
-from models.solver import TweedieSolver
-from training.stage1 import train_stage1
-from training.stage2 import train_stage2
-from evaluation.baselines import Weak4DVar, Strong4DVar, EnKF
-from evaluation.metrics import rmse
+import torch
+
+from oceanml3d.data.dataloader import make_dataloaders
+from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.evaluation.baselines import EnKF, Strong4DVar, Weak4DVar
+from oceanml3d.evaluation.metrics import rmse
+from oceanml3d.models.solver import TweedieSolver
+from oceanml3d.training.stage1 import train_stage1
+from oceanml3d.training.stage2 import train_stage2
 
 
 def evaluate_model(model, dataset, device):

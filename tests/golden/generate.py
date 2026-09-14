@@ -26,7 +26,7 @@ def commit() -> str:
 
 
 def qg_2layer():
-    from models.qg_dynamics import QGDynamics
+    from oceanml3d.models.qg_dynamics import QGDynamics
     d = QGDynamics(nx=32, dt=7200.0)
     s0 = d._flatten(d._initial_q(1, seed=7, device=d.device)).squeeze(0)
     traj = d.rollout_trajectory(s0, steps=5)
@@ -39,7 +39,7 @@ def qg_2layer():
 
 
 def qg_1layer():
-    from models.qg1l_dynamics import QG1LDynamics
+    from oceanml3d.models.qg1l_dynamics import QG1LDynamics
     d = QG1LDynamics(nx=32, dt=7200.0)
     s0 = d._flatten(d._initial_q(1, seed=7, device=d.device)).squeeze(0)
     traj = d.rollout_trajectory(s0, steps=5)
@@ -52,7 +52,7 @@ def qg_1layer():
 
 
 def lorenz63():
-    from models.lorenz63_dynamics import Lorenz63Dynamics
+    from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
     d = Lorenz63Dynamics(dt=0.01, c1=0.0, clip_range=None)
     s = torch.tensor([[1.0, 1.0, 1.0]], dtype=torch.float64)
     W = torch.zeros(1, dtype=torch.float64)

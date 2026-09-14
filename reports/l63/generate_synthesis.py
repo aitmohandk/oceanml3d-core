@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from data.lorenz63 import Lorenz63Config, Lorenz63Dataset
-from evaluation.baselines import EnKF
+from oceanml3d.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
+from oceanml3d.evaluation.baselines import EnKF
 
 NW = 5; DUR = 3.0; SEED = 123; SPIN = 5000
 

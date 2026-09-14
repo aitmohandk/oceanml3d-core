@@ -100,18 +100,24 @@ Each entry in `CHANGELOG.md` should follow this format:
 - **Type check:** `mypy .` — static type analysis
 - **Tests:** `pytest tests/ -v` — run full test suite
 - **Quick test:** `pytest tests/ -v -m "not slow"` — skip slow tests
-- **Coverage:** `pytest tests/ --cov=. --cov-report=term`
+- **Coverage:** `pytest tests/ --cov=oceanml3d --cov-report=term`
 
 Always run tests after making changes.
 
 ## Project Structure
 
-- `data/` — Lorenz-63 SDE simulation, datasets, dataloaders
-- `models/` — Neural network architectures (UNet1D, TweedieSolver, etc.)
-- `training/` — Training pipelines (Lightning-based)
-- `evaluation/` — Baselines (4D-Var, EnKF, ETKF) and metrics
-- `conf/` — Hydra structured config schemas
-- `config/` — YAML configuration presets
+All importable code lives under the `oceanml3d/` package. Import it by its full path
+(`from oceanml3d.models.solver import TweedieSolver`); the bare top-level names (`models`, `data`,
+…) no longer exist.
+
+- `oceanml3d/data/` — Lorenz-63 SDE simulation, datasets, dataloaders
+- `oceanml3d/models/` — Neural network architectures (UNet1D, TweedieSolver, etc.) and `factory.py`
+- `oceanml3d/training/` — Training pipelines (Lightning-based)
+- `oceanml3d/evaluation/` — Baselines (4D-Var, EnKF, ETKF) and metrics
+- `oceanml3d/conf/` — Hydra structured config schemas
+- `config/` — YAML configuration presets (stays at the root: `@hydra.main(config_path="config")`
+  resolves relative to the driver script that carries the decorator)
+- `train.py`, `eval_*.py`, `run_experiment*.py` — driver scripts, root-level for the same reason
 - `reports/` — Report generation scripts
 - `batch/` — SLURM batch scripts for HPC
 - `tests/` — Unit and integration tests
@@ -119,10 +125,10 @@ Always run tests after making changes.
 ## Key Conventions
 
 - **Python 3.10+** with `torch`, `numpy`, `hydra-core`, `pytorch-lightning`
-- **Configuration** uses Hydra/OmegaConf (see `conf/schema.py` for dataclass schemas)
+- **Configuration** uses Hydra/OmegaConf (see `oceanml3d/conf/schema.py` for dataclass schemas)
 - **No comments** in code unless absolutely necessary (prefer self-documenting names)
 - **Type hints** should be used for all function signatures
-- **Training** uses PyTorch Lightning (`LitModel` wrapper in `training/lightning_module.py`)
+- **Training** uses PyTorch Lightning (`LitModel` wrapper in `oceanml3d/training/lightning_module.py`)
 - **Two-stage training** pattern: Stage 1 trains the mean estimator, Stage 2 freezes it and trains the residual
 - **Data** is generated on-the-fly; no large data files committed to git
 - **Tests** use `pytest` with markers (`@pytest.mark.slow`) for expensive tests
@@ -130,7 +136,10 @@ Always run tests after making changes.
 ## When Making Model Changes
 
 - Update the corresponding config in `config/experiment/` if training parameters change
-- Ensure `LitModel` (in `training/lightning_module.py`) handles the new model type correctly
+- Ensure `LitModel` (in `oceanml3d/training/lightning_module.py`) handles the new model type correctly
+- Register the new model in `oceanml3d/models/factory.py` — `train.py` and
+  `oceanml3d/evaluation/neural_inference.py` both build through it, so a model added in only one of
+  them cannot be evaluated from a checkpoint
 - Add tests for any new model, loss, or dataset in `tests/`
 - Document the change in `CHANGELOG.md`
 

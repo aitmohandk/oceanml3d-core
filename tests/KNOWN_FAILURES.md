@@ -239,3 +239,40 @@ same moment those values are serving as the gate for the `Joint*` restructuring.
 science-affecting change and wants its own re-baselining, not a ride-along in a test repair.
 `test_observations_noise` is written to hold either way: it takes its level sample from explicit
 seeds rather than from the windows.
+
+## 2026-09-14: the one failure the NOSC transplant brought in, adjudicated
+
+`tests/test_toy_and_assimilation.py::test_enkf_beats_the_raw_observations` arrived red with the NOSC
+port. It was **not** transplant damage: running the same test inside `donor-prototype` gives the
+identical assertion with the identical numbers (`0.1637 < 0.0966`), so the graft is bit-identical in
+behaviour and the defect is inherited. Third instance of the pattern this file already names twice
+(`test_enkf_mean_tracks_truth`, `test_observations_noise`): **an assertion the code cannot satisfy
+while being correct.**
+
+**The filter is right; the window was ten steps.** Every patch restarts the filter from scratch —
+`_assimilate` seeds the ensemble from the first frame of the window, which is 70 % NaN at
+`obs_density=0.3`, and fills the unobserved components with `N(0, 1)` draws while the true L96 state
+has a spread of ~3.6. The analysis starts far off the attractor and the observations have to pull it
+back. Measured on the same data with the same filter, window length the only variable:
+
+| Window | err(obs) | err(EnKF) | per-step EnKF error |
+|---|---|---|---|
+| T=10 | 0.0966 | **0.1637** | 0.07 0.25 0.16 0.18 0.25 0.16 0.17 0.17 0.13 0.14 |
+| T=80 | 0.0893 | **0.0796** | ...0.14 0.09 0.10 0.17 ...0.06 0.05 0.04 ...0.04 0.04 0.04 |
+
+It converges to 0.04 — half the observation error, which is what the test meant to claim — and the
+*last* value at T=10 is still 0.14, above the obs error, so no choice of sub-window rescues the
+assertion at that length. A ten-step average is an average over spin-up and nothing else.
+
+Fixed by testing the claim where it is estimable. The test is now
+`test_enkf_converges_and_beats_the_raw_observations`, runs on an 80-step window, and asserts the
+original inequality **and** that the second half beats the first by at least 2x — so a filter that
+merely started near the truth and drifted could not pass it. Cost: the file still runs in 7.7 s.
+The fixture became `_toy_dm(tmp_path_factory, patch_time)`, with the 10-step `toy_dm` kept for the
+other tests.
+
+**The quarantine is still empty.** Left open, and worth settling before this filter is used in
+anger: the `N(0, 1)` fill for unobserved components ignores `norm_stats`, which the model already
+holds — a climatological draw would start the ensemble on the attractor and cut the spin-up
+substantially. That is a change to the science, so it is recorded here rather than made in passing.
+

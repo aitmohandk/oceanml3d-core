@@ -5,8 +5,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import torch
 
-from data.qg import QGConfig, make_qg_s0_s1_datasets
-from evaluation.run_qg_baselines import run
+from oceanml3d.data.qg import QGConfig, make_qg_s0_s1_datasets
+from oceanml3d.evaluation.run_qg_baselines import run
 
 
 def probe():

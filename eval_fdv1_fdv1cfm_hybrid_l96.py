@@ -27,14 +27,13 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from omegaconf import OmegaConf
 
-from evaluation.estimate_metrics import (
+from oceanml3d.evaluation.estimate_metrics import (
     evaluate_ensemble_estimates,
     evaluate_estimates,
     save_estimates,
 )
-from evaluation.neural_inference import BatchDict, load_model, prepare_dataset
+from oceanml3d.evaluation.neural_inference import BatchDict, load_model, prepare_dataset
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

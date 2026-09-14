@@ -1,17 +1,17 @@
 """Backward compatibility tests: verify checkpoints reproduce stored results."""
 
+import json
 import os
 import sys
-import json
-import torch
+
 import numpy as np
 import pytest
+import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from models.solver import TweedieSolver
-from evaluation.metrics import rmse
-
+from oceanml3d.evaluation.metrics import rmse
+from oceanml3d.models.solver import TweedieSolver
 
 EXP_DIR = os.path.join(os.path.dirname(__file__), "..", "experiments")
 
@@ -102,9 +102,10 @@ def test_c1_longer_train_checkpoint():
 
 def test_lightning_module_produces_same_output():
     """Lit4DVarNetFM.forward() == TweedieSolver.forward() for same weights."""
-    from training.lightning_module import LitModel as Lit4DVarNetFM
     from omegaconf import OmegaConf
-    from conf.schema import ExperimentConfig
+
+    from oceanml3d.conf.schema import ExperimentConfig
+    from oceanml3d.training.lightning_module import LitModel as Lit4DVarNetFM
 
     cfg = OmegaConf.structured(ExperimentConfig())
     model = TweedieSolver(state_dim=3, hidden_channels=[32, 64, 128], time_emb_dim=64)

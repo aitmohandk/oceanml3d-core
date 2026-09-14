@@ -20,12 +20,12 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from evaluation.estimate_metrics import (
+from oceanml3d.evaluation.estimate_metrics import (
     evaluate_ensemble_estimates,
     evaluate_estimates,
     save_estimates,
 )
-from evaluation.neural_inference import load_model, prepare_dataset, run_inference
+from oceanml3d.evaluation.neural_inference import load_model, prepare_dataset, run_inference
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ def main():
 
     norm_stats = None
     if args.normalize_stats:
-        from data.normalization import load_norm_stats
+        from oceanml3d.data.normalization import load_norm_stats
         norm_stats = load_norm_stats(args.normalize_stats)
         logger.info(f"Loaded normalize-stats from {args.normalize_stats}: "
                     f"mean/std shape {tuple(norm_stats['mean'].shape)}")
@@ -110,7 +110,7 @@ def main():
         # predictions come back in normalized space and must be denormalized
         # to raw physical units before scoring (truth is already raw, since
         # collate_eval never touches true_state).
-        from data.normalization import denormalize
+        from oceanml3d.data.normalization import denormalize
         for est in estimates.values():
             est["trajectories"] = denormalize(est["trajectories"], norm_stats)
             if "members" in est:

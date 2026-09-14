@@ -21,8 +21,8 @@ from pathlib import Path
 import torch
 from omegaconf import OmegaConf
 
-from evaluation.estimate_metrics import evaluate_estimates, save_estimates
-from evaluation.neural_inference import load_model, prepare_dataset, run_inference
+from oceanml3d.evaluation.estimate_metrics import evaluate_estimates, save_estimates
+from oceanml3d.evaluation.neural_inference import load_model, prepare_dataset, run_inference
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ def main():
 
     norm_stats = None
     if args.normalize_stats:
-        from data.normalization import load_norm_stats
+        from oceanml3d.data.normalization import load_norm_stats
         norm_stats = load_norm_stats(args.normalize_stats)
         logger.info(f"Loaded normalize-stats from {args.normalize_stats}: "
                     f"mean/std shape {tuple(norm_stats['mean'].shape)}")
@@ -90,7 +90,7 @@ def main():
         # the target state); predictions come back in normalized space and
         # must be denormalized before scoring against raw truth. Mirrors
         # eval_neural_l96.py's handling exactly.
-        from data.normalization import denormalize
+        from oceanml3d.data.normalization import denormalize
         for case in args.cases:
             estimates[case]["trajectories"] = denormalize(estimates[case]["trajectories"], norm_stats)
 

@@ -1,0 +1,12 @@
+# @package model
+name: fourdvarnet
+obs_map: {}          # {target: input}; role: both targets are mapped automatically
+n_step: 15
+lr_grad: 0.2
+prior_hidden: 64
+grad_hidden: 96
+downsamp: null
+obs_weight: 1.0
+prior_weight: 1.0
+init_from_obs: true
+dropout: 0.1

@@ -10,11 +10,12 @@ Tests cover:
 - Mean tracking truth
 - Ensemble collapse prevention
 """
+import numpy as np
 import pytest
 import torch
-import numpy as np
-from models.lorenz63_dynamics import Lorenz63Dynamics
-from evaluation.baselines import EnKF, BaselineResult
+
+from oceanml3d.evaluation.baselines import BaselineResult, EnKF
+from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
 
 
 def test_enkf_initialization(device):

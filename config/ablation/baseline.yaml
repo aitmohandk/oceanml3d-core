@@ -1,0 +1,4 @@
+# @package _global_
+# Reference of the OSSE-3D study: U-Net + group_mean loss + Sobel gradient term.
+# (these values are also the defaults of the osse3d_* experiments; every other ablation is a delta from them)
+training: {loss_combine: group_mean, grad_loss_weight: 20.0}

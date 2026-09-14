@@ -1,0 +1,10 @@
+# @package _global_
+# ABLATION architecture: iterative 4DVarNet (GradSolver) instead of the direct U-Net; SSH
+# pseudo-obs are the observed counterpart of the zos target, other inputs condition the solver.
+defaults:
+  - override /model: fourdvarnet
+model:
+  obs_map: {zos: ssh_obs}
+  n_step: 10
+  prior_hidden: 64
+  grad_hidden: 64

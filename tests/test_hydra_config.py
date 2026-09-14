@@ -1,5 +1,14 @@
 import hydra
-from conf.schema import DataConfig, ExperimentConfig, ModelConfig, TrainingConfig, BaselinesConfig, CS1Config, CS2Config
+
+from oceanml3d.conf.schema import (
+    BaselinesConfig,
+    CS1Config,
+    CS2Config,
+    DataConfig,
+    ExperimentConfig,
+    ModelConfig,
+    TrainingConfig,
+)
 
 
 def test_schema_imports():

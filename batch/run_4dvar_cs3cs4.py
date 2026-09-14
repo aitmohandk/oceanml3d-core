@@ -4,19 +4,20 @@
 Usage:
     python batch/run_4dvar_cs3cs4.py
 """
+import json
 import os
 import sys
 import time
-import json
-import torch
+
 import numpy as np
+import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from data.lorenz63 import Lorenz63Config as L63Config
-from evaluation.baselines import Weak4DVar, Strong4DVar
-from evaluation.run import evaluate_baseline, fmt_rmse, EXP_DIR
+from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.data.lorenz63 import Lorenz63Config as L63Config
+from oceanml3d.evaluation.baselines import Strong4DVar, Weak4DVar
+from oceanml3d.evaluation.run import EXP_DIR, evaluate_baseline, fmt_rmse
 
 DWS = 50
 SUFFIX = "_cs3cs4_4dvar"

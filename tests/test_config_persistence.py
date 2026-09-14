@@ -9,13 +9,13 @@ import hydra
 import torch
 from omegaconf import OmegaConf
 
-from evaluation.neural_inference import (
+from oceanml3d.evaluation.neural_inference import (
     RESOLVED_CONFIG_FILENAME,
     _find_resolved_config,
     load_checkpoint,
     load_model,
 )
-from models.direct_unet import DirectUNet
+from oceanml3d.models.direct_unet import DirectUNet
 
 
 def _compose(experiment_name):
@@ -109,7 +109,7 @@ class TestLoadCheckpointPrefersResolvedConfig:
         train_tau_0_only=true; overriding it False must actually flip the
         constructed VanillaCFM's flag.
         """
-        from models.vanilla_cfm import VanillaCFM
+        from oceanml3d.models.vanilla_cfm import VanillaCFM
 
         cfg = _compose("L2b_vanilla_cfm_s0s1")
         exp_dir = tmp_path / "L2b_vanilla_cfm_s0s1"
@@ -149,7 +149,7 @@ class TestLoadCheckpointPrefersResolvedConfig:
         """No resolved_config.yaml anywhere -> legacy shape-inference path,
         unchanged behavior (regression guard for pre-existing checkpoints).
         """
-        from models.vanilla_cfm import VanillaCFM
+        from oceanml3d.models.vanilla_cfm import VanillaCFM
 
         model = VanillaCFM(state_dim=24, hidden_channels=[32, 64, 128], param_dim=0)
         ckpt_path = tmp_path / "stage1.ckpt"
@@ -166,7 +166,7 @@ class TestLoadCheckpointPrefersResolvedConfig:
         strict train.model_factory path -- only *auto-discovered*
         resolved_config.yaml files are trusted to be fully field-complete.
         """
-        from models.vanilla_cfm import TweedieCFM
+        from oceanml3d.models.vanilla_cfm import TweedieCFM
 
         model = TweedieCFM(state_dim=24, hidden_channels=[32, 64, 128],
                            K_inner=1, N_outer=10, sigma_prior=0.2)

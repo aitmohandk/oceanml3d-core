@@ -1,0 +1,11 @@
+# @package _global_
+# Non-neural control for the surface-currents task: the geostrophic input IS the prediction.
+# Any learned model must beat this in `oceanml3d-eval run -b surface_currents_15m`.
+defaults:
+  - override /data: surface_currents_15m
+  - override /model: passthrough
+model:
+  source: {u_drifter: ugos, v_drifter: vgos}
+training:
+  trainer: {max_epochs: 1, limit_train_batches: 1}
+export: {depth_m: 15}

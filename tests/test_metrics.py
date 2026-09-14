@@ -8,9 +8,10 @@ Tests cover:
 - Degradation ratio (optional)
 - Import verification
 """
-import pytest
 import numpy as np
-from evaluation.metrics import rmse, spread
+import pytest
+
+from oceanml3d.evaluation.metrics import rmse, spread
 
 
 def test_rmse_calculation():
@@ -82,10 +83,7 @@ def test_degradation_ratio():
 def test_metrics_imports():
     """All metric functions should be importable."""
     try:
-        from evaluation.metrics import rmse
-        from evaluation.metrics import spread
-        from evaluation.metrics import crps
-        from evaluation.metrics import print_metrics_table
+        from oceanml3d.evaluation.metrics import crps, print_metrics_table, rmse, spread
     except ImportError as e:
         pytest.fail(f"Failed to import metrics: {e}")
     

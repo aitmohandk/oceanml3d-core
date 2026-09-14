@@ -2,10 +2,10 @@ import numpy as np
 import pytest
 import torch
 
-from data.qg import QGConfig, make_qg_s0_s1_datasets
-from models.qg1l_dynamics import QG1LDynamics
-from models.qg_dynamics import QGDynamics
-from models.qg_psi_dynamics import QG1LPsiDynamics, QGPsiDynamics, wrap_psi
+from oceanml3d.data.qg import QGConfig, make_qg_s0_s1_datasets
+from oceanml3d.models.qg1l_dynamics import QG1LDynamics
+from oceanml3d.models.qg_dynamics import QGDynamics
+from oceanml3d.models.qg_psi_dynamics import QG1LPsiDynamics, QGPsiDynamics, wrap_psi
 
 
 def _inner(inner_cls, nx=16, **kw):
@@ -58,7 +58,7 @@ def _cfg(nx=8, num_windows=2, geometry="random_columns", da_nx=None, seed=3):
 
 def test_psi_state_etkf_s0_finite():
     """Phase 2 smoke: psi-state ETKF on S0 is finite and skilful."""
-    from evaluation.run_qg_baselines import run
+    from oceanml3d.evaluation.run_qg_baselines import run
     cfg = _cfg()
     ds = make_qg_s0_s1_datasets(cfg)
     p = run("etkf", cfg, device=torch.device("cpu"), N_ensemble=8,
@@ -74,7 +74,7 @@ def test_psi_state_etkf_s0_finite():
 def test_psi_state_etkf_matches_legacy_psi_obs():
     """Phase 2: psi-state ETKF and the legacy psi-obs (H-function) ETKF give
     comparable DA skill on the same S0 windows."""
-    from evaluation.run_qg_baselines import run
+    from oceanml3d.evaluation.run_qg_baselines import run
     cfg = _cfg()
     ds = make_qg_s0_s1_datasets(cfg)
     evs = {}
@@ -92,7 +92,7 @@ def test_psi_state_etkf_matches_legacy_psi_obs():
 
 def test_s1_qg1l_psi_state_finite():
     """1-layer QG1L structural-error scenario with psi_state is finite."""
-    from evaluation.run_qg_baselines import run
+    from oceanml3d.evaluation.run_qg_baselines import run
     cfg = _cfg()
     ds = make_qg_s0_s1_datasets(cfg)
     p = run("etkf", cfg, device=torch.device("cpu"), N_ensemble=8,
@@ -108,7 +108,7 @@ def test_s1_cross_res_psi_state_finite():
     """Cross-resolution psi_state (S1, da_nx < nx) is finite and skilful now
     that it uses the H-mode obs operator (`_psi_h` spectrally resamples the
     DA-model psi-state to the obs grid)."""
-    from evaluation.run_qg_baselines import run
+    from oceanml3d.evaluation.run_qg_baselines import run
     cfg = _cfg(nx=8, da_nx=4)
     ds = make_qg_s0_s1_datasets(cfg)
     p = run("etkf", cfg, device=torch.device("cpu"), N_ensemble=8,
@@ -127,8 +127,8 @@ def test_psi_state_cross_res_obs_op_matches_manual_h():
     """The H-mode psi_state obs operator is exactly the psi-state
     streamfunction (identity reshape) spectrally upsampled to the obs grid and
     column-selected -- reproducing a manual recomputation on the same model."""
-    from evaluation.run_qg_baselines import _build_dyn, _event_columns, _make_obs_system
-    from models.qg_interp import spectral_resize_2d
+    from oceanml3d.evaluation.run_qg_baselines import _build_dyn, _event_columns, _make_obs_system
+    from oceanml3d.models.qg_interp import spectral_resize_2d
     cfg = _cfg(nx=8, da_nx=4)
     ds = make_qg_s0_s1_datasets(cfg)
     w = ds["test_s1"][0]

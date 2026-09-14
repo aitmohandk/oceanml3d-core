@@ -1,0 +1,29 @@
+# Root config. Compose with:  oceanml3d train experiment=<name> paths=<site>
+defaults:
+  - paths: local
+  - data: surface_currents_15m
+  - model: nosc_unet
+  - training: default
+  - _self_                # main's own body (export, seed...) before the experiment, so an
+  - experiment: null      # experiment can override it, and an ablation can override the experiment
+  - ablation: null
+
+command: train            # train | predict | prepare-obs | eofs | validate | list-models | show-config
+experiment_name: ${hydra:runtime.choices.experiment}
+seed: 333
+ckpt: null
+
+export:
+  enabled: true
+  split: test
+  time: ["2019-01-01", "2019-12-31"]   # sub-range of the test split to export (null = all)
+  depth_m: 15
+
+hydra:
+  run:
+    dir: outputs/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: outputs/${experiment_name}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

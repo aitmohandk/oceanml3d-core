@@ -9,11 +9,12 @@ Tests cover:
 - Degradation in CS2
 - Exact dynamics (no q term)
 """
+import numpy as np
 import pytest
 import torch
-import numpy as np
-from models.lorenz63_dynamics import Lorenz63Dynamics
-from evaluation.baselines import Strong4DVar, Weak4DVar, BaselineResult
+
+from oceanml3d.evaluation.baselines import BaselineResult, Strong4DVar, Weak4DVar
+from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
 
 
 def test_strong4dvar_initialization(device):
@@ -164,7 +165,7 @@ def test_strong4dvar_degrades_cs2(cs2_dataset, cs2_config, device):
     """Strong 4D-Var should have higher RMSE on CS2 than CS1 due to model error."""
     torch.manual_seed(123)
     
-    from data.lorenz63 import Lorenz63Config, Lorenz63Dataset
+    from oceanml3d.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
     
     # Create CS1 comparison
     cs1_cfg = Lorenz63Config(

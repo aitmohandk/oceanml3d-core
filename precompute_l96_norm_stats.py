@@ -17,8 +17,8 @@ import logging
 import hydra
 import torch
 
-from data.lorenz96 import Lorenz96Config, make_l96_s0_s1_trainval
-from data.normalization import compute_channel_stats, save_norm_stats
+from oceanml3d.data.lorenz96 import Lorenz96Config, make_l96_s0_s1_trainval
+from oceanml3d.data.normalization import compute_channel_stats, save_norm_stats
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

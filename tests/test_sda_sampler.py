@@ -1,8 +1,8 @@
 import torch
 
-from evaluation.sda_sampler import guided_obs_cost, sda_guided_sample
-from models.interpolant import LinearInterpolant
-from models.sda import UnconditionalPriorCFM
+from oceanml3d.evaluation.sda_sampler import guided_obs_cost, sda_guided_sample
+from oceanml3d.models.interpolant import LinearInterpolant
+from oceanml3d.models.sda import UnconditionalPriorCFM
 
 
 class _MockBatch:

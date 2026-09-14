@@ -24,18 +24,19 @@ Author: Agent B - Visualization Specialist
 Date: June 25, 2026
 """
 
-import sys
-import os
 import argparse
-import numpy as np
+import os
+import sys
+
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from data.lorenz63 import Lorenz63Config, Lorenz63Dataset
-from evaluation.baselines import Weak4DVar, Strong4DVar, EnKF
+from oceanml3d.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
+from oceanml3d.evaluation.baselines import EnKF, Strong4DVar, Weak4DVar
 
 
 def run_baselines_all_windows(dataset, cfg, coupling_type="linear"):

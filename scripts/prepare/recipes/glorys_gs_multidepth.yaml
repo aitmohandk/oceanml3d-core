@@ -1,0 +1,15 @@
+# 1) download:  python scripts/prepare/download_copernicus.py --config <this file>   (uses the `download:` block)
+# 2) subset:    python scripts/prepare/regrid.py --config <this file>                (keeps the depth axis)
+download:
+  dataset_id: cmems_mod_glo_phy_my_0.083deg_P1D-m
+  variables: [thetao, uo, vo, zos]
+  bbox: [-66, -54, 32, 44]
+  time: ["2010-01-01", "2020-01-11"]
+  depth: [0, 200]
+  output: ${OCEANML3D_RAW}/glorys_gs
+input: ${OCEANML3D_RAW}/glorys_gs/*.nc
+output: ${OCEANML3D_DATA}/glorys_gs_multidepth_2010-2020.nc
+variables: {thetao: thetao, uo: uo, vo: vo}
+keep_depth: true
+method: none          # native 1/12 deg grid kept: no interpolation
+time: ["2010-01-01", "2020-01-11"]

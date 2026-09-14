@@ -51,9 +51,9 @@ import torch.nn.functional as F
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
-from data.normalization import load_norm_stats
-from data.qg import QGConfig
-from data.qg_neural import (
+from oceanml3d.data.normalization import load_norm_stats
+from oceanml3d.data.qg import QGConfig
+from oceanml3d.data.qg_neural import (
     QGNeuralDataset,
     denorm_psi,
     ensure_truth_cache,
@@ -64,9 +64,9 @@ from data.qg_neural import (
     q_from_psi_norm,
     qg_collate,
 )
-from models.direct_unet import DirectUNet
-from models.vanilla_cfm import VanillaCFM
-from training.pipeline import create_trainer
+from oceanml3d.models.direct_unet import DirectUNet
+from oceanml3d.models.vanilla_cfm import VanillaCFM
+from oceanml3d.training.pipeline import create_trainer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 EXP_DIR = os.path.join(BASE, "experiments")

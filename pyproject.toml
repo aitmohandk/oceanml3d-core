@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oceanml3d-core"
+version = "0.1.0"
+description = "4DVarNet and flow-matching core for 3D multivariate ocean data assimilation."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "torch>=2.0",
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+    "hydra-core>=1.3",
+    "omegaconf>=2.3",
+    "pytorch-lightning>=2.0",
+    # the gridded-ocean half of the tree (catalog, data/open.py, obs/, inference/) is xarray-native
+    "xarray>=2023.1",
+    "pandas>=2.0",
+    "netCDF4>=1.6",
+    "dask>=2023.1",
+]
+
+[project.optional-dependencies]
+plots = ["matplotlib>=3.8"]
+# monai pulls torch forward (see requirements-monai.txt); install it in its own environment.
+monai = ["monai>=1.6"]
+# `data/open.py` reads `.zarr` stores and `data/datamodule.py` writes its stacked cache as one;
+# NetCDF alone works without it.
+zarr = ["zarr>=2.16"]
+# only `scripts/prepare/` needs these, and only to *download* — nothing in the package imports them.
+prepare = ["copernicusmarine>=1.0", "cdsapi>=0.7", "xesmf>=0.8"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4"]
+
+[project.scripts]
+oceanml3d = "oceanml3d.cli:main"
+
+# The model registry reads this group at import time (`oceanml3d/registry.py`), so third-party models
+# register themselves by publishing into it — see `docs/adding_a_model.md`. The group *name* is a
+# published contract and is deliberately `oceanml3d.models`, not `oceanml3d.models.ocean`, even
+# though the built-in implementations now live one level down.
+[project.entry-points."oceanml3d.models"]
+nosc_unet = "oceanml3d.models.ocean.nosc.model:NOSCUNet"
+fourdvarnet = "oceanml3d.models.ocean.fourdvarnet.model:FourDVarNet"
+passthrough = "oceanml3d.models.ocean.baselines.model:Passthrough"
+linear = "oceanml3d.models.ocean.baselines.model:LinearBaseline"
+climatology = "oceanml3d.models.ocean.baselines.model:Climatology"
+optimal_interpolation = "oceanml3d.models.ocean.assimilation.model:OptimalInterpolation"
+enkf = "oceanml3d.models.ocean.assimilation.model:EnsembleKalmanFilter"
+
+[tool.setuptools.packages.find]
+include = ["oceanml3d*"]
+
+# No `[tool.setuptools.package-data]`: there is not one YAML file under `oceanml3d/`. The prototype
+# declared `models/*/config/**/*.yaml`, but that pattern matched nothing there either — the
+# convention documented in `docs/adding_a_model.md` step 2 puts a model's defaults in the root
+# `config/model/<name>.yaml`, with the rest of the Hydra tree. See the note below.
+
+# NOTE: the Hydra YAML tree (`config/`) and the driver scripts (`train.py`, `eval_*.py`, ...) are
+# still at the repository root, so they are NOT in the wheel: an installed distribution gives you
+# the library, not the CLI. Moving them in is the next step — `@hydra.main(config_path=...)`
+# resolves relative to the file that carries the decorator, so it has to move with them.
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["archive", "logs", "reports", "notebooks"]
+force-exclude = true
+target-version = "py310"
+
+[tool.ruff.lint]
+# `oceanml3d-eval` runs ["E", "F", "I", "B", "UP"]. The same select here reports 148 pre-existing
+# violations in the imported scientific code, so that set is the target, not the gate. What is
+# enforced today is ruff's default plus import sorting — the rename rewrote 455 import statements,
+# so keeping them sorted is worth a rule. Backlog measured 2026-09-14, to be worked down:
+#   B023 × 27 — closures capturing a loop variable; audit first, some of these can be real bugs
+#   B905 × 26, B008 × 21, B007 × 10, UP006/UP045/UP035 × 84 — mechanical
+select = ["E4", "E7", "E9", "F", "I"]
+ignore = [
+    "E501",  # line length: the scientific code wraps at its own rhythm
+    "E402",  # × 18, all in driver scripts that must `sys.path.insert` before importing the package
+    "F841",  # × 27 unused variables, 11 of them in evaluation/baselines.py, which PLAN §3 rewrites
+]

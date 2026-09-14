@@ -38,13 +38,13 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from evaluation.estimate_metrics import (
+from oceanml3d.evaluation.estimate_metrics import (
     evaluate_ensemble_estimates,
     evaluate_estimates,
     save_estimates,
 )
-from evaluation.neural_inference import load_model, prepare_dataset, run_inference
-from models.sda import ConditionalPriorCFM
+from oceanml3d.evaluation.neural_inference import load_model, prepare_dataset, run_inference
+from oceanml3d.models.sda import ConditionalPriorCFM
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

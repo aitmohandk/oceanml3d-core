@@ -1,6 +1,7 @@
 """Tests for LinearInterpolant."""
 import torch
-from models.interpolant import LinearInterpolant
+
+from oceanml3d.models.interpolant import LinearInterpolant
 
 
 def test_alpha_beta_values():
