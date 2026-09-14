@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from oceanml3d.evaluation.estimate_metrics import evaluate_estimates
+from oceanml3d.legacy.evaluation.estimate_metrics import evaluate_estimates
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

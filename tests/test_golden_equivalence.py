@@ -32,21 +32,21 @@ def _check_qg(dyn, g, keys):
 
 
 def test_qg_2layer_unchanged():
-    from oceanml3d.models.qg_dynamics import QGDynamics
+    from oceanml3d.legacy.models.qg_dynamics import QGDynamics
 
     g = load("qg_2layer")
     _check_qg(QGDynamics(nx=32, dt=7200.0), g, [("kinetic_energy", "ke"), ("enstrophy", "enstrophy")])
 
 
 def test_qg_1layer_unchanged():
-    from oceanml3d.models.qg1l_dynamics import QG1LDynamics
+    from oceanml3d.legacy.models.qg1l_dynamics import QG1LDynamics
 
     g = load("qg_1layer")
     _check_qg(QG1LDynamics(nx=32, dt=7200.0), g, [("kinetic_energy", "ke"), ("enstrophy", "enstrophy")])
 
 
 def test_lorenz63_unchanged():
-    from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
+    from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics
 
     g = load("lorenz63")
     d = Lorenz63Dynamics(dt=0.01, c1=0.0, clip_range=None)

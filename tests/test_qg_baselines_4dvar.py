@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 
-from oceanml3d.data.qg import QGConfig, make_qg_s0_s1_datasets
-from oceanml3d.evaluation.run_qg_baselines import (
+from oceanml3d.legacy.data.qg import QGConfig, make_qg_s0_s1_datasets
+from oceanml3d.legacy.evaluation.run_qg_baselines import (
     QG4DVar,
     _build_dyn,
     _evaluate_window,
@@ -20,7 +20,7 @@ def _cfg():
 def test_strong4dvar_psi_run_smoke():
     cfg = _cfg()
     ds = make_qg_s0_s1_datasets(cfg)
-    from oceanml3d.evaluation.run_qg_baselines import run
+    from oceanml3d.legacy.evaluation.run_qg_baselines import run
     p = run("strong4dvar", cfg, device=torch.device("cpu"),
             scenarios=("test_s0",), init="lagged", init_lag_days=0.5,
             geometry="random_columns", obs_var="psi", band_half=0.25,
@@ -37,7 +37,7 @@ def test_strong4dvar_psi_run_smoke():
 def test_weak4dvar_psi_run_smoke():
     cfg = _cfg()
     ds = make_qg_s0_s1_datasets(cfg)
-    from oceanml3d.evaluation.run_qg_baselines import run
+    from oceanml3d.legacy.evaluation.run_qg_baselines import run
     p = run("weak4dvar", cfg, device=torch.device("cpu"),
             scenarios=("test_s0",), init="lagged", init_lag_days=0.5,
             geometry="random_columns", obs_var="psi", band_half=0.25,

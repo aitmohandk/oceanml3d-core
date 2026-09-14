@@ -16,19 +16,21 @@ repository), `feature_inventory.md` (where every capability lives).
 ## 1. Which path are you on?
 
 This repository contains **two model families that do not mix**. Nothing below applies to the other
-one.
+one, which since 2026-09-14 sits in reserve under `oceanml3d/legacy/` — set aside, not removed
+(`oceanml3d/legacy/README.md`).
 
-| | toy / Lorenz / QG | **gridded ocean (this document)** |
+| | toy / Lorenz / QG (reserve) | **gridded ocean (this document)** |
 |---|---|---|
-| Models | `oceanml3d/models/*.py` | `oceanml3d/models/ocean/` |
-| Built by | `models/factory.py`, `model_type` dispatch | `@register_model` registry + entry points |
-| Driver | `python train.py experiment=<n>` | `oceanml3d <args>` |
-| Hydra root | `config/config.yaml` | `config/main.yaml` |
-| Config schema | `oceanml3d/conf/schema.py` | `oceanml3d/config_schema.py` |
+| Models | `oceanml3d/legacy/models/*.py` | `oceanml3d/models/ocean/` |
+| Built by | `legacy/models/factory.py`, `model_type` dispatch | `@register_model` registry + entry points |
+| Driver | `python legacy/train.py experiment=<n>` | `oceanml3d <args>` |
+| Hydra root | `config/legacy/config.yaml` | `config/main.yaml` |
+| Config schema | `oceanml3d/legacy/conf/schema.py` | `oceanml3d/config_schema.py` |
 
-`models/fourdvarnet.py` (the 620-line L96 `FourDVarNetSolver`) and
+`legacy/models/fourdvarnet.py` (the 620-line L96 `FourDVarNetSolver`) and
 `models/ocean/fourdvarnet/model.py` (the 149-line gridded `FourDVarNet`) are **different classes
-with the same name**. If you are reading `train.py`, you are on the wrong path for this document.
+with the same name**. If you are reading `legacy/train.py`, you are on the wrong path for this
+document.
 
 ---
 
@@ -652,8 +654,8 @@ Two reduced variants exist: `osse3d_gs21_surface_only` (surface targets only) an
 namespace move:
 
 * built-in models go in **`oceanml3d/models/ocean/<name>/model.py`**, not `oceanml3d/models/<name>/`;
-* they are registered in **`oceanml3d/models/ocean/__init__.py`** — `oceanml3d/models/__init__.py` is
-  empty *on purpose*, so that no pre-existing import of the toy family changed behaviour.
+* they are registered in **`oceanml3d/models/ocean/__init__.py`**; `oceanml3d/models/__init__.py` is
+  empty.
 
 Third-party models need neither: publish into the `oceanml3d.models` entry-point group and the
 registry picks them up at import.
@@ -698,10 +700,8 @@ Honest limits, so you do not look for them:
 * **Depth is not a patch dimension.** 3D targets are flattened into channels via `depth_indices`.
   `PatchArray` is generic over its `DIMS` tuple and adding `"depth"` is a small change, but nobody
   has done it.
-* **Two config schemas coexist** (`conf/schema.py` for `train.py`, `config_schema.py` for the CLI)
-  with disjoint importers. PLAN 3.x.
-* **`config/experiment/` is flat**: 67 toy/L96/QG presets next to 11 gridded ones. Only the 11 listed
-  in this document apply here.
+* **Two config schemas coexist** (`legacy/conf/schema.py` for `legacy/train.py`, `config_schema.py`
+  for the CLI) with disjoint importers. PLAN 3.x.
 * **The interior model with sinusoidal depth embedding** is not ported (PLAN 3.7); the SSH spectral
   loss and anomaly correlation are PLAN 3.5.
 * **Scoring lives elsewhere.** Metrics beyond the training loss come from `oceanml3d-eval`.

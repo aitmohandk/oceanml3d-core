@@ -16,12 +16,14 @@ import pkgutil
 import pytest
 
 ROOT = "oceanml3d"
-SUBPACKAGES = ("models", "data", "training", "evaluation", "conf")
+SUBPACKAGES = ("models", "models.ocean", "data", "training", "inference", "obs",
+               "legacy", "legacy.models", "legacy.data", "legacy.training", "legacy.evaluation",
+               "legacy.conf")
 
 # Modules whose import genuinely requires an optional dependency. Anything else that fails to
 # import is a bug, not a missing extra — keep this list short and justified.
 OPTIONAL = {
-    "oceanml3d.models.monai_unet_adapter": "monai",
+    "oceanml3d.legacy.models.monai_unet_adapter": "monai",
 }
 
 

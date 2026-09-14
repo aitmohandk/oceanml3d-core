@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-import oceanml3d.models.fourdvarnet as fdv_mod
-from oceanml3d.models.fourdvarnet import FourDVarNetSolver
+import oceanml3d.legacy.models.fourdvarnet as fdv_mod
+from oceanml3d.legacy.models.fourdvarnet import FourDVarNetSolver
 
 N_OUTER_VALUES = (5, 10, 20, 40)
 UPDATE_INPUT_MODES = ("obs+state", "grad+state")
@@ -128,7 +128,7 @@ def write_report(rows, output_path, gpu_name, config):
     md.append(
         f"**Setup:** synthetic batches (`states`/`obs`/`obs_mask` only -- no "
         f"real L96 data generation needed to exercise `forward()`+`backward()`), "
-        f"sized to match `config/experiment/FDV2_grad_state_l96_fixedw.yaml`: "
+        f"sized to match `config/legacy/experiment/FDV2_grad_state_l96_fixedw.yaml`: "
         f"B={config['B']}, T={config['T']} (`da_window_steps`), D={config['D']}, "
         f"`hidden_channels={list(config['hidden_channels'])}`, `time_emb_dim=64`, "
         f"`dropout=0.1`. Two `update_input` modes: **obs+state** (no "

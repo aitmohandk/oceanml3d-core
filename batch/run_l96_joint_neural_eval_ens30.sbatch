@@ -41,7 +41,7 @@ echo "  Steps: ${NO} / flags: ${FLAGS:-none}"
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv -i 0 2>/dev/null | tail -1)"
 echo "============================================"
 
-python eval_joint_neural_l96.py \
+python legacy/eval_joint_neural_l96.py \
   --checkpoint "experiments/${EXP}/checkpoints/stage2_best.ckpt" \
   --config "${CFG}" \
   --dataset "${DATASET}" \

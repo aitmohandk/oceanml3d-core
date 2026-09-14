@@ -5,12 +5,12 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 
-from oceanml3d.data.dataloader import collate_fm
-from oceanml3d.models.solver import TweedieSolver
-from oceanml3d.training.lightning_module import LitModel as Lit4DVarNetFM
+from oceanml3d.legacy.data.dataloader import collate_fm
+from oceanml3d.legacy.models.solver import TweedieSolver
+from oceanml3d.legacy.training.lightning_module import LitModel as Lit4DVarNetFM
+from oceanml3d.legacy.training.stage1 import train_stage1
+from oceanml3d.legacy.training.stage2 import train_stage2
 from oceanml3d.training.losses import StateMSELoss
-from oceanml3d.training.stage1 import train_stage1
-from oceanml3d.training.stage2 import train_stage2
 
 
 class _FixedDataset(Dataset):

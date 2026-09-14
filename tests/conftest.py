@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from oceanml3d.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
+from oceanml3d.legacy.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
 
 ROOT = Path(__file__).resolve().parents[1]
 # `scripts/` is not a package: the synthetic-data generator is imported by module name.

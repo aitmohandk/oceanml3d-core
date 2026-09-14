@@ -1,7 +1,7 @@
 """Tests for MeanEstimatorCell and IterativeUpdateCell."""
 import torch
 
-from oceanml3d.models.residual import IterativeUpdateCell, MeanEstimatorCell
+from oceanml3d.legacy.models.residual import IterativeUpdateCell, MeanEstimatorCell
 
 
 def test_mean_estimator_shape():

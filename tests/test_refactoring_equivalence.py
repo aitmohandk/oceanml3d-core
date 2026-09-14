@@ -1,10 +1,10 @@
 """Refactoring equivalence tests: verify old and new pipelines produce same results."""
 import torch
 
-from oceanml3d.conf.schema import DataConfig
-from oceanml3d.data.lorenz63 import Lorenz63Dataset, generate_long_trajectory
-from oceanml3d.models.solver import TweedieSolver
-from oceanml3d.training.lightning_module import LitModel as Lit4DVarNetFM
+from oceanml3d.legacy.conf.schema import DataConfig
+from oceanml3d.legacy.data.lorenz63 import Lorenz63Dataset, generate_long_trajectory
+from oceanml3d.legacy.models.solver import TweedieSolver
+from oceanml3d.legacy.training.lightning_module import LitModel as Lit4DVarNetFM
 from oceanml3d.training.losses import StateMSELoss
 
 

@@ -35,7 +35,7 @@ python -c "import torch; print('torch', torch.__version__, 'CUDA', torch.cuda.is
 # --randomize activates per-window fast_weights +-20% via the _draw_l96_params per-param path.
 # --skip-weak avoids 4DVar on CPU (too slow for full 200-window sweep).
 # The _fw cache suffix activates automatically when fast_weights is in the randomize dict.
-python -u evaluate_all_l96.py \
+python -u legacy/evaluate_all_l96.py \
   --da-window-steps 500 \
   --num-test-windows 200 \
   --t-max 3.0 \

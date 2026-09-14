@@ -37,7 +37,7 @@ echo "  Task ${SLURM_ARRAY_TASK_ID}: ${CACHE}"
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv -i 0 2>/dev/null | tail -1)"
 echo "============================================"
 
-python rerun_l96_esfix.py --cache "${CACHE}" --device cuda
+python legacy/rerun_l96_esfix.py --cache "${CACHE}" --device cuda
 
 echo ""
 echo " Done: ${CACHE} at $(date)"

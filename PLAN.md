@@ -88,14 +88,14 @@ plan is kept as `PLAN_upstream.md`.
 - [x] `@register_model` / `@register_dynamics` + entry points — `oceanml3d/registry.py` and
       `oceanml3d/dynamics/base.py`, seven models declared in `pyproject.toml` and verified to
       resolve. They cover the gridded family only; the toy/L96/QG models still go through
-      `models/factory.py`.
-- [ ] one U-Net in `oceanml3d/models/nn/` — now **four**: `models/unet.py`, `models/direct_unet.py`,
+      `legacy/models/factory.py`, now in reserve (`oceanml3d/legacy/README.md`).
+- [ ] one U-Net in `oceanml3d/models/nn/` — now **four**: `legacy/models/unet.py`, `legacy/models/direct_unet.py`,
       `models/ocean/nn/unet_nosc.py` (heads and attention; the pre-MONAI trunk, kept for
       reproduction) and `models/ocean/nn/unet_monai.py` (MONAI `DiffusionModelUNet`, the default
       gridded trunk since 2026-09-14). The MONAI wrapper is the plausible convergence point — the
-      1-D adapter (`models/monai_unet_adapter.py`) already shares its resblock patch — but merging
-      still needs the toy and gridded paths to agree on a channel convention.
-- [ ] `oceanml3d/evaluation/baselines.py`: `Joint*` = 1 646 of 3 014 lines → `EnsembleFilter` +
+      1-D adapter (`legacy/models/monai_unet_adapter.py`) already shares its resblock patch — but
+      merging still needs the toy and gridded paths to agree on a channel convention.
+- [ ] `oceanml3d/legacy/evaluation/baselines.py`: `Joint*` = 1 646 of 3 014 lines → `EnsembleFilter` +
       `JointEstimationMixin`, −800/−1 000 lines. **Unblocked**: filter tests green, reference values
       trustworthy. This is now the next structural task.
 - [ ] the QG methods at 88-91% similarity (needs a judgement call on the formulations)
@@ -141,9 +141,12 @@ plan is kept as `PLAN_upstream.md`.
 - [ ] reanalyses data layer + CS1-CS4 — the *capabilities* are present and reimplemented (see
       `docs/feature_inventory.md` §2); what is missing is CS1-CS4 and the depth-embedding interior
       model
-- [ ] deduplicate what the transplant doubled: two config schemas (`conf/schema.py` /
+- [ ] deduplicate what the transplant doubled: two config schemas (`legacy/conf/schema.py` /
       `config_schema.py`, disjoint importers, two Hydra roots) and two dynamics abstractions
-      (`models/dynamics.py` if/elif / `dynamics/base.py` registry). `docs/feature_inventory.md` §4
-      is the list.
+      (`legacy/models/dynamics.py` if/elif / `dynamics/base.py` registry). `docs/feature_inventory.md`
+      §4 is the list. **Halved in cost, not solved**, by the 2026-09-14 move of the toy family to
+      `oceanml3d/legacy/`: the two of each are now on opposite sides of a visible boundary
+      (`oceanml3d/legacy/README.md`) instead of interleaved, so either can be retired without
+      archaeology.
 - [ ] move the evaluation drivers to `oceanml3d-eval`, one benchmark at a time
 - [ ] delete the deprecated adapters

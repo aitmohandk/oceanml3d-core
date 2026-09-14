@@ -35,8 +35,8 @@ import torch
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from oceanml3d.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
-from oceanml3d.evaluation.baselines import EnKF, Strong4DVar, Weak4DVar
+from oceanml3d.legacy.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
+from oceanml3d.legacy.evaluation.baselines import EnKF, Strong4DVar, Weak4DVar
 
 
 def run_baselines_all_windows(dataset, cfg, coupling_type="linear"):

@@ -36,7 +36,7 @@ echo "  Task: ${SLURM_ARRAY_TASK_ID} / Experiment: ${EXP}"
 echo "  GPU: $(nvidia-smi --query-gpu=name,memory.total --format=csv -i 0)"
 echo ""
 
-python train.py \
+python legacy/train.py \
   --config-name "experiment/${EXP}" \
   hydra.run.dir=. \
   hydra.output_subdir=null

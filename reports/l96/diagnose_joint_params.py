@@ -33,9 +33,9 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from oceanml3d.evaluation.estimate_metrics import nrmse_param, trajectory_forecast_skill
-from oceanml3d.evaluation.run_l96 import make_obs_j_indices
-from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
+from oceanml3d.legacy.evaluation.estimate_metrics import nrmse_param, trajectory_forecast_skill
+from oceanml3d.legacy.evaluation.run_l96 import make_obs_j_indices
+from oceanml3d.legacy.models.lorenz96_dynamics import Lorenz96Dynamics
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

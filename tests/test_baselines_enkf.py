@@ -14,8 +14,8 @@ import numpy as np
 import pytest
 import torch
 
-from oceanml3d.evaluation.baselines import BaselineResult, EnKF
-from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
+from oceanml3d.legacy.evaluation.baselines import BaselineResult, EnKF
+from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics
 
 
 def test_enkf_initialization(device):

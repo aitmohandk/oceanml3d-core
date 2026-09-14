@@ -33,7 +33,7 @@ echo "  Task: ${SLURM_ARRAY_TASK_ID} / Experiment: ${EXP}"
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv -i 0 2>/dev/null | tail -1)"
 echo ""
 
-python train.py \
+python legacy/train.py \
   --config-name experiment/${EXP} \
   training.stage1.epochs=1 \
   +data.num_train_windows=10 \

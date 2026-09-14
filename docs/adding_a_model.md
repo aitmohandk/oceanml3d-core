@@ -26,14 +26,14 @@ class MyModel(BaseOceanModel):
 2. Add `config/model/my_model.yaml` (`name: my_model` + hyper-parameters) and an
    `config/experiment/<xp>.yaml` that picks a `data` task and your model.
 
-3. Register it in `oceanml3d/models/__init__.py` (built-in) **or**, for an external
+3. Register it in `oceanml3d/models/ocean/__init__.py` (built-in) **or**, for an external
    package, in its `pyproject.toml`:
    ```toml
    [project.entry-points."oceanml3d.models"]
    my_model = "mypkg.model:MyModel"
    ```
 
-4. Add `oceanml3d/models/<name>/README.md` (inputs / targets / window / reference) and a
+4. Add `oceanml3d/models/ocean/<name>/README.md` (inputs / targets / window / reference) and a
    test in `tests/` that runs a forward pass on the synthetic data.
 
 ## Models that need more than the default batch

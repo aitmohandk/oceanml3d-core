@@ -11,7 +11,6 @@ and train.model_factory, not the normalization math.
 import hydra
 import pytest
 import torch
-
 from train import model_factory
 
 # Canonical DirectUNet/VanillaCFM/FDV L96 configs that must declare
@@ -37,7 +36,7 @@ NORMALIZE_TRUE_CONFIGS = [
 
 
 def _compose(name):
-    with hydra.initialize(config_path="../config", version_base="1.3"):
+    with hydra.initialize(config_path="../config/legacy", version_base="1.3"):
         return hydra.compose(config_name=f"experiment/{name}")
 
 
@@ -87,7 +86,7 @@ class TestFDVModelFactoryOptionalFields:
     def test_fourdvarnet_minimal_fdv_block_uses_constructor_defaults(self):
         import hydra as hy
 
-        with hy.initialize(config_path="../config", version_base="1.3"):
+        with hy.initialize(config_path="../config/legacy", version_base="1.3"):
             cfg = hy.compose(config_name="experiment/FDV1_unrolled_unet_l96")
         # FDV1's own fdv block has no R_var/clip_range (matches the real file).
         assert "R_var" not in cfg.model.fdv
@@ -99,7 +98,7 @@ class TestFDVModelFactoryOptionalFields:
     def test_fourdvarnet_cfm_minimal_fdv_cfm_block_uses_constructor_defaults(self):
         import hydra as hy
 
-        with hy.initialize(config_path="../config", version_base="1.3"):
+        with hy.initialize(config_path="../config/legacy", version_base="1.3"):
             cfg = hy.compose(config_name="experiment/FDV1CFM_predict_state_l96")
         assert "R_var" not in cfg.model.fdv_cfm
         assert "clip_range" not in cfg.model.fdv_cfm

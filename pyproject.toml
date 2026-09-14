@@ -60,10 +60,12 @@ include = ["oceanml3d*"]
 # convention documented in `docs/adding_a_model.md` step 2 puts a model's defaults in the root
 # `config/model/<name>.yaml`, with the rest of the Hydra tree. See the note below.
 
-# NOTE: the Hydra YAML tree (`config/`) and the driver scripts (`train.py`, `eval_*.py`, ...) are
-# still at the repository root, so they are NOT in the wheel: an installed distribution gives you
-# the library, not the CLI. Moving them in is the next step — `@hydra.main(config_path=...)`
+# NOTE: the Hydra YAML tree (`config/`) and the driver scripts (`legacy/train.py`, `legacy/eval_*.py`,
+# ...) are still at the repository root, so they are NOT in the wheel: an installed distribution
+# gives you the library, not the CLI. Moving them in is the next step — `@hydra.main(config_path=...)`
 # resolves relative to the file that carries the decorator, so it has to move with them.
+# `include = ["oceanml3d*"]` does pick up `oceanml3d.legacy`, the reserved toy family
+# (`oceanml3d/legacy/README.md`): that is deliberate, so reactivating it is a plain import.
 
 [tool.ruff]
 line-length = 120

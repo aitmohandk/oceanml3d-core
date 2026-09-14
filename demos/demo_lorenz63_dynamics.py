@@ -27,7 +27,7 @@ import numpy as np
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from oceanml3d.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
+from oceanml3d.legacy.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
 
 
 def plot_3d_attractor(trajectory, save_path):

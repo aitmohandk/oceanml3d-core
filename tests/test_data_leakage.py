@@ -11,9 +11,9 @@ import numpy as np
 import pytest
 import torch
 
-from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from oceanml3d.evaluation.baselines import Strong4DVar, Weak4DVar
-from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
+from oceanml3d.legacy.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.legacy.evaluation.baselines import Strong4DVar, Weak4DVar
+from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics
 
 
 @pytest.fixture

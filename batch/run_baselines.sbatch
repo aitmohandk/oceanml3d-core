@@ -23,7 +23,7 @@ echo "============================================"
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv -i 0 2>/dev/null | tail -1)"
 echo ""
 
-python eval_baselines.py hydra.run.dir=. hydra.output_subdir=null
+python legacy/eval_baselines.py hydra.run.dir=. hydra.output_subdir=null
 
 echo ""
 echo "  Done at: $(date)"

@@ -7,12 +7,12 @@ Uses the real L96 dynamics on CPU; small window counts to stay fast.
 import numpy as np
 import pytest
 
-from oceanml3d.evaluation.estimate_metrics import (
+from oceanml3d.legacy.evaluation.estimate_metrics import (
     nrmse_param,
     trajectory_forecast_skill,
 )
-from oceanml3d.evaluation.run_l96 import make_obs_j_indices
-from oceanml3d.models.lorenz96_dynamics import Lorenz96Dynamics
+from oceanml3d.legacy.evaluation.run_l96 import make_obs_j_indices
+from oceanml3d.legacy.models.lorenz96_dynamics import Lorenz96Dynamics
 
 TRUE_PARAMS = np.array([8.0, 1.0, 1.0, 0.1, 1.0, 1.0, 0.1, 0.1])  # F,c1,hx,eps,w1..w4
 

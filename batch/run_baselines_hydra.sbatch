@@ -26,7 +26,7 @@ echo ""
 
 export HYDRA_FULL_ERROR=1
 
-python eval_baselines.py \
+python legacy/eval_baselines.py \
   --config-name baselines/dws${DWS:-300} \
   baselines.batch_size=128 \
   hydra.run.dir=. \

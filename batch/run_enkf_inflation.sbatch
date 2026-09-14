@@ -30,7 +30,7 @@ echo ""
 
 export HYDRA_FULL_ERROR=1
 
-python eval_baselines.py \
+python legacy/eval_baselines.py \
   --config-name baselines/dws300 \
   baselines.enkf.inflation=$INFLATION \
   baselines.batch_size=128 \

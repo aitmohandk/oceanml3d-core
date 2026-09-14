@@ -33,7 +33,7 @@ case "${SLURM_ARRAY_TASK_ID}" in
     echo
 
     rm -rf "experiments/${EXPERIMENT}"
-    python train.py \
+    python legacy/train.py \
       --config-name experiment/${EXPERIMENT} \
       hydra.run.dir=. \
       hydra.output_subdir=null \
@@ -52,7 +52,7 @@ case "${SLURM_ARRAY_TASK_ID}" in
     echo
 
     rm -rf "experiments/${EXPERIMENT}"
-    python train.py \
+    python legacy/train.py \
       --config-name experiment/${EXPERIMENT} \
       hydra.run.dir=. \
       hydra.output_subdir=null \

@@ -1,6 +1,6 @@
 import torch
 
-from oceanml3d.models.direct_unet import DirectUNet
+from oceanml3d.legacy.models.direct_unet import DirectUNet
 
 
 class _MockBatch:

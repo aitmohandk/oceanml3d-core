@@ -39,7 +39,7 @@ if [ -n "$EPOCHS_OVERRIDE" ]; then
   EPOCHS_ARG="++training.stage1.epochs=${EPOCHS_OVERRIDE}"
 fi
 
-python train.py \
+python legacy/train.py \
   --config-name experiment/${EXP} \
   ++data.test_cache=experiments/l96_datasets_obsj2_int100_nwin200.pt \
   ${EPOCHS_ARG} \

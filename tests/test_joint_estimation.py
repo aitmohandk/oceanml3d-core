@@ -1,6 +1,6 @@
 import torch
 
-from oceanml3d.models.vanilla_cfm import JointCFM
+from oceanml3d.legacy.models.vanilla_cfm import JointCFM
 
 
 class _MockBatch:
@@ -115,7 +115,7 @@ class TestJointCFM:
 
     def test_param_loss_weight_zero_ignores_params(self):
         model = JointCFM(state_dim=3, param_dim=3, hidden_channels=[4, 8], param_loss_weight=0.0)
-        from oceanml3d.data.dataloader import FlowMatchingBatch
+        from oceanml3d.legacy.data.dataloader import FlowMatchingBatch
         B, T = 1, 30
         batch_no_base = _MockBatch(B=B, T=T, D=3)
         batch_no = FlowMatchingBatch(
@@ -132,7 +132,7 @@ class TestJointCFM:
         assert torch.allclose(loss_no, loss_yes)
 
     def test_unet_output_dim(self):
-        from oceanml3d.models.unet import UNet1D
+        from oceanml3d.legacy.models.unet import UNet1D
         model = UNet1D(state_dim=3, hidden_channels=[4, 8], use_obs=True,
                        output_dim=6, obs_dim=6)
         x = torch.randn(1, 3, 30)

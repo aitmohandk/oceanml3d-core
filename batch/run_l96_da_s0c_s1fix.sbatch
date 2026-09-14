@@ -31,7 +31,7 @@ echo ""
 
 python -c "import torch; print('torch', torch.__version__, 'CUDA', torch.cuda.is_available())"
 
-python -u evaluate_all_l96.py \
+python -u legacy/evaluate_all_l96.py \
   --da-window-steps 500 \
   --num-test-windows 200 \
   --t-max 3.0 \

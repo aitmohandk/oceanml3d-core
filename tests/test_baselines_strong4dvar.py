@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 import torch
 
-from oceanml3d.evaluation.baselines import BaselineResult, Strong4DVar, Weak4DVar
-from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
+from oceanml3d.legacy.evaluation.baselines import BaselineResult, Strong4DVar, Weak4DVar
+from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics
 
 
 def test_strong4dvar_initialization(device):
@@ -165,7 +165,7 @@ def test_strong4dvar_degrades_cs2(cs2_dataset, cs2_config, device):
     """Strong 4D-Var should have higher RMSE on CS2 than CS1 due to model error."""
     torch.manual_seed(123)
     
-    from oceanml3d.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
+    from oceanml3d.legacy.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
     
     # Create CS1 comparison
     cs1_cfg = Lorenz63Config(

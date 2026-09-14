@@ -37,7 +37,7 @@ python -c "import torch; print('torch', torch.__version__, 'CUDA', torch.cuda.is
 # Re-run L96 DA baselines on the all-5-param S0/S1 test sets, DWS=500, 200 windows,
 # with partial observations (obs_j=2 -> 24D observed subspace).
 # obs_j<4 auto-appends the _obsj2 cache tag; obs_interval auto-appends the _int{N} tag.
-python -u evaluate_all_l96.py \
+python -u legacy/evaluate_all_l96.py \
   --da-window-steps 500 \
   --num-test-windows 200 \
   --t-max 3.0 \

@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-from oceanml3d.models.qg_dynamics import QGDynamics
+from oceanml3d.legacy.models.qg_dynamics import QGDynamics
 
 
 def main() -> None:

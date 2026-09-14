@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from oceanml3d.data.lorenz63 import Lorenz63Config
-from oceanml3d.data.random_param_dataset import RandomParamLorenz63Dataset
+from oceanml3d.legacy.data.lorenz63 import Lorenz63Config
+from oceanml3d.legacy.data.random_param_dataset import RandomParamLorenz63Dataset
 
 
 class TestRandomParamDataset:

@@ -57,7 +57,7 @@ generate_report
 
 # ── launch experiment runner in background ──────────────────────────────────
 echo "=== Launching experiments ..."
-RUN_CMD="conda run -n ${CONDA_ENV} python3 run_experiments.py $*"
+RUN_CMD="conda run -n ${CONDA_ENV} python3 legacy/run_experiments.py $*"
 echo "  ${RUN_CMD}"
 $RUN_CMD &
 RUNNER_PID=$!

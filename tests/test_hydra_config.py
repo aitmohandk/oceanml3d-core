@@ -1,6 +1,6 @@
 import hydra
 
-from oceanml3d.conf.schema import (
+from oceanml3d.legacy.conf.schema import (
     BaselinesConfig,
     CS1Config,
     CS2Config,
@@ -40,7 +40,7 @@ def test_schema_imports():
 
 def test_config_yaml_loads():
     """Config YAML can be loaded via Hydra."""
-    with hydra.initialize(config_path="../config"):
+    with hydra.initialize(config_path="../config/legacy"):
         cfg = hydra.compose("lorenz63_default")
     assert cfg is not None
     assert cfg.data.dt == 0.01
@@ -52,7 +52,7 @@ def test_config_yaml_loads():
 
 def test_config_all_keys_present():
     """All expected top-level keys exist in the default config."""
-    with hydra.initialize(config_path="../config"):
+    with hydra.initialize(config_path="../config/legacy"):
         cfg = hydra.compose("lorenz63_default")
     expected_keys = {"data", "model", "training", "paths", "baselines", "cs1", "cs2"}
     assert set(cfg.keys()) == expected_keys, f"Missing keys: {expected_keys - set(cfg.keys())}"
@@ -60,7 +60,7 @@ def test_config_all_keys_present():
 
 def test_data_section_keys():
     """All expected data keys exist."""
-    with hydra.initialize(config_path="../config"):
+    with hydra.initialize(config_path="../config/legacy"):
         cfg = hydra.compose("lorenz63_default")
     data_keys = {
         "system", "dt", "T_max", "obs_interval", "R_var", "B_var",
@@ -75,7 +75,7 @@ def test_data_section_keys():
 
 def test_model_section_keys():
     """All expected model keys exist."""
-    with hydra.initialize(config_path="../config"):
+    with hydra.initialize(config_path="../config/legacy"):
         cfg = hydra.compose("lorenz63_default")
     model_keys = {"state_dim", "hidden_channels", "time_emb_dim", "K_inner", "N_outer", "nu", "use_obs", "use_energy", "dropout"}
     assert set(cfg.model.keys()) == model_keys
@@ -83,7 +83,7 @@ def test_model_section_keys():
 
 def test_overrides_compose_correctly():
     """Command-line overrides correctly modify the config."""
-    with hydra.initialize(config_path="../config"):
+    with hydra.initialize(config_path="../config/legacy"):
         cfg = hydra.compose("lorenz63_default", overrides=["data.dt=0.02", "data.case=2", "data.param_bias=0.1"])
     assert cfg.data.dt == 0.02
     assert cfg.data.case == 2
@@ -92,7 +92,7 @@ def test_overrides_compose_correctly():
 
 def test_override_hidden_channels():
     """List-type overrides work."""
-    with hydra.initialize(config_path="../config"):
+    with hydra.initialize(config_path="../config/legacy"):
         cfg = hydra.compose("lorenz63_default", overrides=["model.hidden_channels=[128,256]"])
     assert cfg.model.hidden_channels == [128, 256]
 

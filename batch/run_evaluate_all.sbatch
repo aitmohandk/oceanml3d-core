@@ -23,7 +23,7 @@ echo "============================================"
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv -i 0 2>/dev/null | tail -1)"
 echo ""
 
-python evaluate_all.py --experiments E1 E2 E3 F1 F2 F3 G1 G2 G3
+python legacy/evaluate_all.py --experiments E1 E2 E3 F1 F2 F3 G1 G2 G3
 
 echo ""
 echo "  Done at: $(date)"

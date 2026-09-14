@@ -26,7 +26,7 @@ conda run -n "$CONDA_ENV" python3 reports/generate_report.py --output "$REPORT" 
 echo "  Initial report: ${REPORT}" | tee -a "$LOG"
 
 # Launch pipeline in background
-nohup conda run -n "$CONDA_ENV" python3 -u run_experiments.py "$@" >> "$LOG" 2>&1 &
+nohup conda run -n "$CONDA_ENV" python3 -u legacy/run_experiments.py "$@" >> "$LOG" 2>&1 &
 PIPELINE_PID=$!
 echo "  Pipeline PID: ${PIPELINE_PID}" | tee -a "$LOG"
 echo "" | tee -a "$LOG"

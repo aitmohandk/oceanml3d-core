@@ -1,6 +1,6 @@
 import torch
 
-from oceanml3d.models.sda import UnconditionalPriorCFM
+from oceanml3d.legacy.models.sda import UnconditionalPriorCFM
 
 
 class _MockBatch:

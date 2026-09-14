@@ -107,39 +107,47 @@ Always run tests after making changes.
 ## Project Structure
 
 All importable code lives under the `oceanml3d/` package. Import it by its full path
-(`from oceanml3d.models.solver import TweedieSolver`); the bare top-level names (`models`, `data`,
-…) no longer exist.
+(`from oceanml3d.models.ocean.nosc.model import NOSCUNet`); the bare top-level names (`models`,
+`data`, …) no longer exist.
 
-- `oceanml3d/data/` — Lorenz-63 SDE simulation, datasets, dataloaders
-- `oceanml3d/models/` — Neural network architectures (UNet1D, TweedieSolver, etc.) and `factory.py`
-- `oceanml3d/training/` — Training pipelines (Lightning-based)
-- `oceanml3d/evaluation/` — Baselines (4D-Var, EnKF, ETKF) and metrics
-- `oceanml3d/conf/` — Hydra structured config schemas
-- `config/` — YAML configuration presets (stays at the root: `@hydra.main(config_path="config")`
-  resolves relative to the driver script that carries the decorator)
-- `train.py`, `eval_*.py`, `run_experiment*.py` — driver scripts, root-level for the same reason
+The repository is about the **gridded ocean models**. The toy / Lorenz / QG family it grew out of
+is in reserve under `oceanml3d/legacy/` + `legacy/` + `config/legacy/` — still tested, still
+runnable, just out of the way. `oceanml3d/legacy/README.md` is the only document about it.
+
+- `oceanml3d/data/` — the lazy xarray layer: `open`, `patches`, `datamodule`, `transforms`, `augment`
+- `oceanml3d/models/ocean/` — the gridded models, built through the `@register_model` registry
+- `oceanml3d/training/` — losses, loss grouping, optimisers, patch weights, callbacks, vertical modes
+- `oceanml3d/inference/` — prediction, export, `product_contract.py`
+- `oceanml3d/obs/`, `oceanml3d/dynamics/` — OSSE observation operators; dynamics base + registry
+- `oceanml3d/legacy/` — the reserved toy family: `models/`, `data/`, `training/`, `evaluation/`, `conf/`
+- `config/` — YAML presets for the CLI, rooted at `main.yaml`; `config/legacy/` is the toy root
+  (stays at the repository root: `@hydra.main(config_path=…)` resolves relative to the driver
+  script that carries the decorator)
+- `legacy/` — the toy driver scripts: `train.py`, `eval_*.py`, `run_experiment*.py`, …
 - `reports/` — Report generation scripts
 - `batch/` — SLURM batch scripts for HPC
-- `tests/` — Unit and integration tests
+- `tests/` — Unit and integration tests, for both families
 
 ## Key Conventions
 
 - **Python 3.10+** with `torch`, `numpy`, `hydra-core`, `pytorch-lightning`
-- **Configuration** uses Hydra/OmegaConf (see `oceanml3d/conf/schema.py` for dataclass schemas)
+- **Configuration** uses Hydra/OmegaConf (`oceanml3d/config_schema.py` for the gridded path,
+  `oceanml3d/legacy/conf/schema.py` for the reserve)
 - **No comments** in code unless absolutely necessary (prefer self-documenting names)
 - **Type hints** should be used for all function signatures
-- **Training** uses PyTorch Lightning (`LitModel` wrapper in `oceanml3d/training/lightning_module.py`)
-- **Two-stage training** pattern: Stage 1 trains the mean estimator, Stage 2 freezes it and trains the residual
+- **Training** uses PyTorch Lightning — `BaseOceanModel` for the gridded path, the `LitModel`
+  wrapper in `oceanml3d/legacy/training/lightning_module.py` for the reserve
+- **Two-stage training** pattern (reserve): Stage 1 trains the mean estimator, Stage 2 freezes it and trains the residual
 - **Data** is generated on-the-fly; no large data files committed to git
 - **Tests** use `pytest` with markers (`@pytest.mark.slow`) for expensive tests
 
 ## When Making Model Changes
 
 - Update the corresponding config in `config/experiment/` if training parameters change
-- Ensure `LitModel` (in `oceanml3d/training/lightning_module.py`) handles the new model type correctly
-- Register the new model in `oceanml3d/models/factory.py` — `train.py` and
-  `oceanml3d/evaluation/neural_inference.py` both build through it, so a model added in only one of
-  them cannot be evaluated from a checkpoint
+- Register the new gridded model with `@register_model` (`oceanml3d/registry.py`) — `docs/adding_a_model.md`
+- Reserve models instead register in `oceanml3d/legacy/models/factory.py` — `legacy/train.py` and
+  `oceanml3d/legacy/evaluation/neural_inference.py` both build through it, so a model added in only
+  one of them cannot be evaluated from a checkpoint
 - Add tests for any new model, loss, or dataset in `tests/`
 - Document the change in `CHANGELOG.md`
 

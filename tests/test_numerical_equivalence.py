@@ -10,9 +10,9 @@ import numpy as np
 import pytest
 import torch
 
-from oceanml3d.data.lorenz63 import generate_long_trajectory, generate_observations
-from oceanml3d.evaluation.baselines import ETKF, EnKF, Strong4DVar, Weak4DVar
-from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics, _apply_coupling
+from oceanml3d.legacy.data.lorenz63 import generate_long_trajectory, generate_observations
+from oceanml3d.legacy.evaluation.baselines import ETKF, EnKF, Strong4DVar, Weak4DVar
+from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics, _apply_coupling
 
 DT = 0.01
 NUM_STEPS = 60

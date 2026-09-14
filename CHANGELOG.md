@@ -1,5 +1,69 @@
 # Changelog
 
+## 2026-09-14: the toy / Lorenz / QG family moves to `oceanml3d/legacy/`
+
+**Summary:** the flow-matching and L96-4DVarNet code this repository grew out of is now in reserve
+under `oceanml3d/legacy/` (+ `legacy/` for the drivers, `config/legacy/` for the Hydra tree), so the
+tree shows only the gridded-ocean work. Nothing was deleted, no compatibility shims were added, and
+the 47 toy test files stay in `tests/` and keep running. 143 renames, 5 new files; the content diff
+is import rewrites and documentation.
+
+**Files modified:**
+- `oceanml3d/legacy/{models,data,training,evaluation,conf}/` — 51 modules moved by `git mv`:
+  the 19 top-level `models/*.py`, 8 toy `data/*.py`, `training/{lightning_module,pipeline,stage1,stage2}.py`,
+  all 13 of `evaluation/`, and `conf/schema.py`
+- `legacy/` — the 20 driver scripts (`train.py`, `eval_*.py`, `evaluate_all*.py`,
+  `run_experiment*.py`, `precompute_*.py`, `rerun_*.py`). The repository root now has no `.py` file
+- `config/legacy/` — `config.yaml`, `lorenz63_default.yaml`, `lorenz96_default.yaml`, `baselines/`,
+  `case_study/`, and 67 of the 78 `experiment/` presets. The 11 gridded presets stay in
+  `config/experiment/`; `lorenz96_{unet,enkf}` are among them because they run toy *data* through
+  the registry CLI
+- 452 import references rewritten across 131 files (`oceanml3d.models.solver` →
+  `oceanml3d.legacy.models.solver`, …), by script then read back
+- `oceanml3d/legacy/README.md` — new: what moved, how to run it, what it still imports from the
+  core, and how to undo the whole move with one `git revert`
+- `pytest.ini` — `pythonpath = . legacy`, so `from train import model_factory` in the toy tests
+  keeps working; as a side effect a bare `pytest` now resolves the package the way `python -m
+  pytest` did
+- 6 test files repointed at `config/legacy` for Hydra composition; `tests/test_import_smoke.py`
+  `SUBPACKAGES` rewritten to the real subpackages (it was asserting on `evaluation` and `conf`,
+  which no longer exist at top level)
+- 68 `batch/*.sbatch` invocations → `python legacy/<driver>.py`;
+  `batch/run_config_validation.sbatch` also had pre-namespace-move imports (`from models.direct_unet
+  import …`), fixed in passing
+- `EXP_DIR` unified on the repository root. `oceanml3d/evaluation/run.py` had resolved it to
+  `oceanml3d/experiments/` since the namespace move while the drivers used `<root>/experiments/` —
+  two different caches for the same artefacts. Deepening the tree would have moved it again, so all
+  13 definitions now compute the repo root explicitly
+- `README.md`, `AGENTS.md`, `docs/gridded_models.md` §1/§12/§14, `docs/feature_inventory.md`,
+  `docs/adding_a_model.md`, `PLAN.md` §3/§5, `pyproject.toml` — layout, paths and counts
+
+**Rationale:** the two families never shared code (`docs/gridded_models.md` §1): separate model
+construction, separate Hydra root, separate config schema. The toy family nonetheless occupied 51 of
+96 modules, 67 of 78 presets and every `.py` at the repository root, dominating a tree whose subject
+it no longer is. The cut was measured, not guessed — an AST transitive import closure from the
+gridded entry points put 46 modules inside and 50 outside, with no overlap. Contrary to the shape of
+the directory tree, `oceanml3d/dynamics/`, `training/losses.py` and `data/transforms.py` are on the
+gridded side; `legacy/models/monai_unet_adapter.py` is not. A physical move rather than a
+`__getattr__` shim or a git tag, because the point is visibility, and because `git revert` on one
+pure-rename commit undoes it in full. The reserve's tests deliberately did not move: covered code
+does not rot silently.
+
+**Verification:** `pytest -q -m "not slow"` → **815 passed, 9 skipped, 0 failed** (7:00), against
+**811 passed, 9 skipped** before the move. The +4 is exactly the `test_import_smoke` parametrisation
+delta: `pkgutil.walk_packages` now finds 6 `oceanml3d.legacy*` packages and no longer finds
+`oceanml3d.{evaluation,conf}`. No test changed outcome. `ruff check .` clean (6 import-order fixes
+applied in the moved files). `oceanml3d command=list-models` → the same 7 names. The reserve still
+composes and runs: `python legacy/train.py --config-name=experiment/L1b_direct_unet_s0s1` resolves
+`/lorenz96_default` out of `config/legacy/`, applies the command-line overrides and trains both
+stages to completion. Its `_norm` sibling composes identically but stops at
+`load_norm_stats(<root>/experiments/l96_norm_stats_obsj2.pt)`: that artefact is precomputed and
+`.gitignore`d, so it is absent from a fresh worktree — unrelated to the move, and the path it
+resolves is the newly unified `EXP_DIR` root. `python -c "import oceanml3d.legacy.models.solver,
+oceanml3d.legacy.evaluation.baselines"` succeeds, and nothing under `oceanml3d/models/ocean/`,
+`cli.py` or `registry.py` imports `oceanml3d.legacy` — the dependency is one-way, reserve → core,
+through exactly two modules (`training/losses.py`, `models/ocean/nn/unet_monai.py`).
+
 ## 2026-09-14: MONAI `DiffusionModelUNet` becomes the default gridded trunk
 
 **Summary:** the 2D U-Net behind `nosc_unet` is now MONAI's `DiffusionModelUNet`. The previous

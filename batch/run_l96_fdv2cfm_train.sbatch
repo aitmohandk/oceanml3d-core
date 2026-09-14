@@ -36,7 +36,7 @@ echo "============================================"
 echo
 
 rm -rf "experiments/${EXPERIMENT}"
-python train.py \
+python legacy/train.py \
   --config-name experiment/${EXPERIMENT} \
   hydra.run.dir=. \
   hydra.output_subdir=null \

@@ -31,7 +31,7 @@ if [ ! -f "$F3_DIR/checkpoints/stage2.pt" ]; then
 fi
 
 echo "Running evaluate_all.py for F3 on CS1–CS4..."
-python evaluate_all.py --experiments F3_vanilla_cfm_rand
+python legacy/evaluate_all.py --experiments F3_vanilla_cfm_rand
 
 echo ""
 echo "============================================"

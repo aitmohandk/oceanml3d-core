@@ -28,7 +28,7 @@ case "${SLURM_ARRAY_TASK_ID}" in
     EXPERIMENT="V3_predict_state_cfm_l96"
     echo "==== V3 PredictStateCFM end-to-end quick smoke ===="
     rm -rf "experiments/${EXPERIMENT}"
-    python train.py \
+    python legacy/train.py \
       --config-name experiment/${EXPERIMENT} \
       hydra.run.dir=. hydra.output_subdir=null \
       ${COMMON} \
@@ -39,7 +39,7 @@ case "${SLURM_ARRAY_TASK_ID}" in
     EXPERIMENT="V2_tweedie_cfm_l96"
     echo "==== V2 TweedieCFM end-to-end quick smoke ===="
     rm -rf "experiments/${EXPERIMENT}"
-    python train.py \
+    python legacy/train.py \
       --config-name experiment/${EXPERIMENT} \
       hydra.run.dir=. hydra.output_subdir=null \
       ${COMMON} \

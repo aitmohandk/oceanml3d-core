@@ -1,17 +1,17 @@
 import numpy as np
 import pytest
 import torch
+from train import _make_eval_batch, evaluate_model, make_l96_dataloaders, model_factory
 
-from oceanml3d.data.dataloader import FlowMatchingBatch
-from oceanml3d.data.lorenz96 import (
+from oceanml3d.legacy.data.dataloader import FlowMatchingBatch
+from oceanml3d.legacy.data.lorenz96 import (
     Lorenz96Config,
     RandomParamLorenz96Dataset,
     _make_lorenz96_dynamics,
 )
-from oceanml3d.evaluation.run_l96 import make_obs_j_indices
-from oceanml3d.models.direct_unet import JointDirectUNet, ParamHeadUNet
-from oceanml3d.models.vanilla_cfm import JointCFM, JointCFMCoupled, ParamFlowUNet
-from train import _make_eval_batch, evaluate_model, make_l96_dataloaders, model_factory
+from oceanml3d.legacy.evaluation.run_l96 import make_obs_j_indices
+from oceanml3d.legacy.models.direct_unet import JointDirectUNet, ParamHeadUNet
+from oceanml3d.legacy.models.vanilla_cfm import JointCFM, JointCFMCoupled, ParamFlowUNet
 
 PARAM_NAMES = ("F", "c1", "hx", "eps", "w1", "w2", "w3", "w4")
 SD, PD = 24, 8
@@ -267,7 +267,7 @@ def test_model_factory_joint_l96(l96_joint_cfg):
     from hydra import compose, initialize
 
     def build(name):
-        with initialize(version_base="1.3", config_path="../config"):
+        with initialize(version_base="1.3", config_path="../config/legacy"):
             cfg = compose(config_name="experiment/" + name)
         return model_factory(cfg, torch.device("cpu"))
 
@@ -280,7 +280,7 @@ def test_model_factory_joint_l96(l96_joint_cfg):
 
 
 def test_litmodel_joint_training_step(l96_joint_dataset):
-    from oceanml3d.training.lightning_module import LitModel
+    from oceanml3d.legacy.training.lightning_module import LitModel
 
     w = l96_joint_dataset[0]
     for cls, mtype, extra in [
@@ -298,7 +298,7 @@ def test_litmodel_joint_training_step(l96_joint_dataset):
 
 
 def test_param_flow_cnn_attn_pool_shape(l96_joint_dataset):
-    from oceanml3d.models.vanilla_cfm import ParamFlowCNN
+    from oceanml3d.legacy.models.vanilla_cfm import ParamFlowCNN
 
     w = l96_joint_dataset[0]
     batch = _joint_batch(w)
@@ -320,7 +320,7 @@ def test_param_flow_cnn_attn_pool_shape(l96_joint_dataset):
 
 
 def test_param_head_cnn_attn_pool_shape(l96_joint_dataset):
-    from oceanml3d.models.direct_unet import ParamHeadCNN
+    from oceanml3d.legacy.models.direct_unet import ParamHeadCNN
 
     w = l96_joint_dataset[0]
     batch = _joint_batch(w)
@@ -363,7 +363,7 @@ def test_joint_direct_unet_default_param_ref_is_ones(l96_joint_dataset):
 
 
 def test_joint_models_stage2_param_only_loss_and_freeze(l96_joint_dataset):
-    from oceanml3d.training.lightning_module import LitModel
+    from oceanml3d.legacy.training.lightning_module import LitModel
 
     w = l96_joint_dataset[0]
     batch = _joint_batch(w)
@@ -411,7 +411,7 @@ def test_joint_cfm_stage2_param_loss_conditions_on_real_state(l96_joint_dataset)
 
 
 def test_joint_cfm_stage2_param_loss_real_state_finite(l96_joint_dataset):
-    from oceanml3d.training.lightning_module import LitModel
+    from oceanml3d.legacy.training.lightning_module import LitModel
 
     w = l96_joint_dataset[0]
     model = JointCFM(state_dim=SD, param_dim=PD, hidden_channels=[8, 16])
