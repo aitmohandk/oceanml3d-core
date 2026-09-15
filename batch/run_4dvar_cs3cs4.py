@@ -14,10 +14,10 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from oceanml3d.data.lorenz63 import Lorenz63Config as L63Config
-from oceanml3d.evaluation.baselines import Strong4DVar, Weak4DVar
-from oceanml3d.evaluation.run import EXP_DIR, evaluate_baseline, fmt_rmse
+from oceanml3d.legacy.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.legacy.data.lorenz63 import Lorenz63Config as L63Config
+from oceanml3d.legacy.evaluation.baselines import Strong4DVar, Weak4DVar
+from oceanml3d.legacy.evaluation.run import EXP_DIR, evaluate_baseline, fmt_rmse
 
 DWS = 50
 SUFFIX = "_cs3cs4_4dvar"

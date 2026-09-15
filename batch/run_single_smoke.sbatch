@@ -25,7 +25,7 @@ echo " Smoke Test (1 epoch) | $(date)"
 echo " Experiment: ${EXP}"
 echo "============================================"
 
-python train.py \
+python legacy/train.py \
   --config-name "experiment/${EXP}" \
   training.stage1.epochs=1 \
   data.num_train_windows=10 \

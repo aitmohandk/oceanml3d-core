@@ -26,7 +26,7 @@ echo ""
 # Delete any stale results so this test actually runs
 rm -f experiments/E1_direct_unet_default/results.json
 
-python train.py \
+python legacy/train.py \
   --config-name experiment/E1_direct_unet_default \
   training.stage1.epochs=1 \
   hydra.run.dir=. \

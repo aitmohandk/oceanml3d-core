@@ -1,14 +1,14 @@
 import numpy as np
 import torch
 
-from oceanml3d.data.normalization import compute_channel_stats
-from oceanml3d.data.qg import (
+from oceanml3d.legacy.data.normalization import compute_channel_stats
+from oceanml3d.legacy.data.qg import (
     QGConfig,
     QGS01Dataset,
     ensure_truth_only_cache,
     make_qg_s0_s1_datasets,
 )
-from oceanml3d.data.qg_neural import (
+from oceanml3d.legacy.data.qg_neural import (
     QGNeuralDataset,
     denorm_psi,
     layer_split,
@@ -20,8 +20,8 @@ from oceanml3d.data.qg_neural import (
     steps_per_day,
     window_scales,
 )
-from oceanml3d.models.direct_unet import DirectUNet
-from oceanml3d.models.vanilla_cfm import VanillaCFM
+from oceanml3d.legacy.models.direct_unet import DirectUNet
+from oceanml3d.legacy.models.vanilla_cfm import VanillaCFM
 
 
 def _cfg(**kw):
@@ -178,7 +178,7 @@ def test_psi_to_q_does_not_move_shared_cpu_inverter():
     """A GPU psi_to_q must not pollute the shared CPU inverter used by
     psi_daily/window_scales (per-device cache separation)."""
     cfg, w = _window()
-    from oceanml3d.data.qg_neural import _INVERTER_CACHE
+    from oceanml3d.legacy.data.qg_neural import _INVERTER_CACHE
     _INVERTER_CACHE.clear()
     ps = psi_daily(w, cfg)
     if torch.cuda.is_available():
@@ -201,7 +201,7 @@ def test_lightning_vanilla_cfm_forward_backward_with_qloss():
 def _synth_batch(split=64, days=30, rd=15000.0, b=2):
     """Deterministic QGBatch with realistic shapes (no window generation),
     whose normalized targets have O(1) per-layer scale like the real dataset."""
-    from oceanml3d.data.qg_neural import QGBatch
+    from oceanml3d.legacy.data.qg_neural import QGBatch
     split = int(split)
     D = 2 * split
     states = torch.randn(b, days, D)

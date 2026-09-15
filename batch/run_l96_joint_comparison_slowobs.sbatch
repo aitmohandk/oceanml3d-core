@@ -27,7 +27,7 @@ echo "  methods: EnKF/Joint-EnKF, ETKF/Joint-ETKF, Strong-4DVar/Joint-Strong-4DV
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv -i 0 2>/dev/null | tail -1)"
 echo "============================================"
 
-python eval_joint_comparison_l96.py \
+python legacy/eval_joint_comparison_l96.py \
   --device cuda \
   --obs-interval 100 \
   --obs-j 0 \

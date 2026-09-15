@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 import torch
 
-from oceanml3d.evaluation.baselines import BaselineResult, Weak4DVar
-from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
+from oceanml3d.legacy.evaluation.baselines import BaselineResult, Weak4DVar
+from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics
 
 
 def test_weak4dvar_initialization(device):
@@ -108,7 +108,7 @@ def test_weak4dvar_perfect_obs_low_rmse(device):
     torch.manual_seed(42)
     np.random.seed(42)
     
-    from oceanml3d.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
+    from oceanml3d.legacy.data.lorenz63 import Lorenz63Config, Lorenz63Dataset
     
     # Create config with dense observations
     cfg_dense = Lorenz63Config(

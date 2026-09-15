@@ -12,7 +12,7 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from oceanml3d.data.qg import QGConfig, QGS01Dataset
+from oceanml3d.legacy.data.qg import QGConfig, QGS01Dataset
 
 
 def main():

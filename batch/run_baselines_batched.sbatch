@@ -23,7 +23,7 @@ echo "============================================"
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv -i 0 2>/dev/null | tail -1)"
 echo ""
 
-python eval_baselines.py \
+python legacy/eval_baselines.py \
   baselines.batch_size=128 \
   hydra.run.dir=. \
   hydra.output_subdir=null

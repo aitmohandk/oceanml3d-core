@@ -19,8 +19,8 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from oceanml3d.data.lorenz96 import _generate_observations
-from oceanml3d.evaluation.run_l96 import make_obs_j_indices
+from oceanml3d.legacy.data.lorenz96 import _generate_observations
+from oceanml3d.legacy.evaluation.run_l96 import make_obs_j_indices
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXP_DIR = os.path.join(BASE, "experiments")

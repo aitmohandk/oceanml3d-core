@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 import torch
 
-from oceanml3d.evaluation.baselines import BaselineResult, EnKF, Strong4DVar
-from oceanml3d.evaluation.metrics import energy_score
+from oceanml3d.legacy.evaluation.baselines import BaselineResult, EnKF, Strong4DVar
+from oceanml3d.legacy.evaluation.metrics import energy_score
 
 
 class TestEnergyScoreMetric:
@@ -49,7 +49,7 @@ class TestEnergyScoreMetric:
 
 class TestESAccumulator:
     def _acc(self, N, sd, T):
-        from oceanml3d.evaluation.baselines import _ESAccumulator
+        from oceanml3d.legacy.evaluation.baselines import _ESAccumulator
         return _ESAccumulator(T, sd, N)
 
     def test_matches_energy_score_stepwise(self):
@@ -90,7 +90,7 @@ class TestESAccumulator:
 class TestEnKFEnergyScore:
     def test_batch_reports_es_field(self, device):
         torch = pytest.importorskip("torch")
-        from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
+        from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics
         enkf = EnKF(N_ensemble=8, dt=0.01, device=device, dynamics=Lorenz63Dynamics(dt=0.01))
         T, D = 30, 3
         obs = torch.randn(T, D, device=device)
@@ -106,7 +106,7 @@ class TestEnKFEnergyScore:
 
     def test_es_zero_when_truth_absent(self, device):
         torch = pytest.importorskip("torch")
-        from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
+        from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics
         enkf = EnKF(N_ensemble=8, dt=0.01, device=device, dynamics=Lorenz63Dynamics(dt=0.01))
         T, D = 20, 3
         obs = torch.randn(T, D, device=device)
@@ -120,7 +120,7 @@ class TestEnKFEnergyScore:
 class TestStrong4DVarBatchES:
     def test_batch_reports_mae_es(self, device):
         pytest.importorskip("torch")
-        from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
+        from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics
         method = Strong4DVar(
             da_window_steps=5, max_iter=2, lr=0.1, dt=0.01,
             device=device, dynamics=Lorenz63Dynamics(dt=0.01),
@@ -141,7 +141,7 @@ class TestStrong4DVarBatchES:
 
     def test_batch_es_none_when_truth_absent(self, device):
         pytest.importorskip("torch")
-        from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
+        from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics
         method = Strong4DVar(
             da_window_steps=5, max_iter=2, lr=0.1, dt=0.01,
             device=device, dynamics=Lorenz63Dynamics(dt=0.01),
@@ -156,7 +156,7 @@ class TestStrong4DVarBatchES:
 
     def test_batch_dim_mismatch_no_crash_es_none(self, device):
         pytest.importorskip("torch")
-        from oceanml3d.models.lorenz63_dynamics import Lorenz63Dynamics
+        from oceanml3d.legacy.models.lorenz63_dynamics import Lorenz63Dynamics
         enkf = EnKF(N_ensemble=4, dt=0.01, device=device, dynamics=Lorenz63Dynamics(dt=0.01))
         B, T, D = 1, 6, 3
         obs = torch.randn(B, T, D, device=device)

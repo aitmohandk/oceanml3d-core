@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from oceanml3d.models.fourdvarnet import FourDVarNetPredictStateCFM, FourDVarNetSolver
-from oceanml3d.training.lightning_module import LitModel
+from oceanml3d.legacy.models.fourdvarnet import FourDVarNetPredictStateCFM, FourDVarNetSolver
+from oceanml3d.legacy.training.lightning_module import LitModel
 
 
 def _make_lit(model_type="fourdvarnet", use_cosine_scheduler=False, max_epochs=None,

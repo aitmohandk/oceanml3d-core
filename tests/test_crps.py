@@ -9,7 +9,7 @@ a priori — an external source of truth rather than agreement with neighbouring
 import numpy as np
 import pytest
 
-from oceanml3d.evaluation.metrics import crps
+from oceanml3d.legacy.evaluation.metrics import crps
 
 # CRPS of a N(0,1) predictive distribution against y = 0.
 # Closed form: sigma * [ w (2 Phi(w) - 1) + 2 phi(w) - 1/sqrt(pi) ] with w = (y - mu)/sigma = 0,

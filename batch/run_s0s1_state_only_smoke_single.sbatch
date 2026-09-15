@@ -19,7 +19,7 @@ export PYTHONUNBUFFERED=1
 export MPLCONFIGDIR="/tmp/mplconfig_${SLURM_JOB_ID}"
 mkdir -p "$MPLCONFIGDIR" sbatch_logs experiments
 
-python train.py \
+python legacy/train.py \
   --config-name experiment/S1_direct_unet_s0s1 \
   training.stage1.epochs=1 \
   data.num_train_windows=10 \

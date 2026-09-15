@@ -3,13 +3,13 @@ import math
 import pytest
 import torch
 
-from oceanml3d.data.qg import (
+from oceanml3d.legacy.data.qg import (
     QGConfig,
     QGS01Dataset,
     expand_obs_to_grid,
     make_qg_s0_s1_datasets,
 )
-from oceanml3d.models.qg_dynamics import QGDynamics
+from oceanml3d.legacy.models.qg_dynamics import QGDynamics
 
 
 def _tiny_cfg(**kw):
@@ -189,7 +189,7 @@ def test_s1_qg1l_scenario():
 
 def test_s1_qg1l_metrics_upper_layer():
     """qg1l DA seed/metadata stay 1-layer (upper) while targets remain upper-layer fields."""
-    from oceanml3d.models.qg1l_dynamics import QG1LDynamics
+    from oceanml3d.legacy.models.qg1l_dynamics import QG1LDynamics
 
     cfg = _tiny_cfg()
     ds = make_qg_s0_s1_datasets(cfg)

@@ -1,0 +1,5 @@
+# @package _global_
+# Historical trunk: NOSC's own residual U-Net (oceanml3d/models/ocean/nn/unet_nosc.py), the default
+# until MONAI's DiffusionModelUNet replaced it. This is the reproduction path for every run
+# published before the switch, and the only way to reload their checkpoints.
+model: {trunk: nosc}

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import torch
 
-from oceanml3d.models.qg_dynamics import QGDynamics
+from oceanml3d.legacy.models.qg_dynamics import QGDynamics
 
 NX_SMALL = 32
 NOMINAL = {"U1": 0.05, "U2": 0.0, "rd": 15000.0, "beta": 1.5e-11,

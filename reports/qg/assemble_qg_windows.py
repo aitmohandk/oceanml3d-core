@@ -12,7 +12,7 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from oceanml3d.data.qg import QGConfig, _truth_cache_path
+from oceanml3d.legacy.data.qg import QGConfig, _truth_cache_path
 from generate_qg_window_chunk import SPLIT_SEED_BASE, SPLIT_SIZE  # noqa: E402
 
 

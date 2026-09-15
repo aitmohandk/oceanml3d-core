@@ -23,11 +23,11 @@ echo ""
 
 python -c "
 import hydra, torch, sys
-sys.path.insert(0, '.')
+sys.path.insert(0, 'legacy')
 from train import model_factory
-from models.direct_unet import DirectUNet
-from models.vanilla_cfm import VanillaCFM
-from models.solver import TweedieSolver
+from oceanml3d.legacy.models.direct_unet import DirectUNet
+from oceanml3d.legacy.models.vanilla_cfm import VanillaCFM
+from oceanml3d.legacy.models.solver import TweedieSolver
 
 EXPS = [
     'E1_direct_unet_default', 'E2_direct_unet_small', 'E3_direct_unet_rand',
@@ -36,7 +36,7 @@ EXPS = [
 ]
 
 for exp in EXPS:
-    with hydra.initialize(config_path='config'):
+    with hydra.initialize(config_path='config/legacy'):
         cfg = hydra.compose('experiment/' + exp)
     model = model_factory(cfg, torch.device('cpu'))
     if exp.startswith(('E', 'L1')):
@@ -53,7 +53,7 @@ for exp in EXPS:
         print(f'  OK  {exp}  ->  {type(model).__name__}')
 
 # Also verify the base config loads and produces TweedieSolver
-with hydra.initialize(config_path='config'):
+with hydra.initialize(config_path='config/legacy'):
     base_cfg = hydra.compose('lorenz63_default')
 model = model_factory(base_cfg, torch.device('cpu'))
 assert isinstance(model, TweedieSolver), f'base: expected TweedieSolver, got {type(model).__name__}'

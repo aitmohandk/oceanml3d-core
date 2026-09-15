@@ -40,7 +40,7 @@ echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv -i 0 2>/dev/null | tail 
 echo "============================================"
 
 # Pass 1: single-sample eval (N=1) -> experiment root.
-python eval_neural_l96.py \
+python legacy/eval_neural_l96.py \
   --checkpoint "${EXP_DIR}/checkpoints/stage2_best.ckpt" \
   --config "config/experiment/${EXP}.yaml" \
   --dataset "${DATASET}" \
@@ -51,7 +51,7 @@ python eval_neural_l96.py \
   --output "${EXP_DIR}/neural_eval.json"
 
 # Pass 2: ens30 x10 ensemble eval -> ens30_no10/ (apples-to-apples with L3/L9).
-python eval_neural_l96.py \
+python legacy/eval_neural_l96.py \
   --checkpoint "${EXP_DIR}/checkpoints/stage2_best.ckpt" \
   --config "config/experiment/${EXP}.yaml" \
   --dataset "${DATASET}" \

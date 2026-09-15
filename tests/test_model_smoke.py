@@ -16,18 +16,36 @@ def datamodule(variables, catalog):
     return dm
 
 
-def test_nosc_forward_shapes(variables, datamodule):
+@pytest.mark.parametrize("trunk", ["monai", "nosc"])
+def test_nosc_forward_shapes(variables, datamodule, trunk):
     from oceanml3d.models.ocean.nosc.model import NOSCUNet
     from oceanml3d.training.weights import patch_weight
 
+    if trunk == "monai":
+        pytest.importorskip("monai")
     w = patch_weight("triangular", {"time": 5, "lat": 16, "lon": 16}, {"time": 0, "lat": 2, "lon": 2})
     model = NOSCUNet(variables, 5, w, widths=(8, 16, 32), optimizer_kw={"lr": 1e-3, "t_max": 1},
-                     norm_stats=datamodule.norm_stats())
+                     norm_stats=datamodule.norm_stats(), trunk=trunk)
     batch = next(iter(datamodule.train_dataloader()))
     out = model(batch)
     assert out.shape == (2, 2, 5, 16, 16)
     loss = model.step(batch, "train")
     assert torch.isfinite(loss)
+
+
+def test_nosc_rejects_a_checkpoint_from_the_other_trunk(variables, datamodule):
+    """Old checkpoints carry no `trunk` hyperparameter, so Lightning would rebuild them as MONAI and
+    fail on an unreadable size mismatch. `net.inc.` only exists in UNetNosc."""
+    from oceanml3d.models.ocean.nosc.model import NOSCUNet
+    from oceanml3d.training.weights import patch_weight
+
+    pytest.importorskip("monai")
+    w = patch_weight("constant", {"time": 5, "lat": 16, "lon": 16}, {"time": 0, "lat": 2, "lon": 2})
+    nosc = NOSCUNet(variables, 5, w, widths=(8, 16), optimizer_kw={"lr": 1e-3, "t_max": 1}, trunk="nosc")
+    ckpt = {"state_dict": nosc.state_dict()}
+    with pytest.raises(RuntimeError, match="ablation=trunk_nosc"):
+        NOSCUNet(variables, 5, w, widths=(8, 16), optimizer_kw={"lr": 1e-3, "t_max": 1}).on_load_checkpoint(ckpt)
+    nosc.on_load_checkpoint(ckpt)                       # the right trunk accepts it
 
 
 @pytest.mark.slow

@@ -49,7 +49,7 @@ echo "============================================"
 
 # Pass 1: single-sample eval (N=1, N_outer from model config) -> experiment root.
 # Matches the training-script in-process convention and the L1b-L9 N=1 rows.
-python eval_neural_l96.py \
+python legacy/eval_neural_l96.py \
   --checkpoint "${EXP_DIR}/${CKPT_FILE}" \
   --config "config/${EXP_CONFIG}.yaml" \
   --dataset "${DATASET}" \
@@ -60,7 +60,7 @@ python eval_neural_l96.py \
   --output "${EXP_DIR}/neural_eval.json"
 
 # Pass 2: ens30 x10 ensemble eval -> ens30_no10/ subdir (apples-to-apples with L3's best).
-python eval_neural_l96.py \
+python legacy/eval_neural_l96.py \
   --checkpoint "${EXP_DIR}/${CKPT_FILE}" \
   --config "config/${EXP_CONFIG}.yaml" \
   --dataset "${DATASET}" \

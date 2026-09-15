@@ -2,15 +2,15 @@ import numpy as np
 import pytest
 import torch
 
-from oceanml3d.data.qg import QGConfig, make_qg_s0_s1_datasets
-from oceanml3d.evaluation.baselines import (
+from oceanml3d.legacy.data.qg import QGConfig, make_qg_s0_s1_datasets
+from oceanml3d.legacy.evaluation.baselines import (
     ETKF,
     EnKF,
     ObsOperator,
     _build_qg_col_loc_matrices,
     _build_qg_loc_matrices,
 )
-from oceanml3d.evaluation.run_qg_baselines import (
+from oceanml3d.legacy.evaluation.run_qg_baselines import (
     WindStateAdapter,
     _build_dyn,
     _downsample_to_da,
@@ -77,7 +77,7 @@ def test_qg_loc_matrices_shapes_and_cross_layer():
 
 
 def test_wind_adapter_forwards_wind_state():
-    from oceanml3d.models.qg1l_dynamics import QG1LDynamics
+    from oceanml3d.legacy.models.qg1l_dynamics import QG1LDynamics
     inner = QG1LDynamics(nx=NX)
     adapter = WindStateAdapter(inner)
     state = torch.randn(inner.state_dim) * 1e-6
@@ -349,7 +349,7 @@ def test_psi_obs_run_smoke():
                    num_windows=2, obs_geometry="random_columns",
                    cols_per_day=2, seed=3)
     ds = make_qg_s0_s1_datasets(cfg)
-    from oceanml3d.evaluation.run_qg_baselines import run
+    from oceanml3d.legacy.evaluation.run_qg_baselines import run
     p = run("etkf", cfg, device=torch.device("cpu"), N_ensemble=8,
             inflation=1.0, loc_radius=4.0, scenarios=("test_s0",),
             init="lagged", geometry="random_columns",
@@ -373,7 +373,7 @@ def test_q_obs_multi_window_localized_run_no_crash():
                    num_windows=3, obs_geometry="random_columns",
                    cols_per_day=2, seed=3)
     ds = make_qg_s0_s1_datasets(cfg)
-    from oceanml3d.evaluation.run_qg_baselines import run
+    from oceanml3d.legacy.evaluation.run_qg_baselines import run
     p = run("etkf", cfg, device=torch.device("cpu"), N_ensemble=8,
             inflation=1.0, loc_radius=4.0, scenarios=("test_s0",),
             init="lagged", geometry="random_columns", obs_var="q",
@@ -389,7 +389,7 @@ def test_run_preserves_obs_noise_std_frac():
     fresh `QGConfig` when a dataset was passed, silently dropping this field
     (and any other non-listed one) — so the obs-noise sweep results were pinned
     to the default regardless of the requested value."""
-    from oceanml3d.evaluation.run_qg_baselines import run
+    from oceanml3d.legacy.evaluation.run_qg_baselines import run
 
     base = {"nx": 8, "window_days": 6.0, "spinup_years": 0.05, "num_windows": 1,
             "obs_geometry": "random_columns", "cols_per_day": 2, "seed": 3}
@@ -493,7 +493,7 @@ def test_s1_cross_res_run_smoke():
     cfg = QGConfig(nx=16, window_days=6.0, spinup_years=0.05,
                    num_windows=2, obs_geometry="random_columns",
                    cols_per_day=2, seed=3, da_nx=8)
-    from oceanml3d.evaluation.run_qg_baselines import run
+    from oceanml3d.legacy.evaluation.run_qg_baselines import run
     ds = make_qg_s0_s1_datasets(cfg)
     p = run("etkf", cfg, device=torch.device("cpu"), N_ensemble=8,
             inflation=1.0, loc_radius=4.0, scenarios=("test_s0", "test_s1"),
@@ -512,7 +512,7 @@ def test_s1_cross_res_q_obs_rejected():
     cfg = QGConfig(nx=16, window_days=6.0, spinup_years=0.05,
                    num_windows=1, obs_geometry="random_columns",
                    cols_per_day=2, seed=3, da_nx=8)
-    from oceanml3d.evaluation.run_qg_baselines import run
+    from oceanml3d.legacy.evaluation.run_qg_baselines import run
     ds = make_qg_s0_s1_datasets(cfg)
     with pytest.raises(ValueError):
         run("etkf", cfg, device=torch.device("cpu"), N_ensemble=8,
@@ -529,7 +529,7 @@ def test_s1_qg1l_run_smoke():
     cfg = QGConfig(nx=16, window_days=6.0, spinup_years=0.05,
                    num_windows=2, obs_geometry="random_columns",
                    cols_per_day=2, seed=3)
-    from oceanml3d.evaluation.run_qg_baselines import run
+    from oceanml3d.legacy.evaluation.run_qg_baselines import run
     ds = make_qg_s0_s1_datasets(cfg)
     assert all(w["da_model"] == "qg1l" for w in ds["test_s1_qg1l"])
     p = run("etkf", cfg, device=torch.device("cpu"), N_ensemble=8,
@@ -559,7 +559,7 @@ def test_qg1l_psi_obs_r_scale_restores_da_over_free_forecast():
     the error-free S0 anchor. The key transferable claim is the monotone
     approach, not that a single R-scale fully restores DA (production-scale
     nx=64 shows it does not reach improv>=1 for the 1-layer mismatch)."""
-    from oceanml3d.evaluation.run_qg_baselines import run
+    from oceanml3d.legacy.evaluation.run_qg_baselines import run
     cfg = QGConfig(nx=16, window_days=6.0, spinup_years=0.05,
                    num_windows=2, obs_geometry="random_columns",
                    cols_per_day=2, seed=3)

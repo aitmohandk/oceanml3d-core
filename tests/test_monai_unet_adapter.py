@@ -3,7 +3,7 @@ import torch
 
 monai = pytest.importorskip("monai")
 
-from oceanml3d.models.monai_unet_adapter import MonaiUNet1D
+from oceanml3d.legacy.models.monai_unet_adapter import MonaiUNet1D
 
 
 @pytest.mark.parametrize("state_dim,obs_dim,length", [(1, 1, 64), (3, 3, 32), (40, 24, 200)])
@@ -116,7 +116,7 @@ def test_dropout_zero_attaches_no_resblock_dropout():
 
 
 def test_monai_direct_unet_forwards_dropout():
-    from oceanml3d.models.monai_unet_adapter import MonaiDirectUNet
+    from oceanml3d.legacy.models.monai_unet_adapter import MonaiDirectUNet
     md = MonaiDirectUNet(state_dim=4, hidden_channels=[16, 32], num_res_blocks=1,
                           norm_num_groups=8, dropout=0.5)
     assert _n_resblock_dropouts(md.monai_unet) > 0, \

@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from oceanml3d.data.qg import QGConfig, QGDataset, make_qg_datasets
+from oceanml3d.legacy.data.qg import QGConfig, QGDataset, make_qg_datasets
 
 
 def _tiny_cfg(**kw):
@@ -104,7 +104,7 @@ def test_wind_curl_is_field_at_center():
     cfg = _tiny_cfg(wind_amp=1e-11)
     ds = QGDataset(cfg)
     w = ds[0]
-    from oceanml3d.data.qg import _make_qg_dynamics
+    from oceanml3d.legacy.data.qg import _make_qg_dynamics
     dynamics = _make_qg_dynamics(cfg)
     _traj, wind_state = dynamics.generate_full_trajectory(
         num_steps=cfg.num_steps, seed=cfg.seed, spinup_steps=cfg.spinup_steps)
@@ -116,7 +116,7 @@ def test_wind_curl_is_field_at_center():
 
 def test_wind_amplitude_std_matches_config():
     cfg = _tiny_cfg(wind_amp=3e-12, wind_tau_days=15.0)
-    from oceanml3d.data.qg import _make_qg_dynamics
+    from oceanml3d.legacy.data.qg import _make_qg_dynamics
     dynamics = _make_qg_dynamics(cfg)
     state = dynamics.generate_wind_state(num_steps=2000, seed=cfg.seed)
     assert 0.5 * cfg.wind_amp < float(state[:, 0].std()) < 2.0 * cfg.wind_amp

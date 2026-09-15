@@ -18,8 +18,8 @@ import torch
 
 os.environ.setdefault("TRITON_CACHE_DIR", "/tmp/triton_cache")
 
-from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets  # noqa: E402
-from oceanml3d.evaluation.run import baselines_paths, run_and_cache_baselines  # noqa: E402
+from oceanml3d.legacy.data.lorenz63 import Lorenz63Config, make_mixed_datasets  # noqa: E402
+from oceanml3d.legacy.evaluation.run import baselines_paths, run_and_cache_baselines  # noqa: E402
 
 # The reference values below are the ones in section 2 of reports/l63/outputs/s0_s1_synthesis.md
 # ("DA Baselines, obs at step 0, interpolation init, inflation=2.0"), measured over **200 test

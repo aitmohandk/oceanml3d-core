@@ -30,7 +30,7 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from oceanml3d.data.qg import QGConfig, QGS01Dataset, _truth_cache_path
+from oceanml3d.legacy.data.qg import QGConfig, QGS01Dataset, _truth_cache_path
 from generate_qg_window_chunk import SPLIT_SEED_BASE, SPLIT_SIZE  # noqa: E402
 
 TRUTH_FIELDS = ("true_state", "target_state_psi", "target_state_q", "wind_curl",

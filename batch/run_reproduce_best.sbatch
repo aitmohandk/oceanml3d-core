@@ -23,7 +23,7 @@ echo "============================================"
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv -i 0 2>/dev/null | tail -1)"
 echo ""
 
-python run_experiments.py --experiment B1_small_unet
+python legacy/run_experiments.py --experiment B1_small_unet
 
 echo ""
 echo "============================================"

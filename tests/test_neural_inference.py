@@ -7,8 +7,8 @@ import pytest
 import torch
 from omegaconf import OmegaConf
 
-from oceanml3d.evaluation.estimate_metrics import evaluate_estimates, evaluate_npz
-from oceanml3d.evaluation.neural_inference import (
+from oceanml3d.legacy.evaluation.estimate_metrics import evaluate_estimates, evaluate_npz
+from oceanml3d.legacy.evaluation.neural_inference import (
     _run_case_inference,
     create_model,
     load_checkpoint,
@@ -16,8 +16,8 @@ from oceanml3d.evaluation.neural_inference import (
     resolve_model_class,
     run_inference,
 )
-from oceanml3d.models.direct_unet import DirectUNet
-from oceanml3d.models.vanilla_cfm import PredictStateCFM, TweedieCFM, VanillaCFM
+from oceanml3d.legacy.models.direct_unet import DirectUNet
+from oceanml3d.legacy.models.vanilla_cfm import PredictStateCFM, TweedieCFM, VanillaCFM
 
 
 class _DictBatch:
@@ -338,7 +338,7 @@ class TestNeuralInference:
         Uses a depth-3 param flow ([4,8,16]) matching the real L7/L9 default
         ([32,64,128]) to ensure the full depth is recovered, not truncated.
         """
-        from oceanml3d.models.vanilla_cfm import JointCFM
+        from oceanml3d.legacy.models.vanilla_cfm import JointCFM
 
         SD, PD = 24, 8
         pf_channels = [4, 8, 16]
@@ -362,7 +362,7 @@ class TestNeuralInference:
         param flow is used so a truncated reconstruction (2 blocks) would leave
         blocks.2 and the head unloaded and fail this assertion.
         """
-        from oceanml3d.models.vanilla_cfm import JointCFM
+        from oceanml3d.legacy.models.vanilla_cfm import JointCFM
 
         SD, PD = 24, 8
         pf_channels = [4, 8, 16]
@@ -386,7 +386,7 @@ class TestNeuralInference:
         is used so a truncated reconstruction would leave param_head.blocks.2
         and the head unloaded and fail this assertion.
         """
-        from oceanml3d.models.direct_unet import JointDirectUNet
+        from oceanml3d.legacy.models.direct_unet import JointDirectUNet
 
         SD, PD = 24, 8
         ph_channels = [4, 8, 16]
@@ -418,7 +418,7 @@ class TestNeuralInference:
         bottleneck keys and a Sequential head (head.0/head.2), so a CNN-only
         loader would silently drop the whole backbone and mismatch the head.
         """
-        from oceanml3d.models.vanilla_cfm import JointCFMCoupled
+        from oceanml3d.legacy.models.vanilla_cfm import JointCFMCoupled
 
         SD, PD = 24, 8
         model = JointCFMCoupled(state_dim=SD, param_dim=PD,
@@ -446,7 +446,7 @@ class TestNeuralInference:
         param_head.downs.* keys), not a CNN head that would drop every key of
         the encoder-decoder and the Sequential head output conv.
         """
-        from oceanml3d.models.direct_unet import JointDirectUNet
+        from oceanml3d.legacy.models.direct_unet import JointDirectUNet
 
         SD, PD = 24, 8
         model = JointDirectUNet(state_dim=SD, param_dim=PD,
@@ -472,7 +472,7 @@ class TestNeuralInference:
         """The default CNN head back-compat: `joint_direct_unet` checkpoints with
         a ParamHeadCNN must still resolve to a CNN head (backbone=cnn).
         """
-        from oceanml3d.models.direct_unet import JointDirectUNet
+        from oceanml3d.legacy.models.direct_unet import JointDirectUNet
 
         SD, PD = 24, 8
         model = JointDirectUNet(state_dim=SD, param_dim=PD,
@@ -491,7 +491,7 @@ class TestNeuralInference:
         reconstructed (param_flow_pool inferred from the state dict), not fall
         back to the mean pool (which would silently drop attn_pool.query).
         """
-        from oceanml3d.models.vanilla_cfm import JointCFM
+        from oceanml3d.legacy.models.vanilla_cfm import JointCFM
 
         SD, PD = 24, 8
         pf_channels = [4, 8, 16]
@@ -516,7 +516,7 @@ class TestNeuralInference:
 
     def test_evaluate_npz_roundtrip(self, tmp_path):
         """evaluate_npz loads stored .npz and returns metrics."""
-        from oceanml3d.evaluation.estimate_metrics import save_estimates
+        from oceanml3d.legacy.evaluation.estimate_metrics import save_estimates
 
         B, T, D = 3, 4, 24
         traj = np.random.randn(B, T, D)
@@ -533,7 +533,7 @@ class TestEnsembleInference:
     """Multi-member (N=30-style) CFM inference + ensemble ES evaluation."""
 
     def test_run_inference_multi_member_shapes_mean_and_dtype(self):
-        from oceanml3d.evaluation.estimate_metrics import evaluate_ensemble_estimates
+        from oceanml3d.legacy.evaluation.estimate_metrics import evaluate_ensemble_estimates
 
         class StubCFM(VanillaCFM):
             def __init__(self):
@@ -574,8 +574,8 @@ class TestEnsembleInference:
         assert out["members"].shape == (B, T, d_obs, M)
 
     def test_pooled_ensemble_es_matches_per_window_energy_score_and_accumulator(self):
-        from oceanml3d.evaluation.estimate_metrics import pooled_ensemble_es
-        from oceanml3d.evaluation.metrics import energy_score
+        from oceanml3d.legacy.evaluation.estimate_metrics import pooled_ensemble_es
+        from oceanml3d.legacy.evaluation.metrics import energy_score
 
         rng = np.random.default_rng(7)
         W, T, D, M = 4, 5, 3, 4
@@ -600,7 +600,7 @@ class TestEnsembleInference:
         assert np.allclose(pooled_ensemble_es(members, truth), es_manual)
 
     def test_ensemble_es_degenerate_cases(self):
-        from oceanml3d.evaluation.estimate_metrics import pooled_ensemble_es
+        from oceanml3d.legacy.evaluation.estimate_metrics import pooled_ensemble_es
 
         W, T, D, M = 2, 4, 3, 5
         rng = np.random.default_rng(3)
@@ -616,7 +616,7 @@ class TestEnsembleInference:
         assert np.allclose(pooled_ensemble_es(single, truth), mae)
 
     def test_evaluate_ensemble_estimates_schema_and_member_mean_consistency(self):
-        from oceanml3d.evaluation.estimate_metrics import (
+        from oceanml3d.legacy.evaluation.estimate_metrics import (
             evaluate_ensemble_estimates,
             evaluate_estimates,
         )

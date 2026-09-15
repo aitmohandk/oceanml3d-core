@@ -4,14 +4,14 @@ import numpy as np
 import pytest
 import torch
 
-from oceanml3d.data.dataloader import _l96_biased_param_vector, _l96_true_param_vector
-from oceanml3d.data.lorenz96 import (
+from oceanml3d.legacy.data.dataloader import _l96_biased_param_vector, _l96_true_param_vector
+from oceanml3d.legacy.data.lorenz96 import (
     Lorenz96Config,
     RandomBiasLorenz96Dataset,
     _make_lorenz96_dynamics,
 )
-from oceanml3d.evaluation.run_l96 import make_obs_j_indices
-from oceanml3d.models.param_head import StateParamHead, StateParamModel, StateParamUNet
+from oceanml3d.legacy.evaluation.run_l96 import make_obs_j_indices
+from oceanml3d.legacy.models.param_head import StateParamHead, StateParamModel, StateParamUNet
 
 PARAM_NAMES = ("F", "c1", "hx", "eps", "w1", "w2", "w3", "w4")
 SD, PD = 24, 8
@@ -48,7 +48,7 @@ def _batch(w, use_biased=False):
     else:
         params = torch.tensor([[float(w[nm]) for nm in PARAM_NAMES]])
     true_params = torch.tensor([[float(w[f"true_{nm}"]) for nm in PARAM_NAMES]])
-    from oceanml3d.data.dataloader import FlowMatchingBatch
+    from oceanml3d.legacy.data.dataloader import FlowMatchingBatch
     return FlowMatchingBatch(states, obs, mask, forcing,
                              params=params, true_params=true_params)
 
@@ -74,7 +74,7 @@ def test_biased_vec_differs_from_true(bias_dataset):
 
 
 def test_true_param_vector_list_form_matches_window_param_vector():
-    from oceanml3d.evaluation.neural_inference import _window_param_vector
+    from oceanml3d.legacy.evaluation.neural_inference import _window_param_vector
     list_w = {"true_F": 8.0, "true_c1": 1.0, "true_hx": 1.0, "true_eps": 0.1,
               "true_fast_weights": [1.08, 0.97, 0.12, 0.11]}
     flat_w = {"true_F": 8.0, "true_c1": 1.0, "true_hx": 1.0, "true_eps": 0.1,
@@ -140,7 +140,7 @@ def test_state_param_head_deriv_augment_shape():
 
 
 def test_resample_bias_draws_vary_around_true(bias_dataset):
-    from oceanml3d.data.dataloader import FlowMatchingDataset
+    from oceanml3d.legacy.data.dataloader import FlowMatchingDataset
     obs_idx = make_obs_j_indices(8, 4, 2)
     ds = FlowMatchingDataset(
         bias_dataset, T_max=0.1, obs_interval=20,
@@ -183,7 +183,7 @@ def test_state_param_model_frozen_encoder_optional():
     assert all(not p.requires_grad for p in model.state_encoder.parameters())
     assert all(p.requires_grad for p in model.param_head.parameters())
     w = None
-    from oceanml3d.data.lorenz96 import RandomParamLorenz96Dataset
+    from oceanml3d.legacy.data.lorenz96 import RandomParamLorenz96Dataset
     obs_idx = make_obs_j_indices(8, 4, 2)
     cfg = Lorenz96Config(T_max=0.1, dt=0.001, obs_interval=20, num_windows=1,
                          spinup_steps=500, seed=42, obs_var_indices=obs_idx)
@@ -246,7 +246,7 @@ def test_state_param_unet_frozen_encoder_optional():
     assert isinstance(model.param_head, StateParamUNet)
     assert all(not p.requires_grad for p in model.state_encoder.parameters())
     assert all(p.requires_grad for p in model.param_head.parameters())
-    from oceanml3d.data.lorenz96 import RandomParamLorenz96Dataset
+    from oceanml3d.legacy.data.lorenz96 import RandomParamLorenz96Dataset
     obs_idx = make_obs_j_indices(8, 4, 2)
     cfg = Lorenz96Config(T_max=0.1, dt=0.001, obs_interval=20, num_windows=1,
                          spinup_steps=500, seed=42, obs_var_indices=obs_idx)
@@ -264,12 +264,11 @@ def test_state_param_unet_frozen_encoder_optional():
 
 def test_param_head_unet_configs_instantiate():
     from hydra import compose, initialize
-
     from train import model_factory
 
     for name, src in [("C4a_param_head_unet_true", "true"),
                       ("C4b_param_head_unet_l1b", "l1b")]:
-        with initialize(config_path="../config", version_base=None):
+        with initialize(config_path="../config/legacy", version_base=None):
             cfg = compose(config_name=f"experiment/{name}")
         assert cfg.model.model_type == "param_head_unet"
         assert cfg.model.param_head_unet.state_source == src

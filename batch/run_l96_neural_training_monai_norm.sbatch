@@ -34,7 +34,7 @@ echo ""
 
 rm -rf "experiments/${EXP}"
 
-python train.py \
+python legacy/train.py \
   --config-name experiment/${EXP} \
   hydra.run.dir=. \
   hydra.output_subdir=null
@@ -45,7 +45,7 @@ echo "============================================"
 
 echo ""
 echo " Running full neural_eval.json evaluation (matches L1b's report schema)..."
-python eval_monai_l96.py \
+python legacy/eval_monai_l96.py \
   --checkpoint experiments/${EXP}/checkpoints/stage1.pt \
   --config config/experiment/${EXP}.yaml \
   --dataset experiments/l96_datasets_obsj2_int100_nwin200.pt \

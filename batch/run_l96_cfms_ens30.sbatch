@@ -43,7 +43,7 @@ echo "  Task ${SLURM_ARRAY_TASK_ID}: ${EXP} / ${TAG} / args: ${ARGS} / flags: ${
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv -i 0 2>/dev/null | tail -1)"
 echo "============================================"
 
-python eval_neural_l96.py \
+python legacy/eval_neural_l96.py \
   --checkpoint "experiments/${EXP}/checkpoints/stage1_best.ckpt" \
   --dataset "${DATASET}" \
   --num-windows 200 \

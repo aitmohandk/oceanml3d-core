@@ -14,8 +14,8 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from oceanml3d.data.lorenz63 import Lorenz63Config, make_mixed_datasets
-from oceanml3d.evaluation.run import BASE, run_and_cache_baselines
+from oceanml3d.legacy.data.lorenz63 import Lorenz63Config, make_mixed_datasets
+from oceanml3d.legacy.evaluation.run import BASE, run_and_cache_baselines
 
 EXP_DIR = os.path.join(BASE, "experiments")
 os.makedirs(EXP_DIR, exist_ok=True)

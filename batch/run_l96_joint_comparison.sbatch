@@ -33,7 +33,7 @@ echo "============================================"
 # (the full 6-method JSON is assembled from this + master's vanilla ETKF/EnKF +
 # the refreshed joint rows). No reconstruction npz saved for this run (vanilla
 # Strong-4DVar trajectories already exist on master's state-only cache).
-python eval_joint_comparison_l96.py \
+python legacy/eval_joint_comparison_l96.py \
   --device cuda \
   --obs-interval 100 \
   --obs-j 2 \

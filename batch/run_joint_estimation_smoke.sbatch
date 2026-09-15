@@ -36,7 +36,7 @@ echo "Slow tests: PASSED"
 # === Phase 3: Training smoke test (joint_cfm, 1 epoch) ===
 echo "--- Phase 3: JointCFM training smoke (1 epoch) ---"
 rm -f experiments/H1_joint_cfm_default/results.json
-python train.py \
+python legacy/train.py \
   --config-name experiment/H1_joint_cfm_default \
   training.stage1.epochs=1 \
   hydra.run.dir=. \
