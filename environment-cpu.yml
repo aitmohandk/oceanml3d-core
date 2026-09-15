@@ -1,0 +1,68 @@
+# CPU-only environment for oceanml3d-core: development, review and test on a machine without a GPU.
+#
+#   mamba env create -f environment-cpu.yml # creates `oceanml3d-cpu`
+#   conda activate oceanml3d-cpu
+#   pip install -e '.[dev,zarr]'            # the package itself, editable
+#
+# Use environment-cpu.yml on a machine without a GPU. On an HPC centre where a container is the
+# native way to run (Datarmor, for instance), prefer the Apptainer definition -- these conda files
+# are the fallback for people who cannot or will not use one.
+#
+# Until this file existed, the only description of a working environment was the hard-coded
+# `/Odyssey/private/rfablet/miniforge3/envs/fdv/bin` PATH in 166 SLURM scripts -- i.e. another
+# user's environment on one cluster.
+#
+# THE VERSION WINDOW IS NARROW AND LOAD-BEARING.
+# `monai>=1.5,<1.6` is a hard dependency since MONAI's DiffusionModelUNet became the default gridded
+# trunk. monai 1.5.x pins torch>=2.4.1,<2.7.0 (1.6.0 would require torch>=2.8 and drag the whole
+# project forward, which is what the `<1.6` ceiling prevents). So: torch 2.6.* is the top of the
+# window, and its CUDA builds are cu118, cu124 and cu126 -- there is no cu128 for torch 2.6.
+#
+# compatibility. On an older driver, change it to 11.8. Check with `nvidia-smi` on a compute node
+# (not a login node, and inside a container only with `--nv`).
+name: oceanml3d-cpu
+
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+
+dependencies:
+  - python=3.10
+
+  # --- torch, inside the monai window ---
+  - pytorch::pytorch=2.6.*=*cpu*
+
+  # --- core (mirrors [project].dependencies in pyproject.toml) ---
+  - numpy>=1.24
+  - pyyaml>=6.0
+  - hydra-core>=1.3
+  - omegaconf>=2.3
+  - pytorch-lightning>=2.0
+  - xarray>=2023.1
+  - pandas>=2.0
+  - netcdf4>=1.6
+  - dask>=2023.1
+  - scipy                     # imported lazily by obs/argo_virtual.py and the QG dynamics
+
+  # --- extras that are safe to always have ---
+  - matplotlib>=3.8           # [plots] -- reports/ and demos/
+  - zarr>=2.16                # [zarr]  -- stacked cache (training.cache) and .zarr sources
+  - tensorboard
+
+  # --- dev ---
+  - pytest>=7.4
+  - pytest-cov>=4.1
+  - ruff>=0.4
+
+  # --- data preparation ([prepare]); heavy, and only scripts/prepare/ uses them.
+  # Comment the block out if you only train on already-prepared files.
+  - xesmf>=0.8                # conda-only in practice (pulls esmpy)
+  - pip
+  - pip:
+      # monai is pip-only on conda-forge for recent versions; the ceiling is the one from
+      # pyproject.toml and must not be relaxed here.
+      - "monai>=1.5,<1.6"
+      - copernicusmarine>=1.0
+      - cdsapi>=0.7
+      - argopy                # real ARGO profiles, imported lazily by oceanml3d/obs/argo.py

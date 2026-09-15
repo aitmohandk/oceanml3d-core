@@ -1,0 +1,46 @@
+oceanml3d-core
+Copyright IMT Atlantique / OceaniX
+
+Licensed under the European Union Public Licence v. 1.2 (EUPL-1.2).
+You may not use this work except in compliance with the Licence. A copy of the
+Licence is distributed with this work in the file LICENSE, and is available at:
+
+    https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the Licence is distributed on an "AS IS" basis, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the Licence for the
+specific language governing permissions and limitations under the Licence.
+
+SPDX-License-Identifier: EUPL-1.2
+
+---------------------------------------------------------------------------
+Contributors
+---------------------------------------------------------------------------
+
+This work incorporates code from two upstream repositories of the same
+rightsholder, relicensed under EUPL-1.2 with that rightsholder's permission
+(see LICENSING.md):
+
+  CIA-Oceanix/NOSC
+    Copyright IMT Atlantique / OceaniX
+    Contributors: T. Picard, R. Fablet, S. Ouala, P. Haslee
+    Originally distributed under CeCILL-C.
+
+  CIA-Oceanix/4dvarnet-fm-opencode
+    Copyright IMT Atlantique / OceaniX
+    Contributor: R. Fablet
+    No licence was stated upstream; terms established by the permission above.
+
+  This repository
+    Copyright IMT Atlantique / OceaniX
+    Contributor: K. Ait Mohand
+
+Portions of the 4DVarNet solver (GradSolver, ConvLstmGradModel) derive from
+CIA-Oceanix/4dvarnet-starter and 4dvarnet-core, same rightsholder.
+
+The default trunk of the gridded models wraps MONAI's DiffusionModelUNet
+(Project MONAI, Apache-2.0), used as a dependency, not vendored.
+
+See LICENSING.md for provenance by directory and PROVENANCE.md for the
+commit-level history.
