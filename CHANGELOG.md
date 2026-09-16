@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 1, P1-4 and P1-5 — one file handle per source, lazy masks, one pass for the stats
+
+**Summary:** the last three items of lot 1, all in `data/open.py`. None of them changes a number.
+
+### One handle per file instead of one per variable
+
+A task names variables, not files, and many variables share a file. `osse3d_gs21` draws its 64
+targets from `glorys_gs_multidepth` and 42 inputs and masks from `argo_virtual_thetao_gs21`: about
+**110 `open_dataset` calls over three files**, and 110 separately reindexed arrays for every
+`__getitem__` to walk, per worker, per sample. `open_variable_set` now keeps one handle per resolved
+path for the duration of the call. `test_one_file_handle_per_source` asserts no file is opened twice.
+
+This is the structural reason `training.cache` (the zarr copy) exists; it does not remove the need
+for it, but it makes the uncached path far less punishing.
+
+### Masks were the one eager read in a lazy module
+
+`spec.mask` was opened with `xr.open_dataarray(path)` — no `chunks`, so the whole mask was pulled
+into memory at setup, per masked variable. For a daily 1/12 deg mask over ten years that is a few
+hundred MB each, in a module whose docstring promises everything stays lazy until patches are
+extracted. Masks now go through the same chunked, cached open as everything else, and a mask file
+holding more than one variable raises instead of silently doing something else.
+
+### The train split was walked twice for the normalisation statistics
+
+`compute_norm_stats` called `.compute()` on the mean, then again on the standard deviation: two full
+traversals of the train window. Both reductions are now scheduled in a single `compute()`, so dask
+loads each chunk once and feeds both. dask's `std` is moment-based and does not consume the mean, so
+this is a scheduling change only — `test_norm_stats_are_unchanged_by_the_single_pass` pins the values
+with `array_equal`, not a tolerance.
+
+Lot 1 is complete. What remains before the acceptance criterion is a full run of both gridded tasks
+with the default trunk, with a memory and time record.
+
 ## 2026-09-15: roadmap lot 1, P0-2 and P0-3 — streaming reconstruction, and a field that refuses to be wrong
 
 **Summary:** `predict_field` held every prediction in memory, and under a distributed Trainer it

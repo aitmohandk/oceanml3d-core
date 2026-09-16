@@ -151,3 +151,46 @@ def test_accumulator_rejects_a_repeated_or_out_of_range_patch(variables, catalog
     with pytest.raises(IndexError):
         acc.add(len(pa), item)
     assert isinstance(acc, PatchAccumulator)
+
+
+def test_one_file_handle_per_source(variables, catalog, monkeypatch):
+    """Many variables share a file; the graph should hold one handle per file, not per variable.
+
+    `osse3d_gs21` draws 64 targets from one GLORYS file and 42 inputs and masks from another, so
+    opening per variable meant ~110 `open_dataset` calls over three files -- and 110 separately
+    reindexed arrays for every `__getitem__` to walk.
+    """
+    import xarray as xr
+
+    from oceanml3d.data import open as open_mod
+
+    opened: list[str] = []
+    original = xr.open_dataset
+
+    def counting_open_dataset(path, *a, **kw):
+        opened.append(str(path))
+        return original(path, *a, **kw)
+
+    monkeypatch.setattr(open_mod.xr, "open_dataset", counting_open_dataset)
+    da = open_variable_set(variables, catalog, {"lat": slice(-5, 5), "lon": slice(-5, 5)})
+    assert da.sizes["channel"] == len(variables)
+    sources = {s.source for s in variables} | {s.mask for s in variables if s.mask}
+    assert len(opened) == len(set(opened)), f"a file was opened more than once: {opened}"
+    assert len(opened) <= len(sources)
+
+
+def test_norm_stats_are_unchanged_by_the_single_pass(variables, catalog):
+    """`compute_norm_stats` now schedules both reductions in one `compute()`. dask's `std` is
+    moment-based and does not consume the mean, so this must be a scheduling change only."""
+    da = open_variable_set(variables, catalog, {"lat": slice(-5, 5), "lon": slice(-5, 5)})
+    window = slice("2019-01-01", "2019-01-12")
+    mean, std = compute_norm_stats(da, window)
+
+    sub = da.sel(time=window)
+    ref_mean = sub.mean(dim=("time", "lat", "lon"), skipna=True).compute().values
+    ref_std = sub.std(dim=("time", "lat", "lon"), skipna=True).compute().values
+    ref_std = np.where(ref_std > 0, ref_std, 1.0)
+
+    assert np.array_equal(mean, ref_mean.astype(np.float32))
+    assert np.array_equal(std, ref_std.astype(np.float32))
+    assert (std > 0).all()
