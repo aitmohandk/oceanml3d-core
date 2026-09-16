@@ -48,13 +48,59 @@ def test_nosc_rejects_a_checkpoint_from_the_other_trunk(variables, datamodule):
     nosc.on_load_checkpoint(ckpt)                       # the right trunk accepts it
 
 
+@pytest.mark.parametrize("trunk", ["monai", "nosc"])
+def test_the_trunk_can_actually_fit_a_batch(variables, datamodule, trunk):
+    """A guard against a model that runs, exports, and has learnt nothing.
+
+    It is not hypothetical for the MONAI trunk: MONAI wraps the output convolution and every
+    resblock's second convolution in ``zero_module``, so a freshly built trunk is *exactly* the zero
+    map (pinned in ``test_monai_unet2d::test_zero_initialisation_is_inherited_from_monai``). Every
+    other test here would pass on a model stuck in that state -- shapes are right, the loss is
+    finite, the export writes its files. Overfitting one batch is the cheapest thing that cannot.
+
+    The loss is computed directly rather than through ``model.step`` so that no ``self.log`` call
+    happens outside a Trainer, and masked so that NaN targets do not poison the gradient.
+    """
+    from oceanml3d.models.ocean.nosc.model import NOSCUNet
+    from oceanml3d.training.weights import patch_weight
+
+    if trunk == "monai":
+        pytest.importorskip("monai")
+    w = patch_weight("constant", {"time": 5, "lat": 16, "lon": 16}, {"time": 0, "lat": 2, "lon": 2})
+    model = NOSCUNet(variables, 5, w, widths=(8, 16), optimizer_kw={"lr": 1e-3, "t_max": 1},
+                     norm_stats=datamodule.norm_stats(), trunk=trunk)
+    batch = next(iter(datamodule.train_dataloader()))
+    tgt = model.targets(batch)
+    mask = torch.isfinite(tgt)
+    assert mask.any(), "the synthetic fixture has no finite target: the test would be vacuous"
+
+    def mse():
+        return ((model(batch)[mask] - tgt[mask]) ** 2).mean()
+
+    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
+    first = float(mse())
+    for _ in range(30):
+        opt.zero_grad()
+        loss = mse()
+        loss.backward()
+        opt.step()
+    last = float(mse())
+
+    assert last < 0.9 * first, f"{trunk}: loss went {first:.4f} -> {last:.4f}; the model is not learning"
+    assert float(model(batch).std()) > 0, f"{trunk}: the output is spatially constant after training"
+
+
 @pytest.mark.slow
 def test_train_predict_export(variables, datamodule, tmp_path):
     from pytorch_lightning import Trainer
 
+    from oceanml3d.inference.export import export_variable_names
     from oceanml3d.inference.predict import predict_and_export
     from oceanml3d.models.ocean.nosc.model import NOSCUNet
     from oceanml3d.training.weights import patch_weight
+
+    xr = pytest.importorskip("xarray")
+    np = pytest.importorskip("numpy")
 
     w = patch_weight("constant", {"time": 5, "lat": 16, "lon": 16}, {"time": 0, "lat": 2, "lon": 2})
     model = NOSCUNet(variables, 5, w, widths=(8, 16), optimizer_kw={"lr": 1e-3, "t_max": 1},
@@ -63,7 +109,18 @@ def test_train_predict_export(variables, datamodule, tmp_path):
     trainer.fit(model, datamodule=datamodule)
     manifest = predict_and_export(model, datamodule, trainer, tmp_path, "smoke", depth_m=15)
     assert manifest.exists()
-    assert len(list((tmp_path / "daily").glob("smoke_*.nc"))) == 10
+    files = sorted((tmp_path / "daily").glob("smoke_*.nc"))
+    assert len(files) == 10
+
+    # The two assertions above pass on a degenerate product, and "all zeros" is not the signature to
+    # look for: `predict_step` denormalises, so a trunk stuck at the zero map exports `mean` -- a
+    # spatially *constant*, perfectly finite field. Zero spatial variance is the tell.
+    with xr.open_dataset(files[0]) as ds:
+        for short, _std, _units in export_variable_names(variables).values():
+            assert short in ds, f"{short} missing from the exported product"
+            values = ds[short].values
+            assert np.isfinite(values).any(), f"{short} is entirely non-finite"
+            assert float(np.nanstd(values)) > 0, f"{short} is spatially constant (a dead trunk exports its mean)"
 
 
 def test_fourdvarnet_forward(variables, catalog):

@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 1, step 1 — the test suite can now fail on a model that has learnt nothing
+
+**Summary:** before touching the three scale blockers, the suite needs to be able to tell a working
+pipeline from one that merely writes files. It could not.
+
+### What was wrong
+
+`test_train_predict_export` — the only end-to-end test — asserted exactly two things: the manifest
+exists, and ten daily NetCDF files were written. Both hold for a model that has learnt nothing.
+
+That is not a hypothetical state for the current default. MONAI wraps the output convolution and
+every resblock's second convolution in ``zero_module``, so a freshly built MONAI trunk is *exactly*
+the zero map — this repository pins that fact itself, in
+`test_monai_unet2d::test_zero_initialisation_is_inherited_from_monai`. Every other gridded test
+passes in that state: the shapes are right, `step` returns a finite loss, the export runs.
+
+Two further details made it worse. `test_train_predict_export` is marked `slow`, so it is among the
+45 tests **deselected** by the CI command — the end-to-end path was not being exercised at all. And
+"all zeros" is not the signature to look for anyway: `predict_step` denormalises, so a trunk stuck
+at the zero map exports `mean` per channel, a perfectly finite, spatially *constant* field.
+
+### What changed
+
+`test_the_trunk_can_actually_fit_a_batch`, parametrised over both trunks and **not** marked slow:
+overfit a single batch for 30 Adam steps and require the loss to fall below 0.9× its starting value
+and the output to have non-zero spatial spread. It is the cheapest check that a dead model cannot
+pass. The loss is computed directly rather than through `model.step`, so no `self.log` happens
+outside a Trainer, and it is masked on finite targets so NaNs cannot poison the gradient.
+
+`test_train_predict_export` now opens the first exported day and, for every target named by
+`export_variable_names`, requires the variable to be present, to have finite values, and to have
+non-zero spatial standard deviation.
+
+### Why this before the performance work
+
+The three scale fixes in lot 1 (`_has_target`, streaming reconstruction, the DDP guard) are all
+"change how it computes, not what it computes". Proving that requires a suite that reacts to the
+result, not only to the plumbing. This is that suite.
+
 ## 2026-09-15: roadmap lot 0 — CI actually runs, EUPL-1.2, reproducible environments
 
 **Summary:** the verification net was inoperative and the licence claim was unsupported. Nothing
