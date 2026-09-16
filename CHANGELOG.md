@@ -47,6 +47,32 @@ The same bound is applied in CI (`pip install 'torch>=2.4.1,<2.7' --index-url ..
 unbounded install there would have been undone by the next step) with an assertion afterwards that
 the installed build is neither a CUDA one nor outside the window.
 
+### First clean-environment run: two undeclared dependencies
+
+The point of installing the package in CI instead of a hand-written requirements list was to find
+out what the metadata actually claims. It found two things immediately — 27 failures and 2 errors
+out of 824 selected tests, from exactly two missing names:
+
+* **`scipy`** — `obs/argo_virtual.py` imports `scipy.stats` at *module* level, and
+  `obs/pseudo_obs.py` uses `scipy.ndimage`. Both are core (`oceanml3d/obs/` is the OSSE simulator,
+  not an extra), and neither was declared. This broke `test_import_smoke`, both `test_osse_smoke`
+  fixtures, and `scripts/prepare/drifters_daily_maps.py`.
+* **`einops`** — never imported by this project. MONAI treats it as optional, but
+  `DiffusionModelUNet` *always* builds an attention mid-block
+  (`AttnMidBlock` → `SpatialAttentionBlock` → `SABlock` → `einops.layers.torch.Rearrange`), so
+  since the trunk switch it is not optional at all. This broke every MONAI trunk test
+  (`test_monai_unet2d`, 14), the legacy adapter tests (`test_monai_unet_adapter`, 10) and the two
+  `test_model_smoke` cases that build the default trunk.
+
+Both are now hard dependencies, in `pyproject.toml` and in the two conda files. `einops` is declared
+directly rather than through the `monai[einops]` extra, so the requirement stays visible if the
+trunk changes again.
+
+Worth stating plainly: these were latent before this PR, not caused by it. They were invisible
+because the project had only ever been installed into environments that already carried both — a
+`fdv` conda env on one cluster, and developer machines. A single clean install surfaced them in
+four minutes.
+
 ### Licence: EUPL-1.2, after permission from the rightsholder
 
 `pyproject.toml` declared `license = { text = "MIT" }` with no `LICENSE` file present. Verified:

@@ -34,6 +34,15 @@ dependencies = [
     "pandas>=2.0",
     "netCDF4>=1.6",
     "dask>=2023.1",
+    # `obs/argo_virtual.py` imports `scipy.stats` at module level and `obs/pseudo_obs.py` uses
+    # `scipy.ndimage`; both are core, not optional. Undeclared until the first clean-environment CI
+    # run, which is exactly the kind of thing only a real install can find.
+    "scipy>=1.10",
+    # MONAI declares einops optional, but `DiffusionModelUNet` always builds an attention mid-block
+    # (`AttnMidBlock` -> `SpatialAttentionBlock` -> `SABlock` -> `einops.layers.torch.Rearrange`),
+    # so for this project it is not optional at all. Declared directly rather than via the
+    # `monai[einops]` extra, so the requirement stays visible if the trunk ever changes again.
+    "einops>=0.6",
     # the default trunk of the gridded models is MONAI's DiffusionModelUNet
     # (`models/ocean/nn/unet_monai.py`). The `<1.6` ceiling is load-bearing: monai 1.6.0 requires
     # torch>=2.8, 1.5.x pins torch>=2.4.1,<2.7.0 and leaves this project's torch alone.

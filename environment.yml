@@ -45,7 +45,8 @@ dependencies:
   - pandas>=2.0
   - netcdf4>=1.6
   - dask>=2023.1
-  - scipy                     # imported lazily by obs/argo_virtual.py and the QG dynamics
+  - scipy>=1.10               # obs/argo_virtual.py imports scipy.stats at module level
+  - einops>=0.6               # MONAI's attention blocks need it; not optional here
 
   # --- extras that are safe to always have ---
   - matplotlib>=3.8           # [plots] -- reports/ and demos/
