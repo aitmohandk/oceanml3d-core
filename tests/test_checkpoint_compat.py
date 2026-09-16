@@ -119,3 +119,50 @@ def test_lightning_module_produces_same_output():
         out_lit = lit(x)
 
     assert torch.allclose(out_model, out_lit), "LitModule forward != model forward"
+
+
+def _nosc(variables, norm_stats):
+    from oceanml3d.models.ocean.nosc.model import NOSCUNet
+    from oceanml3d.training.weights import patch_weight
+
+    w = patch_weight("constant", {"time": 5, "lat": 16, "lon": 16}, {"time": 0, "lat": 2, "lon": 2})
+    return NOSCUNet(variables, 5, w, widths=(8, 16), optimizer_kw={"lr": 1e-3, "t_max": 1},
+                    norm_stats=norm_stats, trunk="nosc")
+
+
+def test_norm_stats_travel_with_the_weights(variables, tmp_path):
+    """`predict_step` denormalises with `self.norm_stats`, and those come from the *train* split. A
+    prediction run that recomputes them from whatever splits, domain or variables the current config
+    declares can therefore denormalise with statistics the model was never trained under -- and
+    write a product that looks entirely normal. Storing them in the checkpoint makes the pair
+    inseparable."""
+    n = len(variables)
+    stats = (np.linspace(-1, 1, n).astype(np.float32), np.linspace(0.5, 3, n).astype(np.float32))
+    trained = _nosc(variables, stats)
+
+    ckpt = {"state_dict": trained.state_dict()}
+    trained.on_save_checkpoint(ckpt)
+    assert ckpt["oceanml3d"]["variables"] == list(variables.names)
+
+    wrong = (np.zeros(n, dtype=np.float32), np.full(n, 7.0, dtype=np.float32))
+    loaded = _nosc(variables, wrong)
+    loaded.on_load_checkpoint(ckpt)
+    loaded.load_state_dict(ckpt["state_dict"])
+    assert np.allclose(loaded.norm_stats[0], stats[0])
+    assert np.allclose(loaded.norm_stats[1], stats[1])
+
+    # and it must survive a real round-trip under weights_only=True, which is how predict loads
+    path = tmp_path / "m.ckpt"
+    torch.save(ckpt, path)
+    back = torch.load(path, map_location="cpu", weights_only=True)
+    assert back["oceanml3d"]["norm_stats"]["mean"] == ckpt["oceanml3d"]["norm_stats"]["mean"]
+
+
+def test_a_checkpoint_from_another_channel_layout_is_refused(variables):
+    n = len(variables)
+    model = _nosc(variables, (np.zeros(n, dtype=np.float32), np.ones(n, dtype=np.float32)))
+    ckpt = {"state_dict": model.state_dict()}
+    model.on_save_checkpoint(ckpt)
+    ckpt["oceanml3d"]["variables"] = ["something", "else"]
+    with pytest.raises(ValueError, match="different channel layout"):
+        model.on_load_checkpoint(ckpt)

@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 2 (2/2) — the normalisation statistics travel with the weights
+
+**Summary:** `norm_stats.json` was written next to every checkpoint and read by nothing. The
+statistics now live *in* the checkpoint, and `predict` uses them.
+
+### Why it mattered
+
+`predict_step` denormalises its output with `self.norm_stats`. Those numbers are computed on the
+**train** split. `command=predict` rebuilt the datamodule from the current configuration and
+recomputed them, so if the splits, the domain or the variable list had moved between training and
+prediction — which is the normal reason to run `predict` separately at all — the exported product
+was denormalised with statistics the model had never seen. Finite values, plausible fields, right
+shapes, wrong numbers, straight into `oceanml3d-eval`.
+
+`VersioningCallback` had been writing `norm_stats.json` since the transplant. Nothing ever read it.
+
+### What changed
+
+`BaseOceanModel.on_save_checkpoint` stores the statistics and the channel layout under an
+`oceanml3d` key, as plain lists so the checkpoint still loads under `weights_only=True`.
+`on_load_checkpoint` restores them, and refuses a checkpoint whose channel layout differs from the
+configuration's — the failure that used to surface as an unreadable `load_state_dict` size mismatch,
+or not at all when the sizes happened to agree. `NOSCUNet.on_load_checkpoint`, which already guarded
+the trunk, now chains to it.
+
+`command=predict` calls the hook before `load_state_dict`, and says so plainly when a checkpoint
+predates this and carries no statistics, rather than falling back in silence.
+
+`norm_stats.json` stays: it is the human-readable copy, and it is now the redundant one.
+
+### Also, the multi-stage test path
+
+```python
+trainer.test(model, datamodule=dm, ckpt_path="best" if len(stages) == 1 else None)
+```
+
+With more than one stage this tested the in-memory weights of the final epoch, not the best
+checkpoint — different behaviour from the single-stage branch, undocumented. `"best"` refers to the
+checkpoint callback of the trainer that ran last, which for a staged pipeline is the last stage:
+exactly what should be tested. Now used whenever a best checkpoint exists.
+
 ## 2026-09-15: roadmap lot 2 (1/2) — four ways the pipeline was wrong without saying so
 
 **Summary:** none of these crashed. Each produced a plausible result from data that was not what the
