@@ -337,12 +337,12 @@ Rien d'autre ne mérite d'être fait tant que la CI ne tourne pas.
 
 - [ ] **P1-1** `prepare-obs` dans `prepare_data()`. *Test : deux processus concurrents.*
 - [ ] **P1-2** `predict` charge `norm_stats.json`, échoue si absent, avertit si divergent. *Test : entraîner sur un split, prédire sur un autre, vérifier l'avertissement.*
-- [ ] **P1-3** `is not None` sur `depth_index`. *Test : `depth_index: 0` sur un fichier 2D doit lever.*
-- [ ] **P1-4/5** `tolerance` sur `reindex` spatial ; comptage des pas de temps insérés.
+- [x] **P1-3** `is not None` sur `depth_index` (aux deux endroits). *Test : `depth_index: 0` sur un fichier 2D doit lever.*
+- [x] **P1-4/5** `_align_space` refuse une grille différente (tolérance d'un demi-pas) ; `_align_time` annonce les pas inventés.
 - [ ] **P2-1** `ckpt_path="best"` en multi-étapes, ou documenter le choix inverse.
 - [ ] **P2-2** `predict` via `load_from_checkpoint`.
 - [ ] **P2-3** Jitter centré.
-- [ ] **P2-4** Contrainte recouvrement ≥ 2 × crop dans `validate_config`. *Test : une config à recouvrement insuffisant doit être rejetée.*
+- [x] **P2-4** Recouvrement ≥ 2 × crop vérifié, avec le stride correctif nommé dans le message. *Test : une config à recouvrement insuffisant doit être rejetée.*
 
 ### Lot 3 — Couverture (2–3 jours)
 

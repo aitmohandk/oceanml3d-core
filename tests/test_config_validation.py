@@ -76,3 +76,15 @@ def test_multi_stage_pipeline_is_declarative():
     m2 = TwoStage(vs, 3, np.ones((3, 4, 4), np.float32))
     m2.set_stage("conditional")
     assert m2.current_stage == "conditional"
+
+
+def test_overlap_smaller_than_twice_the_crop_is_rejected():
+    """The cropped border of a patch contributes nothing, so the neighbour has to cover it. Both
+    shipped tasks sit exactly on the equality (144 - 136 = 8 = 2 x 4), so any edit to patch, stride
+    or crop broke the export -- with blank seams, and nothing downstream complaining."""
+    cfg = _cfg("data.stride.lat=142")           # overlap 2, crop 4 -> needs 8
+    problems = validate_config(cfg, variables=build_variables(cfg))
+    assert any("uncovered seams" in x for x in problems), problems
+
+    cfg = _cfg("data.stride.lat=136")           # overlap 8 == 2 x 4: the shipped setting
+    assert validate_config(cfg, variables=build_variables(cfg)) == []

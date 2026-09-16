@@ -76,8 +76,20 @@ def validate_config(cfg: DictConfig, catalog=None, variables=None) -> list[str]:
 
     crop = t.rec_weight.get("crop", {})
     for dim in DIMS:
-        if 2 * int(crop.get(dim, 0)) >= int(d.patch.get(dim, 1)):
+        c, patch = int(crop.get(dim, 0)), int(d.patch.get(dim, 1))
+        if 2 * c >= patch:
             p.append(f"training.rec_weight.crop.{dim} removes the whole patch")
+            continue
+        # The cropped border of a patch contributes nothing, so the neighbouring patch has to cover
+        # it: the overlap must be at least twice the crop, or the exported field carries blank seams
+        # where no patch ever wrote. Both shipped tasks sit exactly on the equality (144 - 136 = 8 =
+        # 2 x 4), so any edit to patch, stride or crop breaks the export -- silently, since nothing
+        # downstream complains about a NaN stripe.
+        overlap = patch - int(d.stride.get(dim, patch))
+        if c > 0 and overlap < 2 * c:
+            p.append(f"overlap along '{dim}' is {overlap} but training.rec_weight.crop.{dim}={c} "
+                     f"needs at least {2 * c}: the exported field would have uncovered seams "
+                     f"(reduce the crop, or the stride to {patch - 2 * c} or less)")
     if t.rec_weight.get("kind") not in VALID["rec_weight_kind"]:
         p.append(f"training.rec_weight.kind must be one of {sorted(VALID['rec_weight_kind'])}")
 
