@@ -1,5 +1,90 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 1, P0-1 — the empty-patch filter stops re-reading the training set
+
+**Summary:** `PatchArray` dropped patches with no finite target by materialising each patch
+separately. Replaced by one reduction per *spatial* window. Same patches selected, pinned by an
+equivalence test against the old implementation.
+
+### The cost
+
+`drop_empty_target_patches` defaults to `True`, so this ran before every `fit`:
+
+```python
+self._valid = [i for i in self._valid if self._has_target(i, drop_all_nan_targets)]
+```
+
+One dask materialisation per patch. With `stride.time = 1`, every time step is re-read once per
+window it appears in — an 11x amplification for an 11-day patch, on top of the per-patch cost:
+
+| task | bytes per patch | patches | read before the first epoch |
+|---|---|---|---|
+| `surface_currents_15m` | 2 x 11 x 560 x 1440 x 4 B = 71 MB | 2912 | **~207 GB** |
+| `osse3d_gs21` | 64 x 11 x 144 x 144 x 4 B = 58 MB | 2912 | **~170 GB** |
+
+### The fix
+
+Reduce once per spatial window instead of once per patch. `cover[t, a, b]` records whether spatial
+window `(a, b)` holds a finite target at time step `t`; a patch is valid iff any of its time steps
+is. `any` over a box equals `any` over its time steps of `any` over the spatial window, so the
+result is identical by construction.
+
+Both shipped tasks have a patch spanning the whole domain, hence **one** spatial window: a single
+pass. More importantly the cost no longer depends on the time stride, which is where the
+amplification came from. Memory is `n_time x n_lat_windows x n_lon_windows` booleans — kilobytes.
+
+`_has_target` is kept, documented as the oracle the equivalence test compares against, and is no
+longer reachable from the constructor.
+
+### Tests
+
+* `test_valid_patches_matches_the_reference` — identical selection on holed data (sparse targets,
+  five wholly empty days, one day where only one of the two targets is empty), across three
+  patch/stride regimes including several overlapping spatial windows.
+* `test_construction_does_not_use_the_per_patch_oracle` — `_has_target` is monkeypatched to raise,
+  so the constructor cannot silently regress to the per-patch path.
+* `PatchIndex.grid_index(i)` added: the new filter needs a patch's position on the grid of window
+  starts, which was only available through `_grid`.
+
+## 2026-09-15: roadmap lot 1, step 1 — the test suite can now fail on a model that has learnt nothing
+
+**Summary:** before touching the three scale blockers, the suite needs to be able to tell a working
+pipeline from one that merely writes files. It could not.
+
+### What was wrong
+
+`test_train_predict_export` — the only end-to-end test — asserted exactly two things: the manifest
+exists, and ten daily NetCDF files were written. Both hold for a model that has learnt nothing.
+
+That is not a hypothetical state for the current default. MONAI wraps the output convolution and
+every resblock's second convolution in ``zero_module``, so a freshly built MONAI trunk is *exactly*
+the zero map — this repository pins that fact itself, in
+`test_monai_unet2d::test_zero_initialisation_is_inherited_from_monai`. Every other gridded test
+passes in that state: the shapes are right, `step` returns a finite loss, the export runs.
+
+Two further details made it worse. `test_train_predict_export` is marked `slow`, so it is among the
+45 tests **deselected** by the CI command — the end-to-end path was not being exercised at all. And
+"all zeros" is not the signature to look for anyway: `predict_step` denormalises, so a trunk stuck
+at the zero map exports `mean` per channel, a perfectly finite, spatially *constant* field.
+
+### What changed
+
+`test_the_trunk_can_actually_fit_a_batch`, parametrised over both trunks and **not** marked slow:
+overfit a single batch for 30 Adam steps and require the loss to fall below 0.9× its starting value
+and the output to have non-zero spatial spread. It is the cheapest check that a dead model cannot
+pass. The loss is computed directly rather than through `model.step`, so no `self.log` happens
+outside a Trainer, and it is masked on finite targets so NaNs cannot poison the gradient.
+
+`test_train_predict_export` now opens the first exported day and, for every target named by
+`export_variable_names`, requires the variable to be present, to have finite values, and to have
+non-zero spatial standard deviation.
+
+### Why this before the performance work
+
+The three scale fixes in lot 1 (`_has_target`, streaming reconstruction, the DDP guard) are all
+"change how it computes, not what it computes". Proving that requires a suite that reacts to the
+result, not only to the plumbing. This is that suite.
+
 ## 2026-09-15: roadmap lot 0 — CI actually runs, EUPL-1.2, reproducible environments
 
 **Summary:** the verification net was inoperative and the licence claim was unsupported. Nothing

@@ -325,7 +325,7 @@ Rien d'autre ne mérite d'être fait tant que la CI ne tourne pas.
 
 ### Lot 1 — Rendre le pipeline grillé exécutable à l'échelle (3–5 jours)
 
-- [ ] **P0-1** `_has_target` : réduction unique sur le temps. *Test : équivalence de `_valid` avec l'implémentation actuelle sur un cas synthétique à trous.*
+- [x] **P0-1** `_has_target` → `_valid_patches` : une réduction par *fenêtre spatiale* (une seule pour les deux tâches livrées), coût indépendant du pas temporel. *Test : équivalence de `_valid` avec l'implémentation actuelle sur un cas synthétique à trous.*
 - [ ] **P0-2** `predict_field` : accumulation en flux, accumulateurs float32. *Test : identité au bit près avec la version actuelle sur le cas synthétique ; mesure du pic RSS.*
 - [ ] **P0-3** Export sous `is_global_zero` avec un `Trainer(devices=1)`. *Test : `reconstruct` sur items permutés doit lever.*
 - [ ] **P1-4** Grouper les ouvertures par `source` ; activer `cache: true` dans les configs `osse3d_*`.
@@ -344,6 +344,8 @@ Rien d'autre ne mérite d'être fait tant que la CI ne tourne pas.
 - [ ] **P2-4** Contrainte recouvrement ≥ 2 × crop dans `validate_config`. *Test : une config à recouvrement insuffisant doit être rejetée.*
 
 ### Lot 3 — Couverture (2–3 jours)
+
+- [x] **N2** : assertion de non-trivialité. `test_the_trunk_can_actually_fit_a_batch` (les deux troncs, non `slow`) et écart-type spatial non nul sur le produit exporté dans `test_train_predict_export`.
 
 - [ ] Paramétrer `test_model_smoke.py` sur `head ∈ {single, grouped, vertical_modes}`, `time_mode ∈ {channels, conv3d}`, `attention_levels ∈ {[], [2]}` — 12 combinaisons en forward seul, rapides.
 - [ ] Test de bout en bout `prepare-obs → train (1 époque) → predict → validate_manifest` sur données synthétiques, marqué `slow`, exécuté en CI nocturne.
