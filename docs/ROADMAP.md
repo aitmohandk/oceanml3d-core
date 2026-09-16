@@ -328,8 +328,9 @@ Rien d'autre ne mérite d'être fait tant que la CI ne tourne pas.
 - [x] **P0-1** `_has_target` → `_valid_patches` : une réduction par *fenêtre spatiale* (une seule pour les deux tâches livrées), coût indépendant du pas temporel. *Test : équivalence de `_valid` avec l'implémentation actuelle sur un cas synthétique à trous.*
 - [x] **P0-2** `predict_field` : accumulation en flux via `PatchAccumulator` ; `reconstruct` devient une enveloppe, résultat bit-à-bit identique. *Test : identité au bit près avec la version actuelle sur le cas synthétique ; mesure du pic RSS.*
 - [x] **P0-3** `result()` refuse un champ partiel (le vrai garde-fou, testable sans DDP) ; `predict_field` prédit sur un seul device ; `_export` sur le rang 0 avec barrière. *Test : `reconstruct` sur items permutés doit lever.*
-- [ ] **P1-4** Grouper les ouvertures par `source` ; activer `cache: true` dans les configs `osse3d_*`.
-- [ ] **P1-5** `compute_norm_stats` en une passe ; `mask` ouvert avec `chunks`.
+- [x] **P1-4** Une poignée de fichier par `source` pour tout le jeu de variables (~110 ouvertures → 3 sur `osse3d_gs21`).
+- [ ] Activer `cache: true` dans les configs `osse3d_*` (décision à prendre au vu du run complet).
+- [x] **P1-5** `compute_norm_stats` en une passe (changement d'ordonnancement, valeurs identiques) ; `mask` chunké et mis en cache.
 - [ ] Un run complet de `nosc_15m_duacs` et un de `osse3d_gs21_multivar_unet`, avec relevé temps/mémoire consigné dans `CHANGELOG.md`. **C'est le critère d'acceptation du lot.**
 
 ### Lot 2 — Justesse (2–3 jours)
