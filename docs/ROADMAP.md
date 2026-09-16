@@ -325,7 +325,7 @@ Rien d'autre ne mérite d'être fait tant que la CI ne tourne pas.
 
 ### Lot 1 — Rendre le pipeline grillé exécutable à l'échelle (3–5 jours)
 
-- [ ] **P0-1** `_has_target` : réduction unique sur le temps. *Test : équivalence de `_valid` avec l'implémentation actuelle sur un cas synthétique à trous.*
+- [x] **P0-1** `_has_target` → `_valid_patches` : une réduction par *fenêtre spatiale* (une seule pour les deux tâches livrées), coût indépendant du pas temporel. *Test : équivalence de `_valid` avec l'implémentation actuelle sur un cas synthétique à trous.*
 - [ ] **P0-2** `predict_field` : accumulation en flux, accumulateurs float32. *Test : identité au bit près avec la version actuelle sur le cas synthétique ; mesure du pic RSS.*
 - [ ] **P0-3** Export sous `is_global_zero` avec un `Trainer(devices=1)`. *Test : `reconstruct` sur items permutés doit lever.*
 - [ ] **P1-4** Grouper les ouvertures par `source` ; activer `cache: true` dans les configs `osse3d_*`.

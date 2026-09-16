@@ -48,6 +48,10 @@ class PatchIndex:
     def __len__(self) -> int:
         return len(self._grid)
 
+    def grid_index(self, i: int) -> tuple[int, int, int]:
+        """Position of patch ``i`` on the (time, lat, lon) grid of window starts."""
+        return self._grid[i]
+
     def slices(self, i: int) -> dict[str, slice]:
         idx = self._grid[i]
         return {d: slice(int(self.starts[d][k]), int(self.starts[d][k]) + self.spec.patch[d])
@@ -79,9 +83,49 @@ class PatchArray:
         self._rng = np.random.default_rng(seed)
         self._valid = list(range(len(self.index)))
         if drop_all_nan_targets:
-            self._valid = [i for i in self._valid if self._has_target(i, drop_all_nan_targets)]
+            self._valid = self._valid_patches(drop_all_nan_targets)
+
+    def _valid_patches(self, target_idx: list[int]) -> list[int]:
+        """Indices of patches holding at least one finite target value.
+
+        The obvious implementation -- :meth:`_has_target` per patch -- costs one dask
+        materialisation per patch, and with ``stride.time = 1`` each time step is re-read once per
+        window in which it appears. On ``surface_currents_15m`` (2922 train days, one spatial
+        position, ``patch.time = 11``) that is ~2900 reads of 71 MB, about 207 GB, before the first
+        epoch; on ``osse3d_gs21`` with its 64 targets, about 170 GB.
+
+        Instead, reduce once per *spatial window* rather than once per patch. The number of spatial
+        windows is the product of the lat and lon grid sizes -- one, for both shipped tasks, since
+        the patch spans the whole domain -- so this is a single pass, and it is independent of the
+        time stride, which is where the redundancy came from. ``cover[t, a, b]`` says whether the
+        spatial window ``(a, b)`` holds a finite target at time step ``t``; a patch is then valid
+        iff any of its time steps is. Memory is ``n_time x n_lat_windows x n_lon_windows`` booleans.
+
+        Equivalent to the per-patch version by construction: ``any`` over a box equals ``any`` over
+        its time steps of ``any`` over the spatial window. ``test_valid_patches_matches_the_
+        reference`` pins that on holed data.
+        """
+        finite = np.isfinite(self.da.isel(channel=target_idx)).any(dim="channel")
+        lat_starts, lon_starts = self.index.starts["lat"], self.index.starts["lon"]
+        cover = np.empty((self.da.sizes["time"], len(lat_starts), len(lon_starts)), dtype=bool)
+        for a, y0 in enumerate(lat_starts):
+            ys = slice(int(y0), int(y0) + self.spec.patch["lat"])
+            for b, x0 in enumerate(lon_starts):
+                xs = slice(int(x0), int(x0) + self.spec.patch["lon"])
+                cover[:, a, b] = np.asarray(finite.isel(lat=ys, lon=xs).any(dim=("lat", "lon")).values)
+
+        t_starts, t_len = self.index.starts["time"], self.spec.patch["time"]
+        valid = []
+        for i in range(len(self.index)):
+            ti, a, b = self.index.grid_index(i)
+            t0 = int(t_starts[ti])
+            if cover[t0:t0 + t_len, a, b].any():
+                valid.append(i)
+        return valid
 
     def _has_target(self, i: int, target_idx: list[int]) -> bool:
+        """Reference implementation of the per-patch test. Kept as the oracle for
+        ``test_valid_patches_matches_the_reference``; :meth:`_valid_patches` is what runs."""
         sl = self.index.slices(i)
         sub = self.da.isel(channel=target_idx, **sl).values
         return bool(np.isfinite(sub).any())

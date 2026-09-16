@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 1, P0-1 — the empty-patch filter stops re-reading the training set
+
+**Summary:** `PatchArray` dropped patches with no finite target by materialising each patch
+separately. Replaced by one reduction per *spatial* window. Same patches selected, pinned by an
+equivalence test against the old implementation.
+
+### The cost
+
+`drop_empty_target_patches` defaults to `True`, so this ran before every `fit`:
+
+```python
+self._valid = [i for i in self._valid if self._has_target(i, drop_all_nan_targets)]
+```
+
+One dask materialisation per patch. With `stride.time = 1`, every time step is re-read once per
+window it appears in — an 11x amplification for an 11-day patch, on top of the per-patch cost:
+
+| task | bytes per patch | patches | read before the first epoch |
+|---|---|---|---|
+| `surface_currents_15m` | 2 x 11 x 560 x 1440 x 4 B = 71 MB | 2912 | **~207 GB** |
+| `osse3d_gs21` | 64 x 11 x 144 x 144 x 4 B = 58 MB | 2912 | **~170 GB** |
+
+### The fix
+
+Reduce once per spatial window instead of once per patch. `cover[t, a, b]` records whether spatial
+window `(a, b)` holds a finite target at time step `t`; a patch is valid iff any of its time steps
+is. `any` over a box equals `any` over its time steps of `any` over the spatial window, so the
+result is identical by construction.
+
+Both shipped tasks have a patch spanning the whole domain, hence **one** spatial window: a single
+pass. More importantly the cost no longer depends on the time stride, which is where the
+amplification came from. Memory is `n_time x n_lat_windows x n_lon_windows` booleans — kilobytes.
+
+`_has_target` is kept, documented as the oracle the equivalence test compares against, and is no
+longer reachable from the constructor.
+
+### Tests
+
+* `test_valid_patches_matches_the_reference` — identical selection on holed data (sparse targets,
+  five wholly empty days, one day where only one of the two targets is empty), across three
+  patch/stride regimes including several overlapping spatial windows.
+* `test_construction_does_not_use_the_per_patch_oracle` — `_has_target` is monkeypatched to raise,
+  so the constructor cannot silently regress to the per-patch path.
+* `PatchIndex.grid_index(i)` added: the new filter needs a patch's position on the grid of window
+  starts, which was only available through `_grid`.
+
 ## 2026-09-15: roadmap lot 1, step 1 — the test suite can now fail on a model that has learnt nothing
 
 **Summary:** before touching the three scale blockers, the suite needs to be able to tell a working
