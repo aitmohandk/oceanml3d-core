@@ -205,7 +205,18 @@ def compute_eofs(cfg: DictConfig, catalog: Catalog) -> None:
 
 
 def _export(cfg: DictConfig, model, dm, trainer) -> None:
+    """Write the product. Rank 0 only.
+
+    Under DDP every rank reaches this point. Prediction itself is never sharded (see
+    :func:`oceanml3d.inference.predict.predict_field`), but letting four ranks run the pass and
+    write the same NetCDF files concurrently is pointless at best. The barrier keeps the others
+    from exiting while rank 0 is still writing.
+    """
     from oceanml3d.inference.predict import predict_and_export
+
+    if not getattr(trainer, "is_global_zero", True):
+        trainer.strategy.barrier("oceanml3d-export")
+        return
 
     e = cfg.export
     out = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir) / "product"
@@ -213,6 +224,8 @@ def _export(cfg: DictConfig, model, dm, trainer) -> None:
     attrs = {"experiment": cfg.experiment_name, "model": cfg.model.name, "git_hash": _git_hash()}
     path = predict_and_export(model, dm, trainer, out, cfg.experiment_name, e.split, time_slice, e.get("depth_m"), attrs)
     print(f"product manifest written to {path}")
+    if getattr(trainer, "world_size", 1) > 1:
+        trainer.strategy.barrier("oceanml3d-export")
 
 
 def _git_hash() -> str:

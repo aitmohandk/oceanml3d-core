@@ -326,8 +326,8 @@ Rien d'autre ne mérite d'être fait tant que la CI ne tourne pas.
 ### Lot 1 — Rendre le pipeline grillé exécutable à l'échelle (3–5 jours)
 
 - [x] **P0-1** `_has_target` → `_valid_patches` : une réduction par *fenêtre spatiale* (une seule pour les deux tâches livrées), coût indépendant du pas temporel. *Test : équivalence de `_valid` avec l'implémentation actuelle sur un cas synthétique à trous.*
-- [ ] **P0-2** `predict_field` : accumulation en flux, accumulateurs float32. *Test : identité au bit près avec la version actuelle sur le cas synthétique ; mesure du pic RSS.*
-- [ ] **P0-3** Export sous `is_global_zero` avec un `Trainer(devices=1)`. *Test : `reconstruct` sur items permutés doit lever.*
+- [x] **P0-2** `predict_field` : accumulation en flux via `PatchAccumulator` ; `reconstruct` devient une enveloppe, résultat bit-à-bit identique. *Test : identité au bit près avec la version actuelle sur le cas synthétique ; mesure du pic RSS.*
+- [x] **P0-3** `result()` refuse un champ partiel (le vrai garde-fou, testable sans DDP) ; `predict_field` prédit sur un seul device ; `_export` sur le rang 0 avec barrière. *Test : `reconstruct` sur items permutés doit lever.*
 - [ ] **P1-4** Grouper les ouvertures par `source` ; activer `cache: true` dans les configs `osse3d_*`.
 - [ ] **P1-5** `compute_norm_stats` en une passe ; `mask` ouvert avec `chunks`.
 - [ ] Un run complet de `nosc_15m_duacs` et un de `osse3d_gs21_multivar_unet`, avec relevé temps/mémoire consigné dans `CHANGELOG.md`. **C'est le critère d'acceptation du lot.**

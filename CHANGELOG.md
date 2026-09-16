@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 1, P0-2 and P0-3 — streaming reconstruction, and a field that refuses to be wrong
+
+**Summary:** `predict_field` held every prediction in memory, and under a distributed Trainer it
+stitched one rank's share onto the whole domain without complaining. Both fixed in the same place,
+because both live in the same function.
+
+### P0-2 — peak memory no longer scales with the number of patches
+
+```python
+preds = trainer.predict(model, dataloaders=loader)
+items = torch.cat(preds).float().cpu().numpy()      # (n_patches, n_targets, T, H, W)
+```
+
+For the `surface_currents_15m` test split that is 377 patches x 2 targets x 11 x 560 x 1440 float32
+— about **27 GB** — before `reconstruct` allocates its two float64 accumulators over the domain, a
+further 10 GB. Roughly 37 GB peak for one export, on a node that also has to hold the model.
+
+`PatchAccumulator` folds each patch in as it arrives and drops it. Peak memory becomes the size of
+the output field, independent of the number of patches. Collecting is taken away from Lightning with
+`return_predictions=False` plus an `on_predict_batch_end` callback, so device placement and precision
+stay Lightning's job.
+
+`PatchArray.reconstruct` is now a thin wrapper over the accumulator — same arithmetic, same order of
+additions, bit-identical results, and the two paths cannot drift apart.
+`test_accumulator_matches_reconstruct` pins that at `atol=0`.
+
+### P0-3 — the partial field is now an error instead of a plausible product
+
+`training=ddp` is a shipped preset. `trainer.predict` shards the dataloader across ranks, and
+`reconstruct` mapped element *i* of whatever it received onto patch *i* of the domain. On four GPUs
+rank 0 therefore assembled a quarter of the predictions at the wrong windows and wrote a
+normal-looking product — no exception, no warning, and it fed straight into `oceanml3d-eval`.
+
+Two changes, deliberately independent:
+
+* `PatchAccumulator.result` refuses to produce a field unless **every** patch has been folded in,
+  naming the missing ones and the usual cause. This is the guard that matters, and it needs no
+  multi-GPU test to exercise: `test_accumulator_refuses_a_partial_field` reproduces the sharding by
+  folding in half the patches.
+* `predict_field` builds a single-device Trainer for the pass, so `training=ddp` runs end to end
+  instead of hitting that error at the last step. `inference_mode` is carried over explicitly —
+  Lightning does not expose it publicly, and `config/training/default.yaml` sets it to `false`
+  because the 4DVarNet solver differentiates inside its forward pass.
+* `_export` in the CLI runs on rank 0 only, with a barrier, so the other ranks do not race to write
+  the same NetCDF files.
+
+### Also
+
+`PatchAccumulator` rejects a patch folded in twice or out of range, which is the other way a
+mis-ordered prediction loop could corrupt a field quietly.
+
 ## 2026-09-15: roadmap lot 1, P0-1 — the empty-patch filter stops re-reading the training set
 
 **Summary:** `PatchArray` dropped patches with no finite target by materialising each patch
