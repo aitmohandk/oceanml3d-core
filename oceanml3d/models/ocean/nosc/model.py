@@ -82,6 +82,7 @@ class NOSCUNet(BaseOceanModel):
                 "this checkpoint was trained with the NOSC trunk (its state_dict has 'net.inc.*'), "
                 f"but the model was built with trunk='{self.trunk}'. Reload it with "
                 "'ablation=trunk_nosc' (CLI) or trunk='nosc' (Python).")
+        super().on_load_checkpoint(checkpoint)      # channel layout + normalisation statistics
 
     def forward(self, batch: torch.Tensor) -> torch.Tensor:
         x = self.inputs(batch)                                  # (B, n_in, T, H, W)

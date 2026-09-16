@@ -142,14 +142,26 @@ def main(cfg: DictConfig) -> None:
                 model.set_stage(stage)
                 trainer = build_trainer(cfg, stage=stage)
             trainer.fit(model, datamodule=dm, ckpt_path=cfg.get("ckpt") if i == 0 else None)
-        trainer.test(model, datamodule=dm, ckpt_path="best" if len(stages) == 1 else None)
+        # "best" refers to the checkpoint callback of the trainer that ran last, which for a
+        # multi-stage pipeline is the last stage -- exactly what should be tested. The old
+        # `if len(stages) == 1` tested the in-memory weights of the final epoch instead, which is
+        # not what the single-stage branch did, and nothing said so.
+        best = getattr(trainer.checkpoint_callback, "best_model_path", "")
+        trainer.test(model, datamodule=dm, ckpt_path="best" if best else None)
         if cfg.export.enabled:
             _export(cfg, model, dm, trainer)
     elif cmd == "predict":
         if not cfg.get("ckpt"):
             sys.exit("predict requires ckpt=<path>")
-        state = __import__("torch").load(cfg.ckpt, map_location="cpu", weights_only=True)["state_dict"]
-        model.load_state_dict(state)
+        import torch
+        ckpt = torch.load(cfg.ckpt, map_location="cpu", weights_only=True)
+        model.on_load_checkpoint(ckpt)              # channel layout + normalisation statistics
+        model.load_state_dict(ckpt["state_dict"])
+        if not ckpt.get("oceanml3d", {}).get("norm_stats"):
+            print(f"[oceanml3d] warning: {cfg.ckpt} carries no normalisation statistics (written "
+                  "before they were stored in checkpoints). Falling back to statistics recomputed "
+                  "from this configuration; if its splits, domain or variables differ from the "
+                  "training run, the exported product is denormalised with the wrong numbers.")
         _export(cfg, model, dm, trainer)
     else:
         sys.exit(f"unknown command '{cmd}' (train|predict|list-models|show-config)")

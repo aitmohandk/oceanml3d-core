@@ -59,6 +59,39 @@ class BaseOceanModel(LightningModule):
         self.grad_loss_weight = float(grad_loss_weight)
         self.log_vars = torch.nn.Parameter(torch.zeros(len(variables.targets))) if loss_combine == "uncertainty" else None
 
+    # -- checkpoint ----------------------------------------------------------
+    def on_save_checkpoint(self, checkpoint: dict) -> None:
+        """Carry the normalisation statistics and the channel layout in the checkpoint.
+
+        ``predict_step`` denormalises with ``self.norm_stats``. Those numbers come from the *train*
+        split, so a prediction run that recomputes them from whatever splits, domain or variable
+        list the current config happens to declare will denormalise with statistics the model was
+        never trained under -- and write a product that looks entirely normal. Storing them next to
+        the weights makes the pair inseparable. Plain lists, so the checkpoint still loads under
+        ``weights_only=True``.
+        """
+        if self.norm_stats is not None:
+            mean, std = self.norm_stats
+            checkpoint["oceanml3d"] = {
+                "norm_stats": {"mean": np.asarray(mean).tolist(), "std": np.asarray(std).tolist()},
+                "variables": list(self.variables.names),
+            }
+
+    def on_load_checkpoint(self, checkpoint: dict) -> None:
+        meta = checkpoint.get("oceanml3d")
+        if not meta:
+            return
+        names = list(meta.get("variables") or [])
+        if names and names != list(self.variables.names):
+            raise ValueError(
+                "the checkpoint was trained on a different channel layout:\n"
+                f"  checkpoint: {names}\n  config:     {list(self.variables.names)}"
+            )
+        ns = meta.get("norm_stats")
+        if ns:
+            self.norm_stats = (np.asarray(ns["mean"], dtype=np.float32),
+                               np.asarray(ns["std"], dtype=np.float32))
+
     # -- helpers -------------------------------------------------------------
     def inputs(self, batch: torch.Tensor) -> torch.Tensor:
         """(B, n_inputs, T, H, W) with NaN replaced by 0 (masked observations)."""

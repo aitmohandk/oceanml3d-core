@@ -194,3 +194,53 @@ def test_norm_stats_are_unchanged_by_the_single_pass(variables, catalog):
     assert np.array_equal(mean, ref_mean.astype(np.float32))
     assert np.array_equal(std, ref_std.astype(np.float32))
     assert (std > 0).all()
+
+
+def test_depth_index_zero_is_not_treated_as_absent(tmp_path):
+    """`depth_index: 0` is falsy, so the "file has no depth axis" guard never fired for the surface
+    level. `thetao_d00`, `uo_d00` and `vo_d00` in osse3d_gs21 are exactly that case: pointed at a
+    2D file they silently returned the flat field instead of raising."""
+    import xarray as xr
+
+    from oceanml3d.catalog import Catalog
+    from oceanml3d.data.open import open_variable
+    from oceanml3d.variables import VariableSpec
+
+    flat = tmp_path / "flat.nc"
+    xr.Dataset({"thetao": (("time", "lat", "lon"), np.zeros((2, 4, 4), dtype="float32"))},
+               coords={"time": np.arange(2), "lat": np.arange(4.0), "lon": np.arange(4.0)}
+               ).to_netcdf(flat)
+    cat = Catalog({"flat": str(flat)})          # the shared `catalog` fixture is session-scoped
+
+    for idx in (0, 3):
+        spec = VariableSpec(name=f"thetao_d{idx:02d}", source="flat", var_name="thetao",
+                            role="target", depth_index=idx)
+        with pytest.raises(ValueError, match="no depth axis"):
+            open_variable(spec, cat, {})
+
+
+def test_a_variable_on_another_grid_is_rejected(tmp_path, variables, catalog):
+    """`method="nearest"` without a tolerance never fails: a file on a coarser or offset grid is
+    quietly resampled and the run converges on the wrong data."""
+    import xarray as xr
+
+    from oceanml3d.catalog import Catalog
+    from oceanml3d.data.open import open_variable_set
+    from oceanml3d.variables import VariableSet
+
+    ref = open_variable_set(variables, catalog, {})
+    lat, lon = ref.lat.values, ref.lon.values
+    coarse = tmp_path / "coarse.nc"
+    xr.Dataset({"zos": (("time", "lat", "lon"),
+                        np.zeros((ref.sizes["time"], len(lat[::3]), len(lon[::3])), dtype="float32"))},
+               coords={"time": ref.time.values, "lat": lat[::3], "lon": lon[::3]}).to_netcdf(coarse)
+    # a copy, not a mutation: the `catalog` fixture is session-scoped
+    cat = Catalog({**{k: v["path"] for k, v in catalog.entries.items()}, "coarse": str(coarse)})
+
+    vs = VariableSet.from_config({
+        "ssh": {"source": "ssh", "var_name": "zos", "role": "input"},
+        "wrong": {"source": "coarse", "var_name": "zos", "role": "input"},
+        "u_drifter": {"source": "drifters", "role": "target"},
+    })
+    with pytest.raises(ValueError, match="not on the reference grid"):
+        open_variable_set(vs, cat, {})

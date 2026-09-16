@@ -30,6 +30,49 @@ def normalise_dims(ds: xr.Dataset | xr.DataArray) -> xr.Dataset | xr.DataArray:
     return ds
 
 
+def _align_space(da: xr.DataArray, reference: xr.DataArray, name: str) -> xr.DataArray:
+    """Nearest-neighbour reindex onto the reference grid, refusing a grid that is not the same one.
+
+    ``method="nearest"`` without a tolerance never fails: point a variable at a 1/4 deg file while
+    the reference is 1/12 deg, or at a grid offset by half a cell, and every target cell quietly
+    takes the closest source cell. The run then converges on resampled data. Requiring every target
+    cell to sit within half a grid step of its source keeps the intended use -- aligning grids that
+    are nominally identical but differ in float representation -- and rejects the rest.
+    """
+    for dim in ("lat", "lon"):
+        if dim not in da.dims:
+            continue
+        src = np.asarray(da[dim].values, dtype=float)
+        dst = np.asarray(reference[dim].values, dtype=float)
+        if src.size == 0:
+            raise ValueError(f"{name}: empty '{dim}' axis after domain selection")
+        step = float(np.median(np.abs(np.diff(dst)))) if dst.size > 1 else float("inf")
+        nearest = np.abs(dst[:, None] - src[None, :]).argmin(axis=1)
+        worst = float(np.abs(dst - src[nearest]).max())
+        if step != float("inf") and worst > 0.5 * step:
+            raise ValueError(
+                f"{name}: '{dim}' is not on the reference grid -- the worst target cell is {worst:.4g} "
+                f"away from its nearest source cell, more than half a grid step ({0.5 * step:.4g}). "
+                f"Regrid the file (see scripts/prepare/regrid.py) rather than letting nearest-neighbour "
+                f"resampling hide it."
+            )
+    return da.reindex(lat=reference.lat, lon=reference.lon, method="nearest")
+
+
+def _align_time(da: xr.DataArray, reference: xr.DataArray, name: str) -> xr.DataArray:
+    """Reindex onto the reference time axis, saying how many steps had to be invented.
+
+    Missing dates become NaN, and for an input NaN becomes 0 in ``BaseOceanModel.inputs`` -- so a
+    month-long hole in a forcing file trains the model on a month of zeros without a word.
+    """
+    missing = int(np.count_nonzero(~np.isin(reference.time.values, da.time.values)))
+    if missing:
+        total = reference.sizes["time"]
+        print(f"[oceanml3d] {name}: {missing}/{total} time steps ({100 * missing / total:.1f}%) are "
+              f"absent from the file and will be NaN (0 for inputs) after reindexing")
+    return da.reindex(time=reference.time)
+
+
 def _select_domain(da: xr.DataArray, domain: Mapping[str, slice]) -> xr.DataArray:
     sel = {k: v for k, v in domain.items() if k in da.dims}
     return da.sel(sel) if sel else da
@@ -70,11 +113,14 @@ def open_variable(spec: VariableSpec, catalog: Catalog, domain: Mapping[str, sli
         raise KeyError(f"'{var_name}' not found in {path}; variables: {list(ds.data_vars)}")
     da = ds[var_name]
     if "depth" in da.dims:
-        idx = spec.depth_index or 0
+        idx = spec.depth_index if spec.depth_index is not None else 0
         if idx >= da.sizes["depth"]:
             raise IndexError(f"{spec.name}: depth_index {idx} out of range (file has {da.sizes['depth']} levels)")
         da = da.isel(depth=idx, drop=True)
-    elif spec.depth_index and var_name == spec.var_name:
+    elif spec.depth_index is not None and var_name == spec.var_name:
+        # `is not None`, not truthiness: index 0 is falsy, so this guard never fired for the surface
+        # level. `thetao_d00`, `uo_d00` and `vo_d00` in osse3d_gs21 are exactly that case -- pointed
+        # at a file with no depth axis they silently returned the 2D field instead of raising.
         raise ValueError(f"{spec.name}: depth_index given but {path} has no depth axis nor '{var_name}_d{spec.depth_index:02d}'")
     da = _select_domain(da, domain)
     if spec.transform:
@@ -105,14 +151,14 @@ def open_variable_set(variables: VariableSet, catalog: Catalog, domain: Mapping[
         if spec.is_static:
             if reference is None:
                 raise ValueError("first variable cannot be static (needs a time axis to broadcast)")
-            da = da.reindex(lat=reference.lat, lon=reference.lon, method="nearest")
+            da = _align_space(da, reference, spec.name)
             da = da.expand_dims(time=reference.time).broadcast_like(reference)
         else:
             if reference is None:
                 reference = da
             else:
-                da = da.reindex(lat=reference.lat, lon=reference.lon, method="nearest")
-                da = da.reindex(time=reference.time)
+                da = _align_space(da, reference, spec.name)
+                da = _align_time(da, reference, spec.name)
         arrays[spec.name] = da.transpose("time", "lat", "lon")
     stacked = xr.concat(list(arrays.values()), dim="channel", coords="minimal", compat="override")
     stacked = stacked.assign_coords(channel=list(arrays))

@@ -1,5 +1,87 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 2 (2/2) — the normalisation statistics travel with the weights
+
+**Summary:** `norm_stats.json` was written next to every checkpoint and read by nothing. The
+statistics now live *in* the checkpoint, and `predict` uses them.
+
+### Why it mattered
+
+`predict_step` denormalises its output with `self.norm_stats`. Those numbers are computed on the
+**train** split. `command=predict` rebuilt the datamodule from the current configuration and
+recomputed them, so if the splits, the domain or the variable list had moved between training and
+prediction — which is the normal reason to run `predict` separately at all — the exported product
+was denormalised with statistics the model had never seen. Finite values, plausible fields, right
+shapes, wrong numbers, straight into `oceanml3d-eval`.
+
+`VersioningCallback` had been writing `norm_stats.json` since the transplant. Nothing ever read it.
+
+### What changed
+
+`BaseOceanModel.on_save_checkpoint` stores the statistics and the channel layout under an
+`oceanml3d` key, as plain lists so the checkpoint still loads under `weights_only=True`.
+`on_load_checkpoint` restores them, and refuses a checkpoint whose channel layout differs from the
+configuration's — the failure that used to surface as an unreadable `load_state_dict` size mismatch,
+or not at all when the sizes happened to agree. `NOSCUNet.on_load_checkpoint`, which already guarded
+the trunk, now chains to it.
+
+`command=predict` calls the hook before `load_state_dict`, and says so plainly when a checkpoint
+predates this and carries no statistics, rather than falling back in silence.
+
+`norm_stats.json` stays: it is the human-readable copy, and it is now the redundant one.
+
+### Also, the multi-stage test path
+
+```python
+trainer.test(model, datamodule=dm, ckpt_path="best" if len(stages) == 1 else None)
+```
+
+With more than one stage this tested the in-memory weights of the final epoch, not the best
+checkpoint — different behaviour from the single-stage branch, undocumented. `"best"` refers to the
+checkpoint callback of the trainer that ran last, which for a staged pipeline is the last stage:
+exactly what should be tested. Now used whenever a best checkpoint exists.
+
+## 2026-09-15: roadmap lot 2 (1/2) — four ways the pipeline was wrong without saying so
+
+**Summary:** none of these crashed. Each produced a plausible result from data that was not what the
+configuration asked for.
+
+### `depth_index: 0` was falsy
+
+```python
+elif spec.depth_index and var_name == spec.var_name:
+    raise ValueError(f"{spec.name}: depth_index given but {path} has no depth axis ...")
+```
+
+The guard never fired for index 0. A variable declared at `depth_index: 0` against a file with no
+depth axis silently returned the 2D field. `thetao_d00`, `uo_d00` and `vo_d00` in `osse3d_gs21` are
+exactly that case — the surface level of the 64-target task. Now `is not None`, in both places where
+the index was tested for truthiness.
+
+### A variable on the wrong grid was resampled instead of refused
+
+`reindex(..., method="nearest")` without a tolerance never fails. Point a variable at a 1/4 deg file
+while the reference is 1/12 deg, or at a grid offset by half a cell, and every target cell quietly
+takes its closest source cell; the run then converges on resampled data. `_align_space` now requires
+every target cell to sit within half a grid step of its source. That keeps the intended use —
+aligning grids that are nominally identical but differ in float representation — and rejects the
+rest, pointing at `scripts/prepare/regrid.py`.
+
+### Missing dates were invented in silence
+
+`reindex(time=reference.time)` turns an absent date into NaN, and `BaseOceanModel.inputs` turns NaN
+into 0. A month-long hole in a forcing file trained the model on a month of zeros without a word.
+`_align_time` now reports how many steps had to be invented, and what fraction of the axis that is.
+
+### The export could have blank seams, and `validate` did not check
+
+`validate_config` checked `stride <= patch` and `2 x crop < patch`, but not the constraint that
+links them: the border cropped by `rec_weight` contributes nothing, so the neighbouring patch must
+cover it, which requires `overlap >= 2 x crop`. Both shipped tasks sit **exactly** on the equality
+(144 - 136 = 8 = 2 x 4), so any edit to patch, stride or crop produced an exported field with
+uncovered stripes — and nothing downstream complains about NaN. Now checked, with the stride that
+would fix it named in the message.
+
 ## 2026-09-15: roadmap lot 1, P1-4 and P1-5 — one file handle per source, lazy masks, one pass for the stats
 
 **Summary:** the last three items of lot 1, all in `data/open.py`. None of them changes a number.
