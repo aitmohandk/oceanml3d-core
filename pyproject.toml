@@ -8,9 +8,22 @@ version = "0.1.0"
 description = "4DVarNet and flow-matching core for 3D multivariate ocean data assimilation."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+# EUPL-1.2. The upstream material (NOSC, CeCILL-C; 4dvarnet-fm-opencode, no stated terms) was
+# relicensed with the rightsholder's permission -- IMT Atlantique / OceaniX holds both. The EUPL
+# Appendix lists CeCILL v2.0/v2.1 as compatible, not CeCILL-C, so no compatibility route was
+# relied on. See LICENSING.md and NOTICE. The previous `{ text = "MIT" }` was unsupported.
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
 dependencies = [
-    "torch>=2.0",
+    # The real window, and it is narrower than it looks: `monai>=1.5,<1.6` below pins
+    # torch>=2.4.1,<2.7.0. Declaring `torch>=2.0` let pip silently *downgrade* a newer torch
+    # already present in the environment -- and from the default PyPI index, i.e. pulling the
+    # ~2.5 GB CUDA wheels. Stated explicitly so resolution fails early and legibly instead.
+    "torch>=2.4.1,<2.7",
     "numpy>=1.24",
     "pyyaml>=6.0",
     "hydra-core>=1.3",
@@ -21,6 +34,15 @@ dependencies = [
     "pandas>=2.0",
     "netCDF4>=1.6",
     "dask>=2023.1",
+    # `obs/argo_virtual.py` imports `scipy.stats` at module level and `obs/pseudo_obs.py` uses
+    # `scipy.ndimage`; both are core, not optional. Undeclared until the first clean-environment CI
+    # run, which is exactly the kind of thing only a real install can find.
+    "scipy>=1.10",
+    # MONAI declares einops optional, but `DiffusionModelUNet` always builds an attention mid-block
+    # (`AttnMidBlock` -> `SpatialAttentionBlock` -> `SABlock` -> `einops.layers.torch.Rearrange`),
+    # so for this project it is not optional at all. Declared directly rather than via the
+    # `monai[einops]` extra, so the requirement stays visible if the trunk ever changes again.
+    "einops>=0.6",
     # the default trunk of the gridded models is MONAI's DiffusionModelUNet
     # (`models/ocean/nn/unet_monai.py`). The `<1.6` ceiling is load-bearing: monai 1.6.0 requires
     # torch>=2.8, 1.5.x pins torch>=2.4.1,<2.7.0 and leaves this project's torch alone.
@@ -74,7 +96,7 @@ force-exclude = true
 target-version = "py310"
 
 [tool.ruff.lint]
-# `oceanml3d-eval` runs ["E", "F", "I", "B", "UP"]. The same select here reports 148 pre-existing
+# `oceanml3d-eval` runs ["E", "F", "I", "B", "UP"]. The same select here reports 168 pre-existing
 # violations in the imported scientific code, so that set is the target, not the gate. What is
 # enforced today is ruff's default plus import sorting — the rename rewrote 455 import statements,
 # so keeping them sorted is worth a rule. Backlog measured 2026-09-14, to be worked down:

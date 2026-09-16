@@ -1,5 +1,132 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 0 — CI actually runs, EUPL-1.2, reproducible environments
+
+**Summary:** the verification net was inoperative and the licence claim was unsupported. Nothing
+else on the roadmap is worth doing until a push to this repository runs tests, so this lands first.
+Audited on `ca5277c`, i.e. after the MONAI trunk switch and the `legacy/` move.
+
+### CI never ran on this repository
+
+`.github/workflows/ci.yml` triggered on `master` plus `4dvarnet-fm-opencode`'s topic branches
+(`feat/qg-*`, `feat/l96-*`). The default branch here is **`main`**. The workflow therefore never
+fired — not on PR #1 (455 imports rewritten, 120 files transplanted), not on PR #3 (default trunk
+replaced, 143 renames). It now triggers on `main`, `feat/**` and `agents/**` — the last one matters,
+since the two PRs that changed the default trunk and moved the toy family were both on `agents/*`.
+
+`pr_llm_review.yml` is **removed** rather than fixed. It had the same dead trigger list, and it
+depends on secrets and a review account (`REVIEWER_GH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`,
+`rfablet-review`) that belong to `4dvarnet-fm-opencode`, not to this repository — so repairing its
+triggers would only have made it fail loudly on every PR. Reinstate it later if the review account
+is set up here.
+
+### ...and would not have covered the gridded half if it had
+
+The test job ran a hand-maintained list of 18 files: L96, QG, `test_direct_unet`, `test_vanilla_cfm`,
+`test_metrics`. **None of them touches the gridded half of the tree.** `tests/test_hydra_config.py`
+was on the list, but the gridded copy was renamed `test_hydra_config_ocean.py` during the transplant
+and was never added. The list is replaced by `pytest -m "not slow" -q` over all of `tests/`.
+
+Installation changes with it. The job installed a hand-written requirements list
+(`requirements.txt` + `hydra-core omegaconf pytorch-lightning`), which contains neither xarray,
+netCDF4, dask nor monai — the gridded tests could not have imported even if they had been listed.
+CI now installs the package (`pip install -e '.[dev,zarr]'`), which also exercises the packaging
+metadata, the console script and the `oceanml3d.models` entry points;
+`oceanml3d command=list-models` runs as a registry smoke check before pytest.
+
+### The torch window is narrower than it was declared
+
+`dependencies` said `torch>=2.0`, but `monai>=1.5,<1.6` — a hard dependency since MONAI's
+`DiffusionModelUNet` became the default trunk — pins `torch>=2.4.1,<2.7.0`. The real window is
+**2.4.1 to 2.6.0**, and nothing said so on the torch side. In an environment already carrying a
+newer torch, `pip install -e .` silently *downgraded* it, resolving from the default PyPI index,
+i.e. pulling the ~2.5 GB CUDA wheels. Now stated explicitly as `torch>=2.4.1,<2.7`, so resolution
+fails early and legibly.
+
+The same bound is applied in CI (`pip install 'torch>=2.4.1,<2.7' --index-url .../whl/cpu`, an
+unbounded install there would have been undone by the next step) with an assertion afterwards that
+the installed build is neither a CUDA one nor outside the window.
+
+### First clean-environment run: two undeclared dependencies
+
+The point of installing the package in CI instead of a hand-written requirements list was to find
+out what the metadata actually claims. It found two things immediately — 27 failures and 2 errors
+out of 824 selected tests, from exactly two missing names:
+
+* **`scipy`** — `obs/argo_virtual.py` imports `scipy.stats` at *module* level, and
+  `obs/pseudo_obs.py` uses `scipy.ndimage`. Both are core (`oceanml3d/obs/` is the OSSE simulator,
+  not an extra), and neither was declared. This broke `test_import_smoke`, both `test_osse_smoke`
+  fixtures, and `scripts/prepare/drifters_daily_maps.py`.
+* **`einops`** — never imported by this project. MONAI treats it as optional, but
+  `DiffusionModelUNet` *always* builds an attention mid-block
+  (`AttnMidBlock` → `SpatialAttentionBlock` → `SABlock` → `einops.layers.torch.Rearrange`), so
+  since the trunk switch it is not optional at all. This broke every MONAI trunk test
+  (`test_monai_unet2d`, 14), the legacy adapter tests (`test_monai_unet_adapter`, 10) and the two
+  `test_model_smoke` cases that build the default trunk.
+
+Both are now hard dependencies, in `pyproject.toml` and in the two conda files. `einops` is declared
+directly rather than through the `monai[einops]` extra, so the requirement stays visible if the
+trunk changes again.
+
+Worth stating plainly: these were latent before this PR, not caused by it. They were invisible
+because the project had only ever been installed into environments that already carried both — a
+`fdv` conda env on one cluster, and developer machines. A single clean install surfaced them in
+four minutes.
+
+### Licence: EUPL-1.2, after permission from the rightsholder
+
+`pyproject.toml` declared `license = { text = "MIT" }` with no `LICENSE` file present. Verified:
+
+* **`CIA-Oceanix/NOSC` is CeCILL-C** — `license.md`, 522 lines, copyright IMT Atlantique/OceaniX
+  (T. Picard, R. Fablet, S. Ouala, P. Haslée). Copyleft at file level, so the ~120 files transplanted
+  from it could not be re-licensed by this repository on its own authority.
+* **`CIA-Oceanix/4dvarnet-fm-opencode` states no licence at all** at `2c709f6`. The only CeCILL-C
+  mention in its tree is a research note about `4dvarnet-starter`/`4dvarnet-core`, the source of the
+  ported `GradSolver`/`ConvLstmGradModel`, not about the repository itself. No stated licence means
+  all rights reserved, which is stricter than CeCILL-C, not looser.
+
+The project now ships under **EUPL-1.2**. Not a compatibility argument: the EUPL Appendix lists
+CeCILL v2.0/v2.1 and **does not list CeCILL-C**, so no automatic route existed. What made it possible
+is that both upstream repositories have the same rightsholder — IMT Atlantique / OceaniX — who
+granted permission, which also settles the second source's silence.
+
+`LICENSE` carries the verbatim EUPL-1.2 text (SPDX license-list-data, sha256
+`57fb42fbcd0b037ce528ed8f72f1ec095d67bc6825ecf1448ff39be1fe68a4b4`). `NOTICE` carries copyright and
+contributors, including MONAI (Apache-2.0, a dependency, not vendored). `LICENSING.md` records the
+evidence, provenance by directory after the `legacy/` move, and three follow-ups: fill in the
+permission reference, add per-file SPDX headers, and give `oceanml3d-eval` the same treatment — it
+carries the same unsupported MIT declaration, including on `product_contract.py`, duplicated byte for
+byte across both repositories.
+
+### Environments
+
+`environment.yml` (GPU, `pytorch=2.6.*` + `pytorch-cuda=12.4`) and `environment-cpu.yml` describe a
+working environment for the first time. Until now the only such description was the hard-coded
+`/Odyssey/private/rfablet/miniforge3/envs/fdv/bin` PATH in 166 SLURM scripts — another user's
+environment on one cluster. Note for CUDA: torch 2.6 ships cu118/cu124/cu126 and no cu128, so the
+monai ceiling constrains the CUDA choice too.
+
+### Audit
+
+`docs/ROADMAP.md` (five lots) and `docs/AUDIT_ca5277c.md` (the delta after the MONAI switch and the
+`legacy/` move). Re-verified line by line at `ca5277c`: the four scale blockers and nine correctness
+bugs identified earlier are **all still present**, untouched by either agent PR — including
+`_has_target` scanning the whole training set at every `setup()` (`data/patches.py:82`),
+`predict_field` concatenating every prediction in RAM and silently mis-assembling under DDP,
+`prepare_observations` running on every rank (`cli.py:118`), `norm_stats.json` written and never read
+(`training/callbacks.py:33`), and `depth_index: 0` being falsy (`data/open.py:61`).
+
+Two new ones from the trunk switch: the default model went from ~18 M to ~224 M parameters with no
+run at full scale (validation was `experiment=smoke training=debug`, synthetic, CPU, 16×16 patches),
+and `test_train_predict_export` asserts only that the manifest and ten daily files exist — it passes
+on an all-zero product, which is exactly the state a freshly built MONAI trunk is in, by its own
+pinned test.
+
+Also: the ruff backlog comment said 148 pre-existing violations under the target
+`["E","F","I","B","UP"]` set; measured with ruff 0.16.7 and the file's own `ignore` list it is
+**168** — the per-rule breakdown in the same comment already summed to 168, only the headline was
+wrong.
+
 ## 2026-09-14: the toy / Lorenz / QG family moves to `oceanml3d/legacy/`
 
 **Summary:** the flow-matching and L96-4DVarNet code this repository grew out of is now in reserve
