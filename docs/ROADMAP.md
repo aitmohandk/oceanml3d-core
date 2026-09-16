@@ -345,6 +345,8 @@ Rien d'autre ne mérite d'être fait tant que la CI ne tourne pas.
 
 ### Lot 3 — Couverture (2–3 jours)
 
+- [x] **N2** : assertion de non-trivialité. `test_the_trunk_can_actually_fit_a_batch` (les deux troncs, non `slow`) et écart-type spatial non nul sur le produit exporté dans `test_train_predict_export`.
+
 - [ ] Paramétrer `test_model_smoke.py` sur `head ∈ {single, grouped, vertical_modes}`, `time_mode ∈ {channels, conv3d}`, `attention_levels ∈ {[], [2]}` — 12 combinaisons en forward seul, rapides.
 - [ ] Test de bout en bout `prepare-obs → train (1 époque) → predict → validate_manifest` sur données synthétiques, marqué `slow`, exécuté en CI nocturne.
 - [ ] Tests d'ordre et de bordure sur `reconstruct` (permutation, recouvrement insuffisant).
