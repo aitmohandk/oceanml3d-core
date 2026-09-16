@@ -1,7 +1,8 @@
 import numpy as np
+import pytest
 
 from oceanml3d.data.open import compute_norm_stats, open_variable_set
-from oceanml3d.data.patches import PatchArray, PatchIndex, PatchSpec
+from oceanml3d.data.patches import PatchAccumulator, PatchArray, PatchIndex, PatchSpec
 from oceanml3d.training.weights import patch_weight
 
 
@@ -90,3 +91,63 @@ def test_construction_does_not_use_the_per_patch_oracle(monkeypatch):
     assert 0 < len(pa) < len(pa.index)
     for i in range(len(pa)):
         assert np.isfinite(pa[i][[3, 4]]).any(), "a kept patch must hold a finite target"
+
+
+def test_accumulator_matches_reconstruct(variables, catalog):
+    """Streaming must be arithmetically identical to the all-at-once path, batch boundaries and all."""
+    from oceanml3d.data.open import open_variable_set
+
+    da = open_variable_set(variables, catalog, {"lat": slice(-5, 5), "lon": slice(-5, 5)}).sel(
+        time=slice("2019-01-01", "2019-01-12"))
+    spec = PatchSpec({"time": 5, "lat": 16, "lon": 16}, {"time": 1, "lat": 12, "lon": 12})
+    pa = PatchArray(da, spec)
+    items = np.stack([pa[i] for i in range(len(pa))])[:, variables.target_indices]
+    w = patch_weight("triangular", spec.patch, {"time": 0, "lat": 2, "lon": 2})
+
+    whole = pa.reconstruct(items, w, ["u", "v"])
+    acc = pa.accumulator(items.shape[1], w)
+    for start in range(0, len(items), 3):                      # fold in batches of three
+        acc.add_batch(start, items[start:start + 3])
+    streamed = acc.result(["u", "v"])
+
+    assert streamed.dims == whole.dims and list(streamed.channel.values) == ["u", "v"]
+    both = np.isfinite(whole.values) & np.isfinite(streamed.values)
+    assert both.any()
+    assert np.array_equal(np.isfinite(whole.values), np.isfinite(streamed.values))
+    assert np.allclose(whole.values[both], streamed.values[both], rtol=0, atol=0)
+
+
+def test_accumulator_refuses_a_partial_field(variables, catalog):
+    """The DDP failure mode, made reachable without DDP: `trainer.predict` shards the loader, so a
+    rank sees only part of the patches. Stitching that subset used to produce a plausible, wrong
+    field -- element `i` of whatever arrived was written to patch `i` of the domain."""
+    from oceanml3d.data.open import open_variable_set
+
+    da = open_variable_set(variables, catalog, {"lat": slice(-5, 5), "lon": slice(-5, 5)}).sel(
+        time=slice("2019-01-01", "2019-01-12"))
+    spec = PatchSpec({"time": 5, "lat": 16, "lon": 16}, {"time": 1, "lat": 12, "lon": 12})
+    pa = PatchArray(da, spec)
+    items = np.stack([pa[i] for i in range(len(pa))])[:, variables.target_indices]
+
+    acc = pa.accumulator(items.shape[1])
+    acc.add_batch(0, items[: len(items) // 2])                 # only "rank 0"'s share
+    assert acc.missing
+    with pytest.raises(RuntimeError, match="never folded in"):
+        acc.result(["u", "v"])
+
+
+def test_accumulator_rejects_a_repeated_or_out_of_range_patch(variables, catalog):
+    from oceanml3d.data.open import open_variable_set
+
+    da = open_variable_set(variables, catalog, {"lat": slice(-5, 5), "lon": slice(-5, 5)}).sel(
+        time=slice("2019-01-01", "2019-01-06"))
+    spec = PatchSpec({"time": 3, "lat": 16, "lon": 16}, {"time": 1, "lat": 12, "lon": 12})
+    pa = PatchArray(da, spec)
+    item = pa[0][variables.target_indices]
+    acc = pa.accumulator(item.shape[0])
+    acc.add(0, item)
+    with pytest.raises(ValueError, match="twice"):
+        acc.add(0, item)
+    with pytest.raises(IndexError):
+        acc.add(len(pa), item)
+    assert isinstance(acc, PatchAccumulator)

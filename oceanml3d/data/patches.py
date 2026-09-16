@@ -158,27 +158,96 @@ class PatchArray:
             item = (item - mean[:, None, None, None]) / std[:, None, None, None]
         return item
 
+    def accumulator(self, n_vars: int, weight: np.ndarray | None = None,
+                    dtype: np.dtype | str = np.float64) -> PatchAccumulator:
+        """A :class:`PatchAccumulator` over this array's domain."""
+        return PatchAccumulator(self, n_vars, weight, dtype)
+
     def reconstruct(self, items: np.ndarray, weight: np.ndarray | None = None,
-                    variable_names: list[str] | None = None) -> xr.DataArray:
+                    variable_names: list[str] | None = None,
+                    dtype: np.dtype | str = np.float64) -> xr.DataArray:
         """Merge patches ``(n_patches, n_vars, time, lat, lon)`` back onto the domain.
 
         Overlapping regions are averaged with ``weight`` (shape ``(time, lat, lon)``),
         typically :func:`oceanml3d.training.weights.patch_weight`.
+
+        Requires every patch at once. Prefer :meth:`accumulator` when the patches arrive one batch
+        at a time -- holding them all is what made an export of ``surface_currents_15m`` peak around
+        37 GB. This method is now a thin wrapper over the streaming path, so the two cannot drift.
         """
-        n_vars = items.shape[1]
-        full_shape = (n_vars, *(self.da.sizes[d] for d in DIMS))
-        acc = np.zeros(full_shape, dtype=np.float64)
-        cnt = np.zeros(full_shape, dtype=np.float64)
-        w = np.ones(items.shape[2:], dtype=np.float64) if weight is None else np.asarray(weight, dtype=np.float64)
-        for i, item in enumerate(items):
-            sl = self.slices(i)
-            region = (slice(None), sl["time"], sl["lat"], sl["lon"])
-            acc[region] += np.nan_to_num(item) * w
-            cnt[region] += w * np.isfinite(item)
+        acc = self.accumulator(items.shape[1], weight, dtype)
+        acc.add_batch(0, items)
+        return acc.result(variable_names)
+
+
+class PatchAccumulator:
+    """Weighted patch stitching, folding each patch in as it arrives.
+
+    Same arithmetic as :meth:`PatchArray.reconstruct` -- a weighted mean over the patches covering
+    each cell, counting only finite contributions -- but the caller never has to materialise the
+    whole ``(n_patches, n_vars, time, lat, lon)`` stack. Peak memory becomes the size of the output
+    field, independent of the number of patches.
+
+    :meth:`result` refuses to produce a field unless every patch of the domain has been folded in.
+    That is deliberate: under a distributed ``Trainer``, ``trainer.predict`` shards the dataloader,
+    each rank sees only its own slice, and the old code mapped element *i* of whatever it got onto
+    patch *i* of the domain -- assembling a plausible, silently wrong field. The count check turns
+    that into an error, and it does so without needing a multi-GPU test to catch it.
+    """
+
+    def __init__(self, patches: PatchArray, n_vars: int, weight: np.ndarray | None = None,
+                 dtype: np.dtype | str = np.float64):
+        self.patches = patches
+        self.n_vars = int(n_vars)
+        shape = (self.n_vars, *(patches.da.sizes[d] for d in DIMS))
+        self.acc = np.zeros(shape, dtype=dtype)
+        self.cnt = np.zeros(shape, dtype=dtype)
+        patch_shape = tuple(patches.spec.patch[d] for d in DIMS)
+        self.w = (np.ones(patch_shape, dtype=dtype) if weight is None
+                  else np.asarray(weight, dtype=dtype))
+        if self.w.shape != patch_shape:
+            raise ValueError(f"weight shape {self.w.shape} does not match the patch {patch_shape}")
+        self._seen: set[int] = set()
+
+    def add(self, i: int, item: np.ndarray) -> None:
+        """Fold patch ``i`` (``(n_vars, time, lat, lon)``) in. ``i`` indexes this array's kept
+        patches, i.e. the same numbering as :meth:`PatchArray.slices`."""
+        if not 0 <= i < len(self.patches):
+            raise IndexError(f"patch index {i} out of range for {len(self.patches)} patches")
+        if i in self._seen:
+            raise ValueError(f"patch {i} folded in twice")
+        if item.shape[0] != self.n_vars:
+            raise ValueError(f"expected {self.n_vars} variables, got {item.shape[0]}")
+        sl = self.patches.slices(i)
+        region = (slice(None), sl["time"], sl["lat"], sl["lon"])
+        self.acc[region] += np.nan_to_num(item) * self.w
+        self.cnt[region] += self.w * np.isfinite(item)
+        self._seen.add(i)
+
+    def add_batch(self, start: int, items: np.ndarray) -> None:
+        """Fold in ``items[k]`` as patch ``start + k``; the shape a ``DataLoader`` batch has when
+        the loader is not shuffled."""
+        for k, item in enumerate(items):
+            self.add(start + k, item)
+
+    @property
+    def missing(self) -> list[int]:
+        return sorted(set(range(len(self.patches))) - self._seen)
+
+    def result(self, variable_names: list[str] | None = None) -> xr.DataArray:
+        missing = self.missing
+        if missing:
+            raise RuntimeError(
+                f"{len(missing)} of {len(self.patches)} patches were never folded in "
+                f"(first missing: {missing[:5]}). Reconstructing from a subset silently produces a "
+                f"wrong field. The usual cause is a distributed Trainer: trainer.predict shards the "
+                f"dataloader across ranks, so each rank only sees its own share. Run the export on a "
+                f"single device."
+            )
         with np.errstate(invalid="ignore", divide="ignore"):
-            out = acc / cnt
-        names = variable_names or [f"v{i}" for i in range(n_vars)]
+            out = self.acc / self.cnt
+        names = variable_names or [f"v{i}" for i in range(self.n_vars)]
         return xr.DataArray(
             out.astype(np.float32), dims=("channel", *DIMS),
-            coords={"channel": names, **{d: self.da[d] for d in DIMS}},
+            coords={"channel": names, **{d: self.patches.da[d] for d in DIMS}},
         )
