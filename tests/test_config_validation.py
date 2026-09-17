@@ -147,7 +147,12 @@ def test_a_prepare_output_need_not_exist_but_must_be_declared():
     catalog = _catalog_from("local")
     cfg = _cfg()
     problems = validate_config(cfg, catalog, build_variables(cfg))
-    assert not any("data.prepare" in x and "does not exist" in x for x in problems), problems
+    # Only the *outputs* are exempt. `truth` and `profiles` are inputs to the simulation and are
+    # expected to be missing here, since this catalog deliberately points at nothing -- as is
+    # `variable 'ssh_obs': source`, which reads one of those outputs.
+    assert not any(".output" in x and "does not exist" in x for x in problems), problems
+    assert any("data.prepare.pseudo_obs.truth" in x and "does not exist" in x for x in problems), \
+        "inputs to the simulation must still be checked for existence"
 
     cfg = _cfg("data.prepare.pseudo_obs.ssh.output=not_a_key")
     problems = validate_config(cfg, catalog, build_variables(cfg))
