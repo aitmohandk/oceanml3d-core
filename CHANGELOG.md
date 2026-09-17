@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 3 — the catalog is complete, and the ablations are tested
+
+### The OSSE-3D task could not run anywhere, and validation said nothing
+
+`config/data/osse3d_gs21.yaml` referenced seven catalog keys that **no shipped site file defined**:
+`glorys_gs_surface`, `glorys_gs_multidepth`, `bathy_gs`, `argo_profiles_gs`, `pseudo_obs_ssh_gs`,
+`pseudo_obs_sst_gs`, `argo_virtual_thetao_gs21`. The 64-target experiment was undeliverable as
+shipped, and `lorenz96` was missing too.
+
+It stayed invisible because `validate_config` resolved `spec.source` and nothing else — not
+`spec.mask`, and not the `data.prepare` block at all, which is where four of the seven appear. Both
+are now checked. The three keys `prepare-obs` *writes* are checked for declaration but not for
+existence: they have to be in the catalog **before** the simulation runs, since that is how it knows
+where to put them, which is also why the CLI validates twice.
+
+`config/paths/local.yaml` now defines all sixteen keys the gridded configs use.
+`test_every_shipped_experiment_resolves_against_the_local_catalog` composes all ten gridded
+experiments against it, with `root` pointed at a directory that does not exist, so the *keys* are
+pinned without the test needing any data.
+
+**`config/paths/odyssey.yaml` is deliberately not touched** — its paths are someone else's layout on
+someone else's machine, and inventing them would be worse than leaving the gap visible. Its owner,
+and whoever writes `datarmor.yaml`, has the list. `test_a_site_file_does_not_invent_keys_of_its_own`
+catches a site file that adds vocabulary rather than paths, which is how typos get in.
+
+### The ablation knobs had no tests
+
+`head`, `time_mode` and `attention_levels` are what `ablation=heads`, `ablation=vertical_modes` and
+`ablation=temporal_conv3d` vary, and nothing exercised them: `attention_levels` got a test with the
+MONAI trunk, the rest got none. A head that lays its channels out wrongly still returns a tensor of
+plausible rank, so the shape, per combination, is the check that matters.
+
+Six combinations of `head` x `time_mode` now run, on a variable set where both targets share a group
+so that `grouped` builds a genuine multi-level head and `vertical_modes` has a basis to project
+onto. Plus the two rejections that would otherwise surface as silent reshapes: an unknown head, and
+an EOF basis whose level count disagrees with the configuration.
+
 ## 2026-09-15: roadmap lot 2 (3/3) — one process simulates the observations, and the jitter is centred
 
 ### P1-1 — `prepare-obs` ran on every rank

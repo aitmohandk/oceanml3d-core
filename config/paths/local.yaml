@@ -10,3 +10,19 @@ datasets:
   drifters_aoml_15m_4th: {path: drifters/daily_uv/drifters_uv_aoml_15m_4th.nc, source: AOML drogued, daily 1/4 deg bins}
   drifters_aoml_00m_4th: {path: drifters/daily_uv/drifters_uv_aoml_00m_4th.nc}
   drifters_cmems_15m_4th: {path: drifters/daily_uv/drifters_uv_cmems_15m_4th.nc}
+
+  # --- Lorenz-96 through the gridded CLI (config/data/lorenz96.yaml) ---
+  lorenz96:             {path: toy/lorenz96.nc, source: scripts/make_toy_data.py}
+
+  # --- OSSE-3D, Gulf Stream (config/data/osse3d_gs21.yaml) ---
+  # Truth and statics: produced by the recipes in scripts/prepare/.
+  glorys_gs_multidepth: {path: glorys/glorys_gs_multidepth_2010-2020.nc, source: CMEMS GLORYS12 reanalysis}
+  glorys_gs_surface:    {path: glorys/glorys_gs_surface_2010-2020.nc, source: CMEMS GLORYS12 reanalysis, surface}
+  bathy_gs:             {path: bathy/bathymetry_gs.nc, source: GEBCO on the GLORYS12 grid}
+  argo_profiles_gs:     {path: argo/argo_profiles_gs.csv, source: scripts/prepare/argo_profiles.py}
+  # Written by `oceanml3d command=prepare-obs`. They have to be declared *before* it runs -- that is
+  # how the simulator knows where to put them -- which is why the CLI validates twice: once without
+  # the catalog, then prepare-obs, then once with it.
+  pseudo_obs_ssh_gs:        {path: osse/pseudo_obs_ssh_gs.nc, source: simulated (oceanml3d command=prepare-obs)}
+  pseudo_obs_sst_gs:        {path: osse/pseudo_obs_sst_gs.nc, source: simulated (oceanml3d command=prepare-obs)}
+  argo_virtual_thetao_gs21: {path: osse/argo_virtual_thetao_gs21.nc, source: simulated (oceanml3d command=prepare-obs)}
