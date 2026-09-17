@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 3 (2/2) — the whole gridded path in one test, and a job that runs it
+
+### The end-to-end chain was covered step by step and never as a chain
+
+`prepare-obs`, opening, patching, the model forward, stitching, export and the manifest each had
+tests. Nothing ran them in sequence, so nothing could catch a product that was well-formed and
+empty of information.
+
+`test_osse_train_predict_export_produces_a_valid_non_trivial_product` runs the lot on synthetic
+OSSE-3D data: simulate the observing system, train one epoch, predict, stitch, export, and then
+check three things the individual tests cannot:
+
+* the manifest satisfies `validate_manifest(..., strict=True)` — the contract shared byte for byte
+  with `oceanml3d-eval`, so a product that passes here is one that repository will accept;
+* every target varies in space. A trunk stuck at MONAI's zero initialisation exports its per-channel
+  mean, which is finite, correctly shaped, and spatially constant — the failure mode that "the file
+  exists" can never see;
+* each variable carries the `standard_name` and `units` the variable set declares, since a target
+  without them cannot be scored.
+
+### ...and the slow tests ran nowhere
+
+`ci.yml` runs `-m "not slow"`, which leaves 45 tests deselected on every push. That is how
+`test_train_predict_export` came to sit unexercised: written, correct, and never called by any job.
+
+`nightly.yml` runs the full suite daily at 03:17 UTC, with `--durations=25` so the cost of the slow
+path stays visible, and `workflow_dispatch` with a `ref` input so it can be pointed at a branch
+before merging something expensive. On failure it says plainly that the fast CI does not cover these
+tests, so a red nightly can predate the day's commits.
+
 ## 2026-09-15: roadmap lot 3 — the catalog is complete, and the ablations are tested
 
 ### The OSSE-3D task could not run anywhere, and validation said nothing

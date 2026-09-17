@@ -1,0 +1,49 @@
+name: Nightly (slow tests)
+
+# `ci.yml` runs `-m "not slow"` on every push, which leaves the 45 deselected tests -- the
+# end-to-end ones, and the long numerical checks -- unrun anywhere. That is how
+# `test_train_predict_export` sat unexercised: it was written, it was correct, and no job ever
+# called it. This workflow is the place those run.
+on:
+  schedule:
+    - cron: "17 3 * * *"        # 03:17 UTC, off the hour to avoid the scheduling rush
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or SHA to run against"
+        required: false
+        default: ""
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  slow:
+    name: pytest (everything, including slow)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: Install (CPU torch inside the monai window, then the package itself)
+        run: |
+          python -m pip install -U pip
+          # The upper bound is not optional: monai>=1.5,<1.6 pins torch<2.7, so an unbounded install
+          # here would be undone by the next step, resolving from the default index and pulling the
+          # CUDA wheels this line exists to avoid.
+          pip install 'torch>=2.4.1,<2.7' --index-url https://download.pytorch.org/whl/cpu
+          pip install -e '.[dev,zarr]'
+      - name: Run the whole suite
+        run: pytest -q --durations=25
+      - name: Report
+        if: failure()
+        run: |
+          echo "::warning::The nightly suite failed. The fast CI does not cover these tests, so a"
+          echo "::warning::failure here can predate today's commits -- check the durations and the"
+          echo "::warning::last nightly that passed before assuming a regression."
