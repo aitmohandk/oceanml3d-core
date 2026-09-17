@@ -177,3 +177,90 @@ def test_passthrough_rejects_unknown_source(variables):
     w = np.ones((5, 16, 16), np.float32)
     with pytest.raises(ValueError, match="not input variables"):
         Passthrough(variables, 5, w, source={"u_drifter": "not_a_variable"})
+
+
+def _grouped(variables, group="uv"):
+    """The same channel layout, with both targets in one group -- so `grouped` builds a real
+    multi-level head and `vertical_modes` has a basis to project onto. Only `group` changes, so the
+    datamodule's batches stay valid."""
+    import dataclasses
+
+    from oceanml3d.variables import VariableSet
+
+    return VariableSet([dataclasses.replace(s, group=group) if s.is_target else s
+                        for s in variables.specs])
+
+
+@pytest.mark.parametrize("time_mode", ["channels", "conv3d"])
+@pytest.mark.parametrize("head", ["single", "grouped", "vertical_modes"])
+def test_every_head_and_time_mode_produces_the_right_shape(variables, datamodule, tmp_path, head, time_mode):
+    """`head` and `time_mode` are what the OSSE-3D ablations vary -- `ablation=heads`,
+    `ablation=vertical_modes`, `ablation=temporal_conv3d` -- and nothing exercised them. A head that
+    lays its channels out wrongly still returns a tensor of plausible rank, so shape is the check
+    that matters, per combination."""
+    import numpy as np
+
+    from oceanml3d.models.ocean.nosc.model import NOSCUNet
+    from oceanml3d.training.weights import patch_weight
+
+    vs = _grouped(variables)
+    n_targets = len(vs.targets)
+    window, kw = 5, {}
+    if head == "vertical_modes":
+        # a two-mode basis over the group's two levels; components is (K, n_levels)
+        npz = tmp_path / "uv_eofs.npz"
+        np.savez(npz, components=np.eye(n_targets, dtype="float32"))
+        kw["mode_specs"] = {"uv": {"npz": str(npz), "n_modes": n_targets}}
+
+    w = patch_weight("constant", {"time": window, "lat": 16, "lon": 16}, {"time": 0, "lat": 2, "lon": 2})
+    model = NOSCUNet(vs, window, w, widths=(8, 16), optimizer_kw={"lr": 1e-3, "t_max": 1},
+                     norm_stats=datamodule.norm_stats(), trunk="nosc",
+                     head=head, time_mode=time_mode, neck_channels=16, **kw)
+
+    batch = next(iter(datamodule.train_dataloader()))
+    out = model(batch)
+    assert out.shape == (batch.shape[0], n_targets, window, batch.shape[-2], batch.shape[-1])
+    assert torch.isfinite(out).all()
+
+
+@pytest.mark.parametrize("attention_levels", [(), (1,)])
+def test_attention_levels_do_not_change_the_output_shape(variables, datamodule, attention_levels):
+    from oceanml3d.models.ocean.nosc.model import NOSCUNet
+    from oceanml3d.training.weights import patch_weight
+
+    w = patch_weight("constant", {"time": 5, "lat": 16, "lon": 16}, {"time": 0, "lat": 2, "lon": 2})
+    model = NOSCUNet(variables, 5, w, widths=(8, 16), optimizer_kw={"lr": 1e-3, "t_max": 1},
+                     norm_stats=datamodule.norm_stats(), trunk="nosc",
+                     attention_levels=attention_levels, attention_heads=2)
+    batch = next(iter(datamodule.train_dataloader()))
+    out = model(batch)
+    assert out.shape[1] == len(variables.targets)
+    assert torch.isfinite(out).all()
+
+
+def test_an_unknown_head_is_rejected(variables, datamodule):
+    from oceanml3d.models.ocean.nosc.model import NOSCUNet
+    from oceanml3d.training.weights import patch_weight
+
+    w = patch_weight("constant", {"time": 5, "lat": 16, "lon": 16}, {"time": 0, "lat": 2, "lon": 2})
+    with pytest.raises(ValueError, match="unknown head"):
+        NOSCUNet(variables, 5, w, widths=(8, 16), optimizer_kw={"lr": 1e-3, "t_max": 1},
+                 norm_stats=datamodule.norm_stats(), trunk="nosc", head="pyramid")
+
+
+def test_a_vertical_basis_with_the_wrong_number_of_levels_is_rejected(variables, datamodule, tmp_path):
+    """The basis and the config can disagree about how many levels a group has; that must not be
+    discovered as a silent reshape."""
+    import numpy as np
+
+    from oceanml3d.models.ocean.nosc.model import NOSCUNet
+    from oceanml3d.training.weights import patch_weight
+
+    vs = _grouped(variables)
+    npz = tmp_path / "wrong.npz"
+    np.savez(npz, components=np.eye(len(vs.targets) + 3, dtype="float32"))
+    w = patch_weight("constant", {"time": 5, "lat": 16, "lon": 16}, {"time": 0, "lat": 2, "lon": 2})
+    with pytest.raises(ValueError, match="EOF basis has"):
+        NOSCUNet(vs, 5, w, widths=(8, 16), optimizer_kw={"lr": 1e-3, "t_max": 1},
+                 norm_stats=datamodule.norm_stats(), trunk="nosc", head="vertical_modes",
+                 mode_specs={"uv": {"npz": str(npz), "n_modes": 2}})

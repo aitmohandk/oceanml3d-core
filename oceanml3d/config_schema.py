@@ -133,15 +133,45 @@ def validate_config(cfg: DictConfig, catalog=None, variables=None) -> list[str]:
                 p.append(f"variable '{spec.name}': depth_index must be >= 0")
     if catalog is not None and variables is not None:
         for spec in variables:
-            try:
-                path = catalog.resolve(spec.source)
-            except KeyError:
-                p.append(f"variable '{spec.name}': source '{spec.source}' is not in the catalog (paths=<site>)")
-                continue
-            if not path.exists():
-                p.append(f"variable '{spec.name}': {path} does not exist "
-                         f"(run the prepare recipes, or `oceanml3d command=prepare-obs`)")
+            _check_key(p, catalog, spec.source, f"variable '{spec.name}': source")
+            if spec.mask:
+                # Masks were never resolved here, so an unknown mask key only surfaced deep inside
+                # open_variable, after the run had started.
+                _check_key(p, catalog, spec.mask, f"variable '{spec.name}': mask")
+
+    # The observing-system simulation names catalog keys too -- including its *outputs*, which must
+    # be declared before `prepare-obs` runs, since that is how the simulator knows where to write.
+    # Nothing checked them, which is why config/data/osse3d_gs21.yaml could reference seven keys no
+    # shipped site file defined and still pass validation.
+    if catalog is not None and "prepare" in d:
+        prep = OmegaConf.to_container(d.prepare, resolve=True) or {}
+        po = prep.get("pseudo_obs") or {}
+        for entry in ([po] if "truth" in po else [v for v in po.values() if v]):
+            for field in ("truth", "real_mask"):
+                if entry.get(field):
+                    _check_key(p, catalog, entry[field], f"data.prepare.pseudo_obs.{field}")
+            if entry.get("output"):
+                _check_key(p, catalog, entry["output"], "data.prepare.pseudo_obs.output",
+                           must_exist=False)
+        va = prep.get("virtual_argo") or {}
+        for field in ("truth", "profiles"):
+            if va.get(field):
+                _check_key(p, catalog, va[field], f"data.prepare.virtual_argo.{field}")
+        if va.get("output"):
+            _check_key(p, catalog, va["output"], "data.prepare.virtual_argo.output", must_exist=False)
     return p
+
+
+def _check_key(problems: list[str], catalog, key: str, what: str, must_exist: bool = True) -> None:
+    """``must_exist=False`` for keys naming a file the run is going to *produce*."""
+    try:
+        path = catalog.resolve(key)
+    except KeyError:
+        problems.append(f"{what} '{key}' is not in the catalog (paths=<site>)")
+        return
+    if must_exist and not path.exists():
+        problems.append(f"{what}: {path} does not exist "
+                        f"(run the prepare recipes, or `oceanml3d command=prepare-obs`)")
 
 
 def check_config(cfg: DictConfig, catalog=None, variables=None) -> None:

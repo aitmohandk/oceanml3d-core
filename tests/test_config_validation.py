@@ -88,3 +88,67 @@ def test_overlap_smaller_than_twice_the_crop_is_rejected():
 
     cfg = _cfg("data.stride.lat=136")           # overlap 8 == 2 x 4: the shipped setting
     assert validate_config(cfg, variables=build_variables(cfg)) == []
+
+
+GRIDDED_EXPERIMENTS = ["nosc_15m_duacs", "nosc_15m_neurost_sst", "nosc_00m_duacs",
+                       "osse3d_gs21_multivar_unet", "osse3d_gs21_surface_only",
+                       "fourdvarnet_ssh_osse", "lorenz96_unet", "lorenz96_enkf",
+                       "smoke", "osse3d_smoke"]
+
+
+def _catalog_from(site: str):
+    """The site's catalog with every path pointed at a directory that does not exist, so only the
+    *key* lookups matter and the test does not need the data."""
+    import yaml
+
+    from oceanml3d.catalog import Catalog
+
+    doc = yaml.safe_load(open(f"{CONFIG_DIR}/paths/{site}.yaml"))
+    return Catalog(doc.get("datasets", {}), root="/nonexistent-on-purpose")
+
+
+def test_every_shipped_experiment_resolves_against_the_local_catalog():
+    """`config/data/osse3d_gs21.yaml` referenced seven keys that no shipped site file defined, so
+    that experiment could not run anywhere as delivered -- and nothing said so, because the
+    validator only resolved `spec.source` and ignored masks and the `prepare` block entirely."""
+    catalog = _catalog_from("local")
+    for xp in GRIDDED_EXPERIMENTS:
+        with initialize_config_dir(version_base="1.3", config_dir=CONFIG_DIR):
+            cfg = compose(config_name="main", overrides=[f"experiment={xp}"])
+        unknown = [x for x in validate_config(cfg, catalog, build_variables(cfg))
+                   if "not in the catalog" in x]
+        assert unknown == [], f"{xp}: {unknown}"
+
+
+def test_a_site_file_does_not_invent_keys_of_its_own():
+    """Site files differ in paths, not in vocabulary: a key only one of them knows is a typo, or a
+    key the others silently lack."""
+    import glob
+    import os
+
+    reference = set(_catalog_from("local").entries)
+    for path in sorted(glob.glob(f"{CONFIG_DIR}/paths/*.yaml")):
+        site = os.path.splitext(os.path.basename(path))[0]
+        extra = set(_catalog_from(site).entries) - reference
+        assert extra == set(), f"{site}.yaml defines keys local.yaml does not: {sorted(extra)}"
+
+
+def test_an_unknown_mask_key_is_reported():
+    catalog = _catalog_from("local")
+    # `+` because Hydra composes in struct mode: `mask` is not declared on this variable
+    cfg = _cfg("+data.variables.ssh_obs.mask=not_a_key")
+    problems = validate_config(cfg, catalog, build_variables(cfg))
+    assert any("mask 'not_a_key' is not in the catalog" in x for x in problems), problems
+
+
+def test_a_prepare_output_need_not_exist_but_must_be_declared():
+    """`prepare-obs` writes to catalog keys, so they must be declared before it runs -- but
+    requiring the file to exist would make validation impossible before the first run."""
+    catalog = _catalog_from("local")
+    cfg = _cfg()
+    problems = validate_config(cfg, catalog, build_variables(cfg))
+    assert not any("data.prepare" in x and "does not exist" in x for x in problems), problems
+
+    cfg = _cfg("data.prepare.pseudo_obs.ssh.output=not_a_key")
+    problems = validate_config(cfg, catalog, build_variables(cfg))
+    assert any("pseudo_obs.output 'not_a_key' is not in the catalog" in x for x in problems), problems
