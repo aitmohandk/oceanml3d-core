@@ -50,3 +50,32 @@ def test_jitter_stays_in_domain(variables, catalog):
     shapes = {pa[i].shape for i in range(len(pa))}
     assert shapes == {(len(variables), 5, 16, 16)}
     assert isinstance(da, xr.DataArray)
+
+
+def test_jitter_is_centred_not_forward_only():
+    """The offset used to be drawn from [0, stride]: forward only, so the leading edge of the domain
+    was under-sampled and the trailing edge over-sampled, and an offset of exactly `stride`
+    reproduced the next patch."""
+    import numpy as np
+    import xarray as xr
+
+    from oceanml3d.data.patches import PatchArray, PatchSpec
+
+    n = 60
+    da = xr.DataArray(np.zeros((1, n, 8, 8), dtype="float32"), dims=("channel", "time", "lat", "lon"),
+                      coords={"channel": ["a"], "time": np.arange(n),
+                              "lat": np.arange(8.0), "lon": np.arange(8.0)})
+    spec = PatchSpec({"time": 10, "lat": 8, "lon": 8}, {"time": 10, "lat": 8, "lon": 8})
+    pa = PatchArray(da, spec, jitter=True, seed=0)
+
+    middle = pa.slices(2)                       # a window with room on both sides
+    offsets = {pa._jittered(middle)["time"].start - middle["time"].start for _ in range(400)}
+    assert min(offsets) < 0, f"never shifted backwards: {sorted(offsets)}"
+    assert max(offsets) > 0, f"never shifted forwards: {sorted(offsets)}"
+    assert max(abs(o) for o in offsets) <= spec.stride["time"] // 2
+
+    first, last = pa.slices(0), pa.slices(len(pa.index) - 1)
+    for sl in (first, last):
+        for _ in range(200):
+            j = pa._jittered(sl)
+            assert 0 <= j["time"].start and j["time"].stop <= n, "jitter left the domain"

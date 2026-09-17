@@ -168,13 +168,36 @@ def main(cfg: DictConfig) -> None:
 
 
 def prepare_observations(cfg: DictConfig, catalog: Catalog) -> None:
-    """Observation-system simulation declared in ``data.prepare`` (idempotent: skips existing outputs)."""
+    """Observation-system simulation declared in ``data.prepare``.
+
+    Idempotent (existing outputs are skipped) and **rank-safe**. This runs from ``main()``, before a
+    Trainer exists, so Lightning's ``prepare_data`` hook -- which would be the idiomatic place -- is
+    not available: ``dm.setup("fit")`` needs the files before ``trainer.fit`` is ever called. Under
+    DDP the script is relaunched once per rank, so all of them reach this point at the same time.
+
+    One process simulates and the others wait for the result. Skipping on existence is not enough on
+    its own: the existence test passes the moment the first writer creates the file, well before it
+    has finished filling it. The writes are therefore atomic (see :mod:`oceanml3d.io`), so a waiting
+    rank sees either nothing or a complete file.
+    """
+    from oceanml3d.io import global_rank_env, is_global_zero, wait_for
     from oceanml3d.obs.argo_virtual import build_virtual_argo
     from oceanml3d.obs.pseudo_obs import prepare_pseudo_obs
 
     prep = OmegaConf.to_container(cfg.data.prepare, resolve=True)
     po = prep.get("pseudo_obs") or {}
     entries = [po] if "truth" in po else [v for v in po.values() if v]
+    va = prep.get("virtual_argo")
+
+    declared = [catalog.resolve(e["output"]) for e in entries]
+    if va:
+        declared.append(catalog.resolve(va["output"]))
+    if not is_global_zero():
+        print(f"[oceanml3d] rank {global_rank_env()}: waiting for the observation simulation "
+              f"produced by rank 0 ({len(declared)} file(s))")
+        wait_for(declared, what="simulated observations")
+        return
+
     for e in entries:
         out = prepare_pseudo_obs(catalog.resolve(e["truth"]), e["truth_var"], catalog.resolve(e["output"]),
                                  missions=e.get("missions"),
@@ -183,7 +206,6 @@ def prepare_observations(cfg: DictConfig, catalog: Catalog) -> None:
                                  historical=e.get("historical", False), per_mission=e.get("per_mission", False),
                                  depth_index=e.get("depth_index"), clouds=e.get("clouds"))
         print(f"pseudo-obs: {out}")
-    va = prep.get("virtual_argo")
     if va and not catalog.resolve(va["output"]).exists():
         import pandas as pd
         profiles_path = catalog.resolve(va["profiles"])

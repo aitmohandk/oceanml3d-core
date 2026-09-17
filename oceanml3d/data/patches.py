@@ -69,9 +69,9 @@ class PatchArray:
                  norm_stats: tuple[np.ndarray, np.ndarray] | None = None,
                  drop_all_nan_targets: list[int] | None = None,
                  jitter: bool = False, augmentations: list | None = None, seed: int | None = None):
-        """``jitter=True`` shifts each window by a random offset in ``[0, stride)`` at every access
-        (moving patches: NOSC ``contrib/moving_patches``); ``augmentations`` are applied before
-        normalisation. Both are meant for the train split only."""
+        """``jitter=True`` shifts each window by a random offset of up to half a stride in either
+        direction at every access (moving patches: NOSC ``contrib/moving_patches``);
+        ``augmentations`` are applied before normalisation. Both are meant for the train split only."""
         if tuple(da.dims) != ("channel", *DIMS):
             raise ValueError(f"expected dims ('channel', 'time', 'lat', 'lon'), got {da.dims}")
         self.da = da
@@ -141,10 +141,19 @@ class PatchArray:
         return {d: self.da[d].values[sl[d]] for d in DIMS}
 
     def _jittered(self, sl: dict[str, slice]) -> dict[str, slice]:
+        """Shift the window by up to half a stride, in either direction.
+
+        The offset used to be drawn from ``[0, stride]`` -- forward only. Over an epoch that biases
+        every window towards later indices, so the leading edge of the domain is under-sampled and
+        the trailing edge over-sampled; and an offset of exactly ``stride`` reproduces the next
+        patch. Half a stride each way keeps the union of the sampled windows centred on the grid,
+        and each bound is clipped to the room actually available on that side.
+        """
         out = {}
         for d, s in sl.items():
-            room = self.da.sizes[d] - s.stop
-            off = int(self._rng.integers(0, min(self.spec.stride[d], room) + 1)) if room > 0 else 0
+            half = self.spec.stride[d] // 2
+            lo, hi = -min(half, s.start), min(half, self.da.sizes[d] - s.stop)
+            off = int(self._rng.integers(lo, hi + 1)) if hi > lo else 0
             out[d] = slice(s.start + off, s.stop + off)
         return out
 
