@@ -19,6 +19,7 @@ import pandas as pd
 import xarray as xr
 
 from oceanml3d.data.open import normalise_dims
+from oceanml3d.io import write_netcdf_atomic
 from oceanml3d.obs.missions import HISTORICAL, MISSIONS, SIX_SAT_NADIR, validate_missions
 from oceanml3d.obs.sampling import rasterize_day
 
@@ -110,8 +111,7 @@ def make_pseudo_obs(truth: str | Path, truth_var: str, mask: xr.Dataset | str | 
                      coords={c: da.coords[c] for c in ("time", "lat", "lon")},
                      attrs={"source_truth": str(truth), "source_var": truth_var, "noise_std": float(noise_std),
                             "noise_seed": int(seed), "mask_source": mds.attrs.get("source", "")})
-    output.parent.mkdir(parents=True, exist_ok=True)
-    out.to_netcdf(output)
+    write_netcdf_atomic(out, output)
     return output
 
 
@@ -132,14 +132,13 @@ def prepare_pseudo_obs(truth: str | Path, truth_var: str, output: str | Path, ma
             mask = build_cloud_mask_dataset(truth, **clouds) if real_mask is None else build_mask_dataset(truth, real_mask=real_mask)
         else:
             mask = build_mask_dataset(truth, missions, real_mask, historical=historical, per_mission=per_mission)
-        mask_output.parent.mkdir(parents=True, exist_ok=True)
-        mask.to_netcdf(mask_output)
+        write_netcdf_atomic(mask, mask_output)
     out = make_pseudo_obs(truth, truth_var, mask, output, noise_std, seed, depth_index, skip_if_exists=False)
     if per_mission and real_mask is None:                    # copy per-mission masks next to the obs
-        ds = xr.open_dataset(out).load()
+        with xr.open_dataset(out) as src:
+            ds = src.load()                                  # closed before we replace the file
         for v in mask.data_vars:
             if v.startswith("mask_"):
                 ds[v] = mask[v]
-        ds.to_netcdf(out.with_suffix(".tmp.nc"))
-        out.with_suffix(".tmp.nc").replace(out)
+        write_netcdf_atomic(ds, out)
     return out

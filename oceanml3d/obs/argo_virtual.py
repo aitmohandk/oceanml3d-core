@@ -19,6 +19,7 @@ import xarray as xr
 from scipy import stats
 
 from oceanml3d.data.open import normalise_dims
+from oceanml3d.io import write_netcdf_atomic
 
 
 def virtualize(profiles: pd.DataFrame, truth: str | Path, truth_var: str, depth_indices: list[int],
@@ -76,7 +77,4 @@ def build_virtual_argo(profiles: pd.DataFrame, truth: str | Path, truth_var: str
     v = virtualize(profiles, truth, truth_var, depth_indices, noise_std=noise_std, seed=seed)
     cols = [f"{truth_var}_d{i:02d}" for i in depth_indices]
     ds = grid_daily(v, truth, cols)
-    output = Path(output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    ds.to_netcdf(output)
-    return output
+    return write_netcdf_atomic(ds, output)

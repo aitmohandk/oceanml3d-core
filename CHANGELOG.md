@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 2 (3/3) — one process simulates the observations, and the jitter is centred
+
+### P1-1 — `prepare-obs` ran on every rank
+
+`prepare_observations` is called from `main()`, before a Trainer exists, because `dm.setup("fit")`
+needs the files and runs before `trainer.fit`. Lightning's `prepare_data` hook — the idiomatic place
+— is therefore not reachable. Under DDP the script is relaunched once per rank, so four processes
+reached this point together and wrote the same NetCDF files at the same time.
+
+Being idempotent did not help; it made it worse. `if output.exists(): return` passes the moment the
+first writer **creates** the file, long before it has finished filling it, so the other ranks sailed
+past and read a truncated NetCDF.
+
+Two pieces, both required, in the new `oceanml3d/io.py`:
+
+* `is_global_zero()` — true for a single process, and for exactly one process of a distributed
+  launch. It reads every launcher's idea of rank (`RANK`, `SLURM_PROCID`, `PMI_RANK`,
+  `OMPI_COMM_WORLD_RANK`, `NODE_RANK`, `LOCAL_RANK`) and requires all of those that are set to be
+  zero — `LOCAL_RANK=0` on node 3 is not the global first process.
+* `write_netcdf_atomic()` — writes to a pid-tagged temporary name, then `os.replace`. A waiting rank
+  sees either nothing or a complete file, which is what makes polling on existence sound at all.
+  Applied to all three observation writes (pseudo-obs, mask, virtual ARGO).
+
+Non-zero ranks call `wait_for()` on the outputs the config declares, with a timeout that says what
+is missing and where to look if rank 0 failed.
+
+One known rough edge: if rank 0 *skips* virtual ARGO because the profile table is absent, the other
+ranks wait out the timeout rather than failing immediately. Both paths fail, one slowly.
+
+### P2-3 — the jitter only ever shifted forwards
+
+```python
+off = int(self._rng.integers(0, min(self.spec.stride[d], room) + 1)) if room > 0 else 0
+```
+
+Offsets drawn from `[0, stride]`, never negative. Over an epoch that biases every window towards
+later indices: the leading edge of the domain is under-sampled and the trailing edge over-sampled.
+An offset of exactly `stride` also reproduces the next patch verbatim. Now half a stride in either
+direction, each bound clipped to the room actually available on that side.
+
+Lot 2 is complete.
+
 ## 2026-09-15: roadmap lot 2 (2/2) — the normalisation statistics travel with the weights
 
 **Summary:** `norm_stats.json` was written next to every checkpoint and read by nothing. The

@@ -335,13 +335,13 @@ Rien d'autre ne mérite d'être fait tant que la CI ne tourne pas.
 
 ### Lot 2 — Justesse (2–3 jours)
 
-- [ ] **P1-1** `prepare-obs` dans `prepare_data()`. *Test : deux processus concurrents.*
+- [x] **P1-1** Un seul rang simule (`oceanml3d/io.py::is_global_zero`), les autres attendent ; écritures atomiques via `os.replace`. `prepare_data()` n'était pas utilisable : `dm.setup("fit")` a besoin des fichiers avant `trainer.fit`.
 - [x] **P1-2** Les statistiques voyagent **dans** le checkpoint (`on_save_checkpoint`/`on_load_checkpoint`), avec la disposition des canaux ; `predict` les utilise et signale un checkpoint antérieur qui n'en porte pas.
 - [x] **P1-3** `is not None` sur `depth_index` (aux deux endroits). *Test : `depth_index: 0` sur un fichier 2D doit lever.*
 - [x] **P1-4/5** `_align_space` refuse une grille différente (tolérance d'un demi-pas) ; `_align_time` annonce les pas inventés.
 - [x] **P2-1** `ckpt_path="best"` dès qu'un meilleur checkpoint existe, y compris en multi-étapes.
 - [x] **P2-2** ~~`load_from_checkpoint`~~ : le but réel (pas d'incohérence silencieuse entre checkpoint et config) est atteint par la vérification de disposition des canaux + statistiques, sans la machinerie `hparams` que les constructeurs positionnels du registre ne permettent pas.
-- [ ] **P2-3** Jitter centré.
+- [x] **P2-3** Jitter centré sur ±½ stride, borné des deux côtés.
 - [x] **P2-4** Recouvrement ≥ 2 × crop vérifié, avec le stride correctif nommé dans le message. *Test : une config à recouvrement insuffisant doit être rejetée.*
 
 ### Lot 3 — Couverture (2–3 jours)
