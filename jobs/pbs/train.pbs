@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#PBS -N oceanml3d
+#PBS -l select=1:ncpus=8:ngpus=1:mem=64gb
+#PBS -l walltime=20:00:00
+#PBS -j oe
+#PBS -o logs/
+## Site-specific, uncomment and fill in:
+##PBS -q gpuq
+##PBS -P <project>
+#
+# The PBS twin of jobs/slurm/train.sbatch. The two differ only in their directives and in how they
+# name the submit directory and the core count; the work is jobs/run.sh in both cases.
+#
+#     qsub -v OCEANML3D_SITE=datarmor -- jobs/pbs/train.pbs experiment=nosc_15m_duacs
+#
+# PBS does not pass trailing arguments the way sbatch does, so overrides usually travel in a
+# variable instead:
+#     qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_ARGS="experiment=nosc_15m_duacs" jobs/pbs/train.pbs
+set -euo pipefail
+
+cd "${PBS_O_WORKDIR:-$PWD}"
+mkdir -p logs
+export OCEANML3D_SITE="${OCEANML3D_SITE:-datarmor}"
+export OMP_NUM_THREADS="${NCPUS:-1}"
+
+echo "[pbs] job ${PBS_JOBID:-?} on $(hostname), ncpus=${NCPUS:-?}"
+# shellcheck disable=SC2086
+exec jobs/run.sh ${OCEANML3D_ARGS:-} "$@"
