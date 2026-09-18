@@ -166,8 +166,8 @@ Expect `True Tesla V100-...`. `False` is a missing `--nv`.
 
 ```bash
 cd $WORK/oceanml3d-core
-OCEANML3D_SITE=jeanzay jobs/run.sh command=list-models
-OCEANML3D_SITE=jeanzay jobs/run.sh command=validate experiment=osse3d_gs21_multivar_unet
+jobs/run.sh --site jeanzay command=list-models
+jobs/run.sh --site jeanzay command=validate experiment=osse3d_gs21_multivar_unet
 exit
 ```
 
@@ -230,7 +230,7 @@ singularity exec --bind $WORK:$WORK,$SCRATCH:$SCRATCH $OCEANML3D_SIF \
 `prepare-obs` downloads nothing, so it runs on a compute node like everything else.
 
 ```bash
-OCEANML3D_SITE=jeanzay jobs/run.sh command=prepare-obs experiment=osse3d_gs21_multivar_unet
+jobs/run.sh --site jeanzay command=prepare-obs experiment=osse3d_gs21_multivar_unet
 ```
 
 The three output keys must already be in `config/paths/jeanzay.yaml`.
@@ -275,7 +275,7 @@ caps at 20 hours, which for a multi-day campaign means chaining jobs.
 srun -A <proj>@v100 --qos=qos_gpu-dev --gres=gpu:1 --cpus-per-task=10 \
      --time=00:30:00 --hint=nomultithread --pty bash
 cd $WORK/oceanml3d-core
-OCEANML3D_SITE=jeanzay jobs/run.sh experiment=osse3d_smoke training=debug
+jobs/run.sh --site jeanzay experiment=osse3d_smoke training=debug
 ```
 
 Then:

@@ -19,7 +19,7 @@ that way would have made 332 files to keep in step.
 
 ```bash
 # locally, no scheduler
-OCEANML3D_SITE=local jobs/run.sh command=validate experiment=osse3d_gs21_multivar_unet
+jobs/run.sh --site local command=validate experiment=osse3d_gs21_multivar_unet
 
 # Slurm (Jean Zay, Odyssey)
 sbatch --export=ALL,OCEANML3D_SITE=jeanzay jobs/slurm/train.sbatch experiment=nosc_15m_duacs
@@ -28,13 +28,18 @@ sbatch --export=ALL,OCEANML3D_SITE=jeanzay jobs/slurm/train.sbatch experiment=no
 qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_ARGS="experiment=nosc_15m_duacs" jobs/pbs/train.pbs
 ```
 
+`--site` rather than `OCEANML3D_SITE=…` in front of the command, because the two are not equivalent
+everywhere: `VAR=value command` is bash syntax, and Datarmor's default login shell is csh, which
+reads the whole first word as a command name. The flag works in any shell. The environment variable
+still works where the syntax does, and is what the job wrappers set.
+
 ## Adding a site
 
 1. `cp jobs/env/local.sh jobs/env/<site>.sh` and fill in the environment and `OCEANML3D_DATA`.
 2. `cp config/paths/local.yaml config/paths/<site>.yaml` and change the **paths**, not the keys —
    `test_a_site_file_does_not_invent_keys_of_its_own` enforces that, because a key only one site
    knows is either a typo or a key the others silently lack.
-3. `OCEANML3D_SITE=<site> jobs/run.sh command=validate experiment=<xp>` before submitting anything.
+3. `jobs/run.sh --site <site> command=validate experiment=<xp>` before submitting anything.
 
 ## The container
 

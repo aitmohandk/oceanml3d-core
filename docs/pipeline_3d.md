@@ -56,7 +56,7 @@ it possible to score a reconstruction at 150 m, where no real observation exists
 ### The one thing to check before anything else
 
 ```bash
-OCEANML3D_SITE=<site> jobs/run.sh command=validate experiment=osse3d_gs21_multivar_unet
+jobs/run.sh --site <site> command=validate experiment=osse3d_gs21_multivar_unet
 ```
 
 It reports every problem at once: missing catalog keys, missing files, splits that leak, a crop
@@ -109,7 +109,7 @@ Bathymetry (`bathy_gs`) is GEBCO regridded onto the GLORYS grid, once, with `reg
 ### 3.3 The observing system, simulated
 
 ```bash
-OCEANML3D_SITE=<site> jobs/run.sh command=prepare-obs experiment=osse3d_gs21_multivar_unet
+jobs/run.sh --site <site> command=prepare-obs experiment=osse3d_gs21_multivar_unet
 ```
 
 Writes three files: `pseudo_obs_ssh_gs`, `pseudo_obs_sst_gs`, `argo_virtual_thetao_gs21`.
@@ -206,7 +206,7 @@ OCEANML3D_ARGS="experiment=osse3d_gs21_multivar_unet ablation=vertical_modes"
 `vertical_modes` needs its bases first:
 
 ```bash
-OCEANML3D_SITE=<site> jobs/run.sh command=eofs experiment=osse3d_gs21_multivar_unet
+jobs/run.sh --site <site> command=eofs experiment=osse3d_gs21_multivar_unet
 ```
 
 ### Multi-GPU
@@ -222,7 +222,7 @@ rank's share is wrong without looking wrong.
 ## 5. Inference
 
 ```bash
-OCEANML3D_SITE=<site> jobs/run.sh command=predict \
+jobs/run.sh --site <site> command=predict \
     experiment=osse3d_gs21_multivar_unet \
     ckpt=outputs/osse3d_gs21_multivar_unet/<run>/checkpoints/<best>.ckpt
 ```
@@ -287,7 +287,7 @@ Inherited from NOSC's `GUIDE_UTILISATION.md` §8, re-verified against this code.
 
 ```bash
 oceanml3d command=list-models                                   # the registry loads
-OCEANML3D_SITE=local jobs/run.sh experiment=osse3d_smoke training=debug   # synthetic, CPU, minutes
+jobs/run.sh --site local experiment=osse3d_smoke training=debug   # synthetic, CPU, minutes
 pytest -m "not slow" -q -k "osse or open_and_patches or model_smoke"
 pytest -q tests/test_osse_smoke.py                              # includes the end-to-end, marked slow
 ```

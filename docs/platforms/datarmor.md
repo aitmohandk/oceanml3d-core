@@ -15,6 +15,20 @@ means, and is worth reading first.
 * **Compute nodes have no Internet.** One queue does: **`ftp`**. Every download — GLORYS through
   `copernicusmarine`, ARGO through `argopy` — must be submitted there.
 
+> **Your login shell is probably csh.** That is Datarmor's default, and it changes how you set a
+> variable for one command. `VAR=value command` is bash syntax; csh reads the whole first word as a
+> command name and answers `OCEANML3D_SITE=datarmor: Command not found.` Every example here uses
+> `jobs/run.sh --site <name>` instead, which works in any shell. If you need a variable that has no
+> flag, either `setenv NAME value` first, or prefix with `env`:
+>
+> ```csh
+> setenv OCEANML3D_DATA $SCRATCH/oceanml3d/data      # csh
+> env OCEANML3D_DATA=$SCRATCH/oceanml3d/data some-command   # any shell
+> ```
+>
+> Batch scripts are their own case: a `.pbs` file declares its interpreter on the first line, so
+> `#!/bin/csh` and `#!/usr/bin/env bash` jobs coexist happily. The ones in `jobs/pbs/` say which.
+
 > **Sources.** Adapted from NOSC's `env/README_conteneur_datarmor.md`, which draws on Datarmor's
 > public community documentation. Points marked **[confirm]** are those the public documentation
 > does not settle — mostly GPU details; each says which command answers it in two minutes once you
@@ -228,8 +242,8 @@ Then the project itself:
 
 ```bash
 cd $DATAWORK/oceanml3d-core
-OCEANML3D_SITE=datarmor jobs/run.sh command=list-models
-OCEANML3D_SITE=datarmor jobs/run.sh command=validate experiment=osse3d_gs21_multivar_unet
+jobs/run.sh --site datarmor command=list-models
+jobs/run.sh --site datarmor command=validate experiment=osse3d_gs21_multivar_unet
 exit
 ```
 
@@ -283,7 +297,7 @@ the scale for sizing the walltime:
 qsub -I -l walltime=00:30:00 -l mem=32g
 source /usr/share/Modules/init/bash && module load singularity
 cd $DATAWORK/oceanml3d-core
-OCEANML3D_SITE=datarmor OCEANML3D_DATA=$SCRATCH/oceanml3d/data \
+OCEANML3D_DATA=$SCRATCH/oceanml3d/data \
   singularity exec --bind $OCEANML3D_BIND $DATAWORK/containers/oceanml3d-2026-09.sif \
   python scripts/prepare/regrid.py --config /tmp/glorys_one_month.yaml
 ```

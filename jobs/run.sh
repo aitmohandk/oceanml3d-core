@@ -8,17 +8,36 @@
 # is ~15 lines of directives around this file, and a site is a handful of exports.
 #
 # Usage, directly or from a job wrapper:
-#     OCEANML3D_SITE=datarmor jobs/run.sh experiment=nosc_15m_duacs
-#     OCEANML3D_SITE=local    jobs/run.sh command=validate experiment=osse3d_gs21_multivar_unet
+#     jobs/run.sh --site datarmor experiment=nosc_15m_duacs
+#     jobs/run.sh --site local command=validate experiment=osse3d_gs21_multivar_unet
 #
 # Environment:
 #   OCEANML3D_SITE   name of a file in jobs/env/ (default: local)
+#
+# `--site <name>` does the same as OCEANML3D_SITE and does not depend on the shell. That matters:
+# Datarmor's default login shell is csh, where `VAR=value command` is not a thing -- it reads the
+# whole first word as a command name and answers `OCEANML3D_SITE=datarmor: Command not found.`
+# In csh the alternatives are `setenv OCEANML3D_SITE datarmor` first, or `env VAR=value ...`;
+# `--site` avoids having to know which shell you are in.
 #   OCEANML3D_SIF    path to an Apptainer image; if set, the command runs inside it
 #   OCEANML3D_DATA   data root, consumed by config/paths/<site>.yaml
 #   OCEANML3D_EXTRA  extra Hydra overrides appended after "$@"
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# --site <name> before any Hydra override; everything else is passed through untouched.
+ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --site) OCEANML3D_SITE="$2"; shift 2 ;;
+        --site=*) OCEANML3D_SITE="${1#--site=}"; shift ;;
+        --) shift; ARGS+=("$@"); break ;;
+        *) ARGS+=("$1"); shift ;;
+    esac
+done
+set -- "${ARGS[@]+"${ARGS[@]}"}"
+
 SITE="${OCEANML3D_SITE:-local}"
 ENV_FILE="$REPO_ROOT/jobs/env/$SITE.sh"
 
