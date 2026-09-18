@@ -124,7 +124,7 @@ def plot_reconstruction(window, results, cfg, save_path):
         'EnKF': '#2ca02c'
     }
     
-    for i, (ax, comp) in enumerate(zip(axes, components)):
+    for i, (ax, comp) in enumerate(zip(axes, components, strict=False)):
         # Plot truth
         ax.plot(time_grid, true_state[:, i], color='black', linewidth=2, 
                 label='Truth', alpha=0.8)
@@ -199,7 +199,7 @@ def plot_forcing_impact(window, results, cfg, save_path):
                  label='Strong-4DVar Reconstruction', alpha=0.8)
     
     # Shade error regions
-    error = results['strong'].trajectory[:, 0] - true_state[:, 0]
+    results['strong'].trajectory[:, 0] - true_state[:, 0]
     axes[1].fill_between(time_grid, true_state[:, 0], 
                           results['strong'].trajectory[:, 0], 
                           alpha=0.3, color='red', label='Reconstruction Error')

@@ -130,7 +130,7 @@ def plot_side_by_side(window_cs1, window_cs2, results_cs1, results_cs2, cfg, sav
     components = ['X', 'Y', 'Z']
     
     # Top row: CS1
-    for i, (ax, comp) in enumerate(zip(axes[0], components)):
+    for i, (ax, comp) in enumerate(zip(axes[0], components, strict=False)):
         true_state = window_cs1['true_state'].cpu().numpy()
         ax.plot(time_grid, true_state[:, i], color='black', linewidth=2, 
                 label='Truth', alpha=0.8)
@@ -145,7 +145,7 @@ def plot_side_by_side(window_cs1, window_cs2, results_cs1, results_cs2, cfg, sav
             ax.set_title('CS1: Good Reconstruction', fontsize=12, fontweight='bold')
     
     # Bottom row: CS2
-    for i, (ax, comp) in enumerate(zip(axes[1], components)):
+    for i, (ax, comp) in enumerate(zip(axes[1], components, strict=False)):
         true_state = window_cs2['true_state'].cpu().numpy()
         ax.plot(time_grid, true_state[:, i], color='black', linewidth=2, 
                 label='Truth', alpha=0.8)
@@ -199,7 +199,7 @@ def plot_degradation_barplot(results_cs1, results_cs2, save_path):
     ax.fill_between([-0.5, len(methods)-0.5], 3, 6, color='red', alpha=0.1)
     
     # Add value labels on bars
-    for i, (bar, mean, std) in enumerate(zip(bars, degradation_means, degradation_stds)):
+    for _i, (bar, mean, std) in enumerate(zip(bars, degradation_means, degradation_stds, strict=False)):
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2., height + std + 0.2,
                 f'{mean:.2f}x', ha='center', va='bottom', fontsize=11, fontweight='bold')

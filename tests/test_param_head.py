@@ -87,7 +87,6 @@ def test_true_param_vector_list_form_matches_window_param_vector():
 
 
 def test_state_param_head_shapes():
-    w = None
     model = StateParamHead(state_dim=SD, param_dim=PD, hidden_channels=[8, 16],
                            param_ref=REF)
     class _B:
@@ -120,7 +119,6 @@ def test_state_param_head_no_oracle(bias_dataset):
 
 
 def test_state_param_head_deriv_augment_shape():
-    w = None
     base = StateParamHead(state_dim=SD, param_dim=PD, hidden_channels=[8, 16],
                           param_ref=REF, augment_derivatives=False)
     aug = StateParamHead(state_dim=SD, param_dim=PD, hidden_channels=[8, 16],
@@ -182,7 +180,6 @@ def test_state_param_model_frozen_encoder_optional():
     )
     assert all(not p.requires_grad for p in model.state_encoder.parameters())
     assert all(p.requires_grad for p in model.param_head.parameters())
-    w = None
     from oceanml3d.legacy.data.lorenz96 import RandomParamLorenz96Dataset
     obs_idx = make_obs_j_indices(8, 4, 2)
     cfg = Lorenz96Config(T_max=0.1, dt=0.001, obs_interval=20, num_windows=1,

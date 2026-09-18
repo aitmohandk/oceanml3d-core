@@ -39,7 +39,7 @@ def plot_3d_attractor(trajectory, save_path):
     
     # Color by time
     time_steps = np.arange(len(X))
-    colors = plt.cm.viridis(time_steps / len(time_steps))
+    plt.cm.viridis(time_steps / len(time_steps))
     
     # Scatter plot with time coloring
     scatter = ax.scatter(X, Y, Z, c=time_steps, cmap='viridis', s=1, alpha=0.6)
@@ -69,7 +69,7 @@ def plot_time_series(trajectory, time_grid, save_path):
     labels = ['X', 'Y', 'Z', r'$W_L$ (Forcing)']
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
     
-    for i, (ax, label, color) in enumerate(zip(axes, labels, colors)):
+    for i, (ax, label, color) in enumerate(zip(axes, labels, colors, strict=False)):
         ax.plot(time_grid, trajectory[:, i], color=color, linewidth=1.5)
         ax.set_ylabel(label, fontsize=12, fontweight='bold')
         ax.grid(True, alpha=0.3, linestyle='--')

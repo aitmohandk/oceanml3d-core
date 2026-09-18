@@ -263,7 +263,7 @@ def test_truth_only_plus_obs_ic_matches_generate_truth():
     truth_only = QGS01Dataset._generate_truth_only(cfg, 2)
     indices = list(range(2))
     ics = QGS01Dataset._generate_obs_ic(cfg, truth_only, indices)
-    for full, part, ic in zip(combined, truth_only, ics):
+    for full, part, ic in zip(combined, truth_only, ics, strict=True):
         assert torch.equal(full["true_state"], part["true_state"])
         assert full["true_params"] == part["true_params"]
         assert torch.equal(full["obs_mask"], ic["obs_mask"])
@@ -301,6 +301,6 @@ def test_fixed_obs_dataset_is_deterministic_across_draws():
     ds = QGNeuralDataset([w], cfg)
     item_a = ds[0]
     item_b = ds[0]
-    for a, b in zip(item_a, item_b):
+    for a, b in zip(item_a, item_b, strict=True):
         if isinstance(a, torch.Tensor):
             assert torch.equal(a, b)

@@ -96,15 +96,26 @@ force-exclude = true
 target-version = "py310"
 
 [tool.ruff.lint]
-# `oceanml3d-eval` runs ["E", "F", "I", "B", "UP"]. The same select here reports 168 pre-existing
-# violations in the imported scientific code, so that set is the target, not the gate. What is
-# enforced today is ruff's default plus import sorting — the rename rewrote 455 import statements,
-# so keeping them sorted is worth a rule. Backlog measured 2026-09-14, to be worked down:
-#   B023 × 27 — closures capturing a loop variable; audit first, some of these can be real bugs
-#   B905 × 26, B008 × 21, B007 × 10, UP006/UP045/UP035 × 84 — mechanical
-select = ["E4", "E7", "E9", "F", "I"]
+# The full set that `oceanml3d-eval` runs, now enforced on the live tree. The backlog that made this
+# a "target, not a gate" turned out to live almost entirely in reserve code: of 168 violations, 143
+# were in `oceanml3d/legacy/` and 2 in `legacy/`, leaving 24 in the code anyone actually runs. Those
+# are fixed; the reserve trees are exempted below rather than rewritten.
+select = ["E", "F", "I", "B", "UP"]
 ignore = [
-    "E501",  # line length: the scientific code wraps at its own rhythm
-    "E402",  # × 18, all in driver scripts that must `sys.path.insert` before importing the package
-    "F841",  # × 27 unused variables, 11 of them in evaluation/baselines.py, which PLAN §3 rewrites
+    # Line length. 67 occurrences in the live tree, all style: fixing them means reflowing scientific
+    # code that wraps at its own rhythm, for a diff nobody can review usefully.
+    "E501",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Reserve: the toy / Lorenz / QG family and the inherited job scripts. Exempted, not fixed, because
+# rewriting imported scientific code to satisfy a style rule is how you introduce a bug into results
+# that have already been published. Counts measured 2026-09-15.
+#
+# One note worth keeping, since it corrects an earlier assessment. `docs/ROADMAP.md` warned that some
+# of the 27 B023 "might be real bugs". They are not. All 27 come from two `def closure()` blocks in
+# `legacy/evaluation/baselines.py` (lines 630 and 2855), each passed to `opt.step(closure)` inside
+# the same loop iteration -- the standard LBFGS idiom. The closure is consumed before the loop
+# variable can change, so the late binding is harmless in both cases.
+"oceanml3d/legacy/**" = ["B007", "B008", "B023", "B905", "E402", "F841", "UP006", "UP035", "UP045"]
+"legacy/**" = ["B007", "B008", "B023", "B905", "E402", "F841", "UP006", "UP035", "UP045"]

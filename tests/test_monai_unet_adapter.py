@@ -3,7 +3,10 @@ import torch
 
 monai = pytest.importorskip("monai")
 
-from oceanml3d.legacy.models.monai_unet_adapter import MonaiUNet1D
+# The import has to follow the skip guard, not precede it: monai is a hard dependency of the
+# package but the adapter is reserve code, and importing it unconditionally would turn a missing
+# optional install into a collection error rather than a skip.
+from oceanml3d.legacy.models.monai_unet_adapter import MonaiUNet1D  # noqa: E402
 
 
 @pytest.mark.parametrize("state_dim,obs_dim,length", [(1, 1, 64), (3, 3, 32), (40, 24, 200)])

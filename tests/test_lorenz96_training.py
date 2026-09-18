@@ -609,7 +609,7 @@ class TestBatchedGeneration:
         F = torch.tensor([8.0, 7.6, 8.4, 8.2])
         refs = [dyn.generate_full_trajectory(num_steps=batch_cfg.num_steps, seed=s, F=f.item(),
                                               spinup_steps=batch_cfg.spinup_steps)[0]
-                for s, f in zip(seeds, F)]
+                for s, f in zip(seeds, F, strict=True)]
         ref = torch.stack(refs)
         bt, _ = dyn.generate_batch_trajectories_seeded(
             num_steps=batch_cfg.num_steps, seeds=seeds, F_values=F,

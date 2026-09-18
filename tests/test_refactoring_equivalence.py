@@ -145,7 +145,7 @@ class TestCheckpointLoading:
         lit_module = Lit4DVarNetFM(model=new_model, stage=1)
         lit_module.load_legacy_checkpoint(str(ckpt_path))
 
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+        for p1, p2 in zip(model.parameters(), new_model.parameters(), strict=True):
             torch.testing.assert_close(p1, p2)
 
     def test_legacy_full_checkpoint(self, tmp_path):
@@ -158,5 +158,5 @@ class TestCheckpointLoading:
         lit_module = Lit4DVarNetFM(model=new_model, stage=2)
         lit_module.load_legacy_checkpoint(str(ckpt_path))
 
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+        for p1, p2 in zip(model.parameters(), new_model.parameters(), strict=True):
             torch.testing.assert_close(p1, p2)

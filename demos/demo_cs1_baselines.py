@@ -124,7 +124,7 @@ def plot_reconstruction(window, results, cfg, save_path):
         'EnKF': '#2ca02c'
     }
     
-    for i, (ax, comp) in enumerate(zip(axes, components)):
+    for i, (ax, comp) in enumerate(zip(axes, components, strict=False)):
         # Plot truth
         ax.plot(time_grid, true_state[:, i], color='black', linewidth=2, 
                 label='Truth', alpha=0.8)
