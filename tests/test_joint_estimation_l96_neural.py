@@ -406,7 +406,7 @@ def test_joint_cfm_stage2_param_loss_conditions_on_real_state(l96_joint_dataset)
     ga = param_grad(batch_a)
     gb = param_grad(batch_b)
     assert len(ga) > 0
-    diff = sum(torch.abs(g1 - g2).sum() for g1, g2 in zip(ga, gb))
+    diff = sum(torch.abs(g1 - g2).sum() for g1, g2 in zip(ga, gb, strict=True))
     assert diff > 0, "stage-2 param flow must be conditioned on the real state"
 
 

@@ -79,7 +79,7 @@ def test_deterministic():
     ds_a = make_qg_s0_s1_datasets(_tiny_cfg())
     ds_b = make_qg_s0_s1_datasets(_tiny_cfg())
     for k in ("test_s0", "test_s1"):
-        for wa, wb in zip(ds_a[k], ds_b[k]):
+        for wa, wb in zip(ds_a[k], ds_b[k], strict=True):
             assert torch.equal(wa["true_state"], wb["true_state"])
             assert torch.equal(wa["target_state_psi"], wb["target_state_psi"])
             assert torch.equal(wa["obs_mask"], wb["obs_mask"])
@@ -307,7 +307,7 @@ def test_generate_truth_indices_subset_matches_full_run():
     cfg = _tiny_cfg()
     full = QGS01Dataset._generate_truth(cfg, cfg.num_windows)
     subset = QGS01Dataset._generate_truth(cfg, cfg.num_windows, indices=[2, 0])
-    for idx, w in zip([2, 0], subset):
+    for idx, w in zip([2, 0], subset, strict=True):
         assert torch.equal(w["true_state"], full[idx]["true_state"])
         assert torch.equal(w["obs"], full[idx]["obs"])
 

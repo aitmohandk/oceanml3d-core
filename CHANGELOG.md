@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 5 (1/2) — the full lint set is now the gate, not a target
+
+### The backlog was in the reserve, not in the code anyone runs
+
+`pyproject.toml` described the `["E","F","I","B","UP"]` set as "the target, not the gate", with 168
+pre-existing violations. Split by tree, that number reads differently:
+
+| | |
+|---|---|
+| `oceanml3d/legacy/` | 143 |
+| `legacy/` | 2 |
+| **live tree** (package, tests, scripts, demos) | **24** |
+
+The `legacy/` reorganisation moved almost the whole backlog into reserve without anyone noticing.
+Twenty-four is a morning's work, so the set is now enforced and `ruff check .` passes on the whole
+tree.
+
+### A correction: none of the 27 B023 are bugs
+
+`docs/ROADMAP.md` warned that "certaines sont de vrais bugs de capture de variable de boucle" and
+scheduled a manual audit. That was speculation, and it was wrong. All 27 come from **two**
+`def closure()` blocks in `legacy/evaluation/baselines.py` (lines 630 and 2855), each passed to
+`opt.step(closure)` inside the same loop iteration — the standard LBFGS idiom. The closure is
+consumed before the loop variable can change, so the late binding is harmless in both. The count of
+27 is one violation per captured name, not per site. Recorded in `pyproject.toml` so the next person
+does not re-run the audit.
+
+### What changed in the live tree
+
+* **17 `zip()` calls in tests** made `strict=True`, not `strict=False`. Ruff's automatic fix picks
+  `strict=False`, which silences the rule and changes nothing — and every one of these zips pairs
+  things that are equal in length by construction: two datasets from the same config, two models'
+  parameters, a model's gradients against its own. `strict=True` turns "silently compared a prefix"
+  into a failure, which is the whole point in a test. `demos/` keeps `strict=False`: those are
+  illustrative scripts, not assertions.
+* 6 unused locals removed, 1 unused loop variable renamed.
+* The one live `E402`, in `test_monai_unet_adapter.py`, is deliberate and now says so: the import
+  must follow `pytest.importorskip`, or a missing optional install becomes a collection error
+  instead of a skip. `# noqa: E402` with the reason.
+
+### Reserve is exempted, not rewritten
+
+`per-file-ignores` for `oceanml3d/legacy/**` and `legacy/**`. Rewriting imported scientific code to
+satisfy a style rule is how a bug gets into results that have already been published; the rules are
+listed explicitly so the exemption is a decision on record rather than a blanket skip.
+
 ## 2026-09-15: roadmap lot 4 (2/2) — `batch/` moves to `legacy/batch/`
 
 **Moved, not deleted.** Several of these scripts encode campaigns whose results are written up in

@@ -36,7 +36,7 @@ def test_dataset_window_shapes():
 def test_dataset_deterministic():
     ds_a = QGDataset(_tiny_cfg())
     ds_b = QGDataset(_tiny_cfg())
-    for wa, wb in zip(ds_a, ds_b):
+    for wa, wb in zip(ds_a, ds_b, strict=True):
         assert torch.equal(wa["true_state"], wb["true_state"])
         assert torch.equal(wa["obs_mask"], wb["obs_mask"])
         m = wa["obs_mask"]
@@ -95,7 +95,7 @@ def test_dataset_deterministic_wind():
     cfg = _tiny_cfg(wind_amp=1e-11)
     ds_a = QGDataset(cfg)
     ds_b = QGDataset(cfg)
-    for wa, wb in zip(ds_a, ds_b):
+    for wa, wb in zip(ds_a, ds_b, strict=True):
         assert torch.equal(wa["wind_curl"], wb["wind_curl"])
         assert torch.equal(wa["forcing_true"], wb["forcing_true"])
 

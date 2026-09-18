@@ -138,7 +138,7 @@ def test_forcing_ou_properties(cs2_config, device):
     eta_np = eta.cpu().numpy()
     
     # Compute lag-1 autocorrelation
-    mean_eta = np.mean(eta_np)
+    np.mean(eta_np)
     var_eta = np.var(eta_np)
     
     if var_eta > 1e-6:
@@ -208,7 +208,7 @@ def test_observations_noise(cs1_dataset, cs1_config):
     # 4 standard errors: sqrt(2/(n-1)) for the variance, sqrt(R_var/n) for the mean
     var_tol = 4 * np.sqrt(2.0 / (n - 1))
     mean_tol = 4 * np.sqrt(cs1_config.R_var / n)
-    for i, (var, mean) in enumerate(zip(torch.var(noise, dim=0), noise.mean(dim=0))):
+    for i, (var, mean) in enumerate(zip(torch.var(noise, dim=0), noise.mean(dim=0), strict=True)):
         assert abs(var - cs1_config.R_var) <= var_tol * cs1_config.R_var, \
             f"Noise variance dim {i}: expected {cs1_config.R_var:.3f} " \
             f"+/-{var_tol * cs1_config.R_var:.3f} over {n} draws, got {var:.4f}"
