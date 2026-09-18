@@ -6,7 +6,8 @@ Three layers, so that adding a scheduler or a site is a small file rather than a
 |---|---|---|
 | Scheduler | `jobs/slurm/*.sbatch`, `jobs/pbs/*.pbs` | how do I ask for resources? |
 | Site | `jobs/env/<site>.sh` | where is the environment and the data? |
-| Work | `jobs/run.sh` | what do I actually run? |
+| Work | `jobs/run.sh`, `jobs/prepare.sh` | what do I actually run? |
+| Shared | `jobs/env/_lib.sh` | loading modules, wrapping a command in the container |
 
 The wrappers hold directives and nothing else; the site files hold `module load`, paths and thread
 counts; `run.sh` composes the Hydra command and, if `OCEANML3D_SIF` is set, runs it in a container.
@@ -61,6 +62,25 @@ qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_ARGS="experiment=nosc_15m_duacs" jobs/
 everywhere: `VAR=value command` is bash syntax, and Datarmor's default login shell is csh, which
 reads the whole first word as a command name. The flag works in any shell. The environment variable
 still works where the syntax does, and is what the job wrappers set.
+
+## What is in `jobs/`
+
+| File | Does |
+|---|---|
+| `run.sh` | one `oceanml3d` CLI command: `validate`, `prepare-obs`, `eofs`, `train`, `predict` |
+| `prepare.sh` | one preparation step: `glorys <year>`, `concat`, `argo`, `obs` |
+| `pbs/*.pbs`, `slurm/*.sbatch` | directives only; each is ~10 lines around one of the two above |
+| `env/<site>.sh` | modules, data root, thread count, container path, precision default |
+| `env/_lib.sh` | `load_modules`, `container_exec`, `load_site` — shared, so `--nv` and the bind list are decided once |
+
+Every job file has a twin in the other scheduler and they differ only in their directives, because
+the work is not in them. That is what makes a second scheduler cheap, and it is also why you can
+debug any of them interactively:
+
+```bash
+qsub -I -l walltime=00:30:00 -l mem=32g       # or srun --pty bash
+jobs/prepare.sh --site datarmor glorys 2014
+```
 
 ## Adding a site
 

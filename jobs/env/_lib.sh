@@ -33,3 +33,33 @@ load_modules() {
     fi
     [[ $# -gt 0 ]] && module load "$@"
 }
+
+# Run a command in the site's container, or directly when no image is configured. Shared by
+# jobs/run.sh and jobs/prepare.sh so the bind list and `--nv` are decided in exactly one place -- a
+# forgotten --nv is the most common way to conclude the GPU is broken.
+container_exec() {
+    if [[ -z "${OCEANML3D_SIF:-}" ]]; then
+        "$@"
+        return
+    fi
+    local root="${REPO_ROOT:-$PWD}"
+    local binds=("--bind" "$root:$root")
+    [[ -n "${OCEANML3D_DATA:-}" ]] && binds+=("--bind" "$OCEANML3D_DATA:$OCEANML3D_DATA")
+    [[ -n "${OCEANML3D_BIND:-}" ]] && binds+=("--bind" "$OCEANML3D_BIND")
+    "${OCEANML3D_CONTAINER_CMD:-apptainer}" exec --nv "${binds[@]}" --pwd "$root" \
+        "$OCEANML3D_SIF" "$@"
+}
+
+# Source a site file by name.
+load_site() {
+    local site="${1:?load_site <name> <repo_root>}" root="${2:?load_site <name> <repo_root>}"
+    local env_file="$root/jobs/env/$site.sh"
+    if [[ ! -f "$env_file" ]]; then
+        echo "no environment for site '$site'." >&2
+        echo "available: $(cd "$root/jobs/env" && ls ./*.sh | sed 's|.*/||; s/\.sh$//' | grep -v '^_' | tr '\n' ' ')" >&2
+        echo "copy jobs/env/local.sh to jobs/env/$site.sh and fill it in." >&2
+        return 2
+    fi
+    # shellcheck source=/dev/null
+    source "$env_file"
+}

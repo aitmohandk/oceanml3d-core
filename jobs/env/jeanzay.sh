@@ -19,6 +19,11 @@ export OCEANML3D_CONTAINER_CMD="${OCEANML3D_CONTAINER_CMD:-singularity}"
 export OCEANML3D_BIND="${OCEANML3D_BIND:-$WORK:$WORK,$SCRATCH:$SCRATCH}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-10}"
 
+# Where GLORYS comes from. Check $DSDIR first -- if IDRIS already mirrors the reanalysis you
+# save the download, the space and the inodes. Otherwise point this at a download directory.
+export GLORYS_SRC="${GLORYS_SRC:-$SCRATCH/oceanml3d/raw/glorys}"
+export GLORYS_YEARS="${GLORYS_YEARS:-2010:2020}"
+
 # A100 and H100 support bf16, which is the better choice where available; on the V100 partition
 # override this to 16-mixed.
 export OCEANML3D_EXTRA="${OCEANML3D_EXTRA:-training.trainer.precision=bf16-mixed}"

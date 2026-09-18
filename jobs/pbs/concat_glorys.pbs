@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#PBS -N o3d_concat
+#PBS -q omp
+#PBS -l select=1:ncpus=4:mem=32g
+#PBS -l walltime=04:00:00
+#PBS -j oe
+#PBS -o logs/
+#
+# Merge the per-year files into the consolidated one. Run after the array of prepare_glorys.pbs.
+#     qsub -v OCEANML3D_SITE=datarmor jobs/pbs/concat_glorys.pbs
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$PWD}"
+mkdir -p logs
+export OCEANML3D_SITE="${OCEANML3D_SITE:-datarmor}"
+export OMP_NUM_THREADS="${NCPUS:-1}"
+exec jobs/prepare.sh concat

@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-09-15: the preparation jobs live in the repository now
+
+The Datarmor runbook printed a 25-line PBS array script for you to retype. That is the thing the
+`jobs/` layer exists to avoid: a script in a document is not tested, drifts from the code, and
+cannot be run interactively when it fails.
+
+Same three layers as before, extended to preparation:
+
+| | |
+|---|---|
+| `jobs/prepare.sh` | the work: `glorys <year>`, `concat`, `argo`, `obs` — scheduler-agnostic |
+| `jobs/pbs/{prepare_glorys,concat_glorys,prepare_argo,prepare_obs}.pbs` | directives only |
+| `jobs/slurm/{…}.sbatch` | the same four, as Slurm twins |
+| `jobs/env/_lib.sh` | `container_exec` and `load_site`, so `--nv` and the bind list are decided once |
+
+Each job file is about ten lines around `jobs/prepare.sh`, which is what actually runs and what you
+can execute by hand on an interactive node to see why a year failed. The PBS and Slurm versions
+differ **only** in their directives.
+
+### Templating without templating
+
+The recipes are read through `os.path.expandvars`, so a per-year recipe needs no `sed` step: export
+`YEAR` and `NEXT` and one file serves the whole array.
+`scripts/prepare/recipes/glorys_gs_multidepth.datarmor.yaml` reads from `${GLORYS_SRC}` and writes
+`by_year/…_${YEAR}.nc`; `glorys_gs_concat.yaml` merges them. `jobs/prepare.sh` prefers a
+`<recipe>.<site>.yaml` when one exists and falls back to the generic file, so a site with a different
+source is one recipe, not a fork of the pipeline.
+
+`GLORYS_SRC` moves into the site files, which is where it belongs: on Datarmor it points at the
+read-only CMEMS mirror, on Jean Zay at `$DSDIR` if IDRIS mirrors the reanalysis, or a download
+directory otherwise.
+
+### The runbooks got shorter
+
+`docs/platforms/datarmor.md` loses the inline array script and the inline recipe; `jeanzay.md` loses
+the inline download loop. What stays is the part a job file cannot express: why one year per sub-job
+rather than one monolithic job, why downloads go on queue `ftp` or `--partition=prepost`, and why the
+mirror has to be in `OCEANML3D_BIND` or the path resolves to nothing inside the container.
+
 ## 2026-09-15: `module` from a script, and what `run.sh` actually is
 
 ### `module: command not found`

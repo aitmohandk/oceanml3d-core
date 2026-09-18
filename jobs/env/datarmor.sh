@@ -18,5 +18,11 @@ export OCEANML3D_CONTAINER_CMD="${OCEANML3D_CONTAINER_CMD:-singularity}"
 export OCEANML3D_BIND="${OCEANML3D_BIND:-$DATAWORK:$DATAWORK,$SCRATCH:$SCRATCH,/home/ref-ocean-reanalysis}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 
+# Where GLORYS comes from. Datarmor mirrors the central CMEMS products read-only, GLORYS12V1
+# (product 001-030) included, so there is nothing to download. Confirm the exact directory with
+# `ls /home/ref-ocean-reanalysis/` -- the product name is the part that moves.
+export GLORYS_SRC="${GLORYS_SRC:-/home/ref-ocean-reanalysis/global-reanalysis-phy-001-030-daily}"
+export GLORYS_YEARS="${GLORYS_YEARS:-2010:2020}"
+
 # V100 does fp16 but NOT bf16. `bf16-mixed` fails here; `16-mixed` is the one that works.
 export OCEANML3D_EXTRA="${OCEANML3D_EXTRA:-training.trainer.precision=16-mixed}"

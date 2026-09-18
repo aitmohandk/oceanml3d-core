@@ -1,0 +1,21 @@
+# GLORYS truth for the OSSE-3D Gulf Stream task, read from Datarmor's read-only CMEMS mirror.
+#
+# No `download:` block on purpose: /home/ref-ocean-reanalysis holds GLORYS12V1 (product 001-030), so
+# there is nothing to fetch. Bind that path into the container (jobs/env/datarmor.sh does) or it
+# resolves to nothing inside and looks like a missing dataset rather than a missing mount.
+#
+# ${YEAR} and ${NEXT} are exported by jobs/prepare.sh -- the recipe is read through
+# os.path.expandvars, so one file serves every year of the array with no templating step.
+input: ${GLORYS_SRC}/**/*${YEAR}*.nc
+output: ${OCEANML3D_DATA}/by_year/glorys_gs_multidepth_${YEAR}.nc
+
+variables: {thetao: thetao, uo: uo, vo: vo, zos: zos}
+time: ["${YEAR}-01-01", "${NEXT}-01-01"]
+
+domain: {lat: [32, 44], lon: [-66, -54]}
+keep_depth: true        # 3D task: the depth axis is the point
+method: none            # native 1/12 deg; put a `grid:` here to coarsen
+
+# Deliberately no `depth_indices`: store every level the source carries and let the task select.
+# The data config's `depth_index` addresses positions in THIS file, so reducing here silently
+# re-points all 21 indices in config/data/osse3d_gs21.yaml. See docs/pipeline_3d.md section 3.3.
