@@ -424,6 +424,8 @@ rsync -av $SCRATCH/oceanml3d/runs/<run>/ $DATAWORK/oceanml3d/runs/<run>/
 | Prepared data gone | `$SCRATCH`, ten days untouched |
 | `torch.cuda.is_available()` is `False` | `--nv` missing |
 | Quota exceeded before the first epoch | Hydra wrote `outputs/` into `$HOME` or `$DATAWORK`; set `hydra.run.dir` |
-| `no file matches /home/ref-…` inside the container | the mirror is not in `OCEANML3D_BIND`; the path exists on the host and not in the container |
+| `no file matches /home/ref-…` inside the container | the mirror is not in `OCEANML3D_BIND`. An unbound path is *empty*, not missing, so the error is about the pattern rather than the mount. |
+| `FATAL: mount source … doesn't exist` | a bind path that does not exist on the host. `$OCEANML3D_DATA` is an output directory and is created for you now; anything else in `OCEANML3D_BIND` is skipped with a reason. |
+| `Could not find any nv files on this host!` | `--nv` on a CPU queue. Harmless, and no longer printed: `--nv` is passed only where a driver is present. Force it with `OCEANML3D_NV=1`. |
 | `Unmatched "` from a `.pbs` job | csh cannot carry a multi-line double-quoted string. Call a `.py` file, never `python -c`. |
 | A whole GLORYS job lost on walltime | one monolithic job saves nothing along the way. Use the `-J` array, one year per sub-job (F.2). |

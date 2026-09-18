@@ -43,10 +43,43 @@ container_exec() {
         return
     fi
     local root="${REPO_ROOT:-$PWD}"
-    local binds=("--bind" "$root:$root")
-    [[ -n "${OCEANML3D_DATA:-}" ]] && binds+=("--bind" "$OCEANML3D_DATA:$OCEANML3D_DATA")
-    [[ -n "${OCEANML3D_BIND:-}" ]] && binds+=("--bind" "$OCEANML3D_BIND")
-    "${OCEANML3D_CONTAINER_CMD:-apptainer}" exec --nv "${binds[@]}" --pwd "$root" \
+    local binds=()
+
+    # OCEANML3D_DATA is an *output* directory: on a first run it does not exist yet, and Singularity
+    # refuses to start at all rather than creating it --
+    #   FATAL: mount source /.../oceanml3d doesn't exist
+    # which reads like a configuration error when it is only a missing mkdir.
+    if [[ -n "${OCEANML3D_DATA:-}" ]]; then
+        mkdir -p "$OCEANML3D_DATA" || {
+            echo "[oceanml3d] cannot create OCEANML3D_DATA=$OCEANML3D_DATA" >&2
+            return 1
+        }
+    fi
+
+    # Every bind must exist on the host. A path that does not is skipped with a reason, because one
+    # typo in OCEANML3D_BIND otherwise takes the whole job down with a message about mounting.
+    local spec src
+    for spec in "$root:$root" "${OCEANML3D_DATA:+$OCEANML3D_DATA:$OCEANML3D_DATA}" \
+                ${OCEANML3D_BIND:+${OCEANML3D_BIND//,/ }}; do
+        [[ -n "$spec" ]] || continue
+        src="${spec%%:*}"
+        if [[ -e "$src" ]]; then
+            binds+=("--bind" "$spec")
+        else
+            echo "[oceanml3d] skipping bind '$spec': $src does not exist on this host" >&2
+        fi
+    done
+
+    # --nv only where there is a driver to expose. On a CPU queue -- Datarmor's `omp`, used for the
+    # preparation jobs -- it prints "Could not find any nv files on this host!", which looks like a
+    # failure in a log that is otherwise about data.
+    local nv=()
+    if [[ "${OCEANML3D_NV:-auto}" == "1" ]] || { [[ "${OCEANML3D_NV:-auto}" == "auto" ]] &&
+            { [[ -e /dev/nvidiactl ]] || command -v nvidia-smi >/dev/null 2>&1; }; }; then
+        nv=("--nv")
+    fi
+
+    "${OCEANML3D_CONTAINER_CMD:-apptainer}" exec "${nv[@]+"${nv[@]}"}" "${binds[@]}" --pwd "$root" \
         "$OCEANML3D_SIF" "$@"
 }
 

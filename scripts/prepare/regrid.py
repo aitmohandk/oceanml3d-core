@@ -20,6 +20,7 @@ leave it out: store every level the download produced and let the task select.
 from __future__ import annotations
 
 import argparse
+import glob
 import os
 import sys
 from pathlib import Path
@@ -91,13 +92,24 @@ def run(recipe: dict, *, force: bool = False) -> Path:
         # stored re-fragments every read, and the compressed write then streams through that
         # fragmented graph -- slower than the native chunking by a wide margin (NOSC, `dd520be`).
         open_kw["chunks"] = recipe["chunks"]
-    inputs = sorted(Path().glob(recipe["input"])) if "*" in str(recipe["input"]) else recipe["input"]
-    if isinstance(inputs, list):
+    pattern = str(recipe["input"])
+    if any(c in pattern for c in "*?["):
+        # `glob.glob(..., recursive=True)`, not `Path().glob()`: the latter raises
+        # `NotImplementedError: Non-relative patterns are unsupported` on an absolute pattern, which
+        # every real recipe has. `recursive=True` is what makes `**` descend, as the per-year GLORYS
+        # recipes need against a mirror laid out by year and month.
+        inputs = sorted(glob.glob(pattern, recursive=True))
         if not inputs:
-            raise FileNotFoundError(f"no file matches {recipe['input']}")
+            raise FileNotFoundError(
+                f"no file matches {pattern}. Check the pattern, and -- inside a container -- that the "
+                f"directory is bound: an unbound path is empty rather than missing."
+            )
         print(f"[regrid] {len(inputs)} input file(s)")
         open_kw["parallel"] = True            # open and preprocess files concurrently
-    ds = xr.open_mfdataset(recipe["input"], **open_kw)
+    else:
+        inputs = pattern
+    # Pass the resolved list rather than the pattern: xarray does its own globbing, but not `**`.
+    ds = xr.open_mfdataset(inputs, **open_kw)
 
     ds = ds.rename({k: v for k, v in recipe["variables"].items() if k in ds.data_vars})
     if "time" in recipe:
