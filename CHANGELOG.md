@@ -1,5 +1,54 @@
 # Changelog
 
+## 2026-09-15: NOSC preparation fixes ported, and the 3D pipeline documented end to end
+
+### What the recent NOSC work turned out to be
+
+`aitmohandk/NOSC` has moved on since the transplant. Reviewing every commit after it: they are
+almost entirely **data preparation and PBS jobs** for the Datarmor GLORYS pipeline, i.e. the same
+ground this repository covers in `scripts/prepare/` and, since the portability lot, in `jobs/`. Two
+touch real code (`concat_glorys.py`, `prepare_glorys_osse.py`), and both fix the same class of
+problem: a preparation job that does not finish.
+
+Ported into `scripts/prepare/regrid.py`, which had every one of them:
+
+* **Depth selection happened after the merge.** `ds.isel(depth=...)` on the merged dataset means
+  xarray decompresses all fifty native levels and, if regridding, interpolates all fifty, then keeps
+  five. Moved into `open_mfdataset(preprocess=...)` so it happens per file at read time. On the
+  GLORYS Gulf Stream box that is roughly an order of magnitude, and it is what pushed the job past
+  walltime upstream (`8f97ab8`).
+* **`parallel=True`** on `open_mfdataset`: files are opened and preprocessed concurrently.
+* **`chunks={"time": 30}` was forced unconditionally.** Imposing a time chunking that does not match
+  how the files are stored re-fragments every read, and the compressed write then streams through
+  that fragmented graph. Now only applied when the recipe asks, and the result is materialised with
+  `.load()` before a single write (`dd520be`).
+* **Not idempotent.** These jobs get killed on walltime; a re-run that restarts from scratch never
+  finishes. A completed output is now skipped, `--force` rebuilds.
+* **Fully buffered stdout.** In a batch job stdout is a pipe, so nothing is flushed until exit and a
+  walltime kill leaves an empty log. Line-buffered now, so progress lands in the `.o`/`.out` file as
+  it happens.
+
+Also fixed, found while porting: a recipe with `depth_indices` and `keep_depth: false` silently
+produced a surface file, because the axis is dropped before the selection could apply. It raises now.
+
+### `docs/pipeline_3d.md`
+
+The 3D multivariate model — lat/lon **and** depth, 64 output variables — end to end, on Datarmor
+(PBS Pro) and Jean Zay (Slurm): what the task is, preparing GLORYS truth and the ARGO coverage
+table, simulating the observing system, training with the nine ablations, inference, and the site
+specifics of each centre. Adapted from NOSC's `GUIDE_UTILISATION.md` and its Datarmor container
+guide, re-verified against this code rather than copied.
+
+It states plainly the thing that fails most silently: **`depth_index` is a position on the stored
+file's depth axis, not a depth in metres.** Change what preparation stores and every index in
+`config/data/osse3d_gs21.yaml` addresses a different level, with no error, because the indices are
+still valid. The safe habit — store every level the download produced, let the task select — is now
+written down, along with the two guards that now exist.
+
+Site notes worth repeating: on Datarmor `nvidia-smi` does not exist on the login node and only
+appears inside a container with `--nv`; on Jean Zay compute nodes have no outbound network, so every
+download must run on a pre/post node, while `prepare-obs` downloads nothing and runs anywhere.
+
 ## 2026-09-15: roadmap lot 5 (2/2) — upstream triaged, and a seam over the Pacific
 
 ### The 44 upstream commits, reviewed
