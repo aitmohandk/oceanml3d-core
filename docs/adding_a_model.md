@@ -1,6 +1,8 @@
 # Adding a model
 
-1. Create `oceanml3d/models/<name>/model.py`:
+1. Create `oceanml3d/models/ocean/<name>/model.py`. Note the `ocean/`: the gridded family
+   lives one level down since the NOSC transplant, and `oceanml3d/models/__init__.py` is
+   empty *on purpose*, so that no pre-existing import of the toy family changed behaviour.
 
 ```python
 from oceanml3d.models.ocean.base import BaseOceanModel
@@ -34,7 +36,10 @@ class MyModel(BaseOceanModel):
    ```
 
 4. Add `oceanml3d/models/ocean/<name>/README.md` (inputs / targets / window / reference) and a
-   test in `tests/` that runs a forward pass on the synthetic data.
+   test in `tests/` that runs a forward pass on the synthetic data. A forward pass is not
+   enough on its own: `test_the_trunk_can_actually_fit_a_batch` exists because a model can
+   return correctly shaped output and have learnt nothing, and every other test still
+   passes in that state. Overfit one batch and require the loss to fall.
 
 ## Models that need more than the default batch
 
@@ -44,3 +49,17 @@ class MyModel(BaseOceanModel):
   over the `DIMS` tuple; adding `"depth"` is a 3-line change.
 * two-stage training (4dvarnet-fm): keep one `BaseOceanModel` per stage and chain them in
   a custom `command` in `cli.py`, or freeze stage-1 weights inside stage-2 `__init__`.
+
+## Where the base class does the work for you
+
+Read `oceanml3d/models/ocean/base.py` before overriding anything:
+
+* `inputs(batch)` / `targets(batch)` slice the channel axis from the `VariableSet`, so a model never
+  indexes channels by hand.
+* `predict_step` returns **denormalised** values, which is why the inference layer needs to know
+  nothing about the model.
+* `on_save_checkpoint` / `on_load_checkpoint` carry the normalisation statistics and the channel
+  layout with the weights. If you override either, call `super()` — `NOSCUNet` does, and forgetting
+  it means a checkpoint that denormalises with whatever statistics the current config happens to
+  produce.
+* `stages` plus `set_stage` drive multi-stage training; the CLI runs one `fit` per stage.

@@ -41,7 +41,9 @@ oceanml3d/
                evaluation/, conf/ — see oceanml3d/legacy/README.md
 config/        YAML presets for the CLI, rooted at main.yaml; config/legacy/ is the toy root
 legacy/        the toy driver scripts: train.py, eval_*.py, run_experiment*.py, ...
-tests/         the suite (gridded *and* reserve)   reports/, batch/, scripts/, demos/, notebooks/
+tests/         the suite (gridded *and* reserve)   reports/, scripts/, demos/, notebooks/
+jobs/          run it on a cluster: one runner, Slurm and PBS wrappers, one file per site
+container/     Apptainer definition, one image for V100 / RTX 8000 / A100 / H100
 ```
 
 Import by full path: `from oceanml3d.models.ocean.nosc.model import NOSCUNet`.
