@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-09-15: per-platform runbooks for Datarmor and Jean Zay
+
+`docs/pipeline_3d.md` carried one thin "site specifics" section for two centres that differ in more
+than syntax. Split into three, because the two kinds of knowledge go stale on different schedules:
+what the model is changes when the code changes; what a centre's `$SCRATCH` purge is changes when
+the centre decides.
+
+* **`docs/pipeline_3d.md`** — platform-independent: the task, the data, which command does what.
+* **`docs/platforms/datarmor.md`** — Ifremer, PBS Pro, V100 32 GB.
+* **`docs/platforms/jeanzay.md`** — IDRIS, Slurm, V100 / A100 / H100.
+
+Each runbook goes from building the image to the first training run, step by step, with the commands
+that reserve each kind of node and the paths that centre actually uses. Adapted from NOSC's
+`env/README_conteneur_datarmor.md` and `env/README_conteneur.md` — the operational knowledge in those
+files is hard-won and was not worth re-deriving — rewritten against this project's CLI, `jobs/` layer
+and container, and with the account and project names left as placeholders.
+
+### What differs between the two, and why one guide could not cover both
+
+| | Datarmor | Jean Zay |
+|---|---|---|
+| Scheduler | PBS Pro | Slurm |
+| Downloads run on | queue `ftp` | `--partition=prepost` |
+| Container | runs from `$DATAWORK` directly | registered with `idrcontmgr`, runs only from `$SINGULARITY_ALLOWED_DIR` |
+| `$SCRATCH` purge | 10 days | 30 days without access |
+| The quota that bites | volume | **inodes** — 500 000 on `$WORK`, project-wide |
+| Precision | `16-mixed` (V100 has no bf16) | `bf16-mixed` on A100/H100 |
+
+Both carry a pitfalls table of the failures that look like something else: `nvidia-smi: command not
+found` because you are on a login node *or* because `--nv` is missing; `Connection timed out` on
+`datacopy` meaning "not routed from here" rather than a bad password; `Multiple accounts available`
+on Jean Zay meaning `-A` is missing; and on both, a job dying on quota before the first epoch
+because Hydra wrote `outputs/` next to the clone instead of on `$SCRATCH`.
+
+Adding a third centre is now one file in `docs/platforms/`, one in `jobs/env/`, one in
+`config/paths/` — and nothing in the code.
+
+Points that IDRIS and Ifremer move on their own schedule (partition names, QoS lists, the module
+name for Singularity, the size of the image area) are marked `[confirm]` with the command that
+answers each in two minutes, rather than presented as settled.
+
 ## 2026-09-15: NOSC preparation fixes ported, and the 3D pipeline documented end to end
 
 ### What the recent NOSC work turned out to be
