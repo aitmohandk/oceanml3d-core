@@ -11,6 +11,8 @@ Recipe (YAML):
     keep_depth: true                                   # keep the depth axis (3D tasks)
     depth_indices: [0, 2, 4]                           # positions on the SOURCE depth axis
     chunks: {time: 30}                                 # only if you know you need it (see below)
+    parallel: false                                    # open files from dask threads -- see below
+    dask_scheduler: synchronous                        # synchronous | threads | processes
 
 CAREFUL WITH ``depth_indices``. It selects *positions on the source file's depth axis*, and the
 positions it leaves are what the data config's own ``depth_index`` then addresses. Change this list
@@ -25,6 +27,7 @@ import os
 import sys
 from pathlib import Path
 
+import dask
 import numpy as np
 import xarray as xr
 import yaml
@@ -35,6 +38,11 @@ from oceanml3d.data.open import normalise_dims
 # exit -- if the job is killed on walltime the log looks empty and you cannot tell how far it got.
 # Line-buffer so the progress below lands in the .o/.out file as it happens. (Same as `python -u`,
 # kept here so it holds however the script is launched.)
+# Lustre, which is what every one of these centres runs, does not implement the POSIX locking HDF5
+# reaches for. Left alone it produces either an error about file locking or a hang on the first open.
+# Harmless for us: these files are read-only inputs.
+os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")
+
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(line_buffering=True)
@@ -104,12 +112,24 @@ def run(recipe: dict, *, force: bool = False) -> Path:
                 f"no file matches {pattern}. Check the pattern, and -- inside a container -- that the "
                 f"directory is bound: an unbound path is empty rather than missing."
             )
-        print(f"[regrid] {len(inputs)} input file(s)")
-        open_kw["parallel"] = True            # open and preprocess files concurrently
+        print(f"[regrid] {len(inputs)} input file(s): {Path(inputs[0]).name} … {Path(inputs[-1]).name}")
+        # `parallel=True` opens and preprocesses files from dask threads. That is faster where it
+        # works -- and where it does not it does not raise, it segfaults, because netCDF4/HDF5 is not
+        # thread-safe and the C library dies under the interpreter:
+        #     jobs/env/_lib.sh: line 40: 23487 Segmentation fault  singularity exec ...
+        # Whether a given build is safe depends on how HDF5 was compiled, so it cannot be decided
+        # here. Off by default; turn it on per recipe once you have seen it work on that machine.
+        if recipe.get("parallel", False):
+            open_kw["parallel"] = True
     else:
         inputs = pattern
     # Pass the resolved list rather than the pattern: xarray does its own globbing, but not `**`.
-    ds = xr.open_mfdataset(inputs, **open_kw)
+    # The synchronous scheduler for the same reason as `parallel` above: the read goes through the
+    # netCDF4 C library, and a threaded scheduler is the other way to reach it from several threads
+    # at once. This costs little here -- the work is I/O against one shared filesystem, not CPU --
+    # and `dask_scheduler: threads` in the recipe restores the old behaviour.
+    with dask.config.set(scheduler=recipe.get("dask_scheduler", "synchronous")):
+        ds = xr.open_mfdataset(inputs, **open_kw)
 
     ds = ds.rename({k: v for k, v in recipe["variables"].items() if k in ds.data_vars})
     if "time" in recipe:
@@ -133,7 +153,8 @@ def run(recipe: dict, *, force: bool = False) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     # Materialise before writing. A subdomained, depth-reduced box is a few GB at most, and one
     # in-memory write beats streaming a compressed write through a dask graph by a long way.
-    out = out.load()
+    with dask.config.set(scheduler=recipe.get("dask_scheduler", "synchronous")):
+        out = out.load()
     out.to_netcdf(path, encoding={v: {"zlib": True, "complevel": 4} for v in out.data_vars})
     out.close()
     ds.close()

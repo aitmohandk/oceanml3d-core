@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-09-15: the segfault in `regrid.py`, and why it was not an error
+
+```
+[regrid] 415 input file(s)
+jobs/env/_lib.sh: line 40: 23487 Segmentation fault      singularity exec ...
+```
+
+The glob and the mounts were right — 415 files were found. The crash is in the read, and it is the
+`parallel=True` I ported from NOSC in the preparation fixes.
+
+**netCDF4/HDF5 is not thread-safe.** `open_mfdataset(parallel=True)` opens and preprocesses files
+from dask threads, so the C library is entered from several at once; when the build does not tolerate
+it, it does not raise, it dies. A Python traceback would have pointed at the line. A segfault points
+at `singularity exec`, which is why this looks like a container problem and is not one.
+
+Whether a given HDF5 build tolerates it depends on how it was compiled, so it cannot be decided in
+this file. Three changes, all defaulting to the safe side:
+
+* **`parallel` is now a recipe key, off by default.** Turn it on per recipe once you have seen it
+  work on that machine.
+* **The read and the `.load()` run on dask's synchronous scheduler**, for the same reason: a threaded
+  scheduler is the other way into the netCDF4 C library from several threads. This costs little here
+  — the work is I/O against one shared filesystem, not CPU — and `dask_scheduler: threads` in the
+  recipe restores the old behaviour.
+* **`HDF5_USE_FILE_LOCKING=FALSE`** is set by default. Lustre, which every one of these centres runs,
+  does not implement the POSIX locking HDF5 reaches for; left alone it gives either an error about
+  locking or a hang on the first open. Harmless here, the inputs being read-only.
+
+`[regrid]` now also prints the first and last file it matched, not only the count. **415 files for
+one year of a daily product is worth a second look** — the year appearing anywhere in a filename
+matches, so a mirror whose names carry a date range will pull in neighbours. The `time:` slice
+discards them afterwards, so the result is right and the read is larger than it needs to be.
+
 ## 2026-09-15: three things the first real `prepare_glorys` submission found
 
 A first run of `jobs/pbs/prepare_glorys.pbs` on Datarmor failed before reading a single file. Three
