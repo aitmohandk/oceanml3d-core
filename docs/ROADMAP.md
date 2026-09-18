@@ -377,10 +377,22 @@ Datarmor (PBS Pro, V100 32 Go), Jean Zay (Slurm, V100/A100/H100), Odyssey (Slurm
 
 ### Lot 5 — Dette structurelle (à planifier, ~1 semaine)
 
-- [ ] Fusionner `conf/schema.py` et `config_schema.py`, **ou** acter par écrit que les deux CLI sont permanentes.
-- [ ] Converger `models/dynamics.py` sur le registre `dynamics/`.
-- [ ] Ramener les trois U-Nets à un.
-- [ ] Solder les 168 violations ruff par vagues : d'abord les 73 auto-corrigeables (UP006/UP045), puis **B023 × 27 en audit manuel — certaines sont de vrais bugs de capture de variable de boucle**, puis B905/B008/B007.
+> **Réévalué le 2026-09-15.** La réorganisation `legacy/` (PR #3) a largement dissous les trois
+> premiers items : ils décrivaient des duplications *dans le code vivant*, or l'un des deux exemplaires
+> est désormais en réserve dans chaque cas. Ce n'est plus de la duplication, c'est une frontière
+> vivant/réserve — qui est exactement ce qu'on voulait obtenir. Les fusionner reviendrait à retravailler
+> du code scientifique importé pour une raison esthétique.
+
+- [x] ~~Fusionner `conf/schema.py` et `config_schema.py`~~ — `conf/schema.py` est en réserve
+  (`oceanml3d/legacy/conf/`), utilisé par le seul `legacy/train.py`. Deux points d'entrée assumés :
+  `config/main.yaml` pour la CLI grillée, `config/legacy/config.yaml` pour la voie jouet.
+- [x] ~~Converger `models/dynamics.py` sur le registre~~ — même raison : le dispatch `if/elif` est en réserve.
+- [x] ~~Ramener les trois U-Nets à un~~ — `unet.py` et `direct_unet.py` sont en réserve ; le vivant a
+  `unet_nosc.py` et `unet_monai.py`, deux troncs sélectionnables et testés, pas une duplication.
+- [x] **Ruff** : jeu complet `["E","F","I","B","UP"]` désormais appliqué. Le « backlog de 168 » était
+  à 143 dans `oceanml3d/legacy/` et 2 dans `legacy/` ; 24 dans le code vivant, corrigés.
+  **Correction : aucun des 27 `B023` n'est un bug** — deux `def closure()` LBFGS consommées dans la
+  même itération. Réserve exemptée par `per-file-ignores`, décision consignée dans `pyproject.toml`.
 - [ ] Décider du sort des 27 commits amont non repris (backbone MONAI FDV1-Stier, `prior_hidden_channels`, truncated-BPTT, campagne QG S0/S1) : reprise manuelle chiffrée, ou abandon acté dans `PROVENANCE.md`.
 - [ ] Profondeur comme dimension de patch (`PatchArray` est déjà générique sur `DIMS`).
 
