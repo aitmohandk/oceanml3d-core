@@ -15,6 +15,35 @@ This replaces `batch/`, which held 166 Slurm scripts — 113 hard-coding one use
 81 hard-coding that user's conda environment, and none usable under PBS. Adding a second scheduler
 that way would have made 332 files to keep in step.
 
+## What `run.sh` is, and is not
+
+**It is not a pipeline.** It runs **one** `oceanml3d` command, exactly the one you give it, and does
+three small things around it: source `jobs/env/<site>.sh` (modules, data root, thread count), append
+`paths=<site>` so the catalog matches, and — if `OCEANML3D_SIF` is set — run the command inside the
+container with the right binds and `--nv`.
+
+That is all. These two are the same command:
+
+```bash
+jobs/run.sh --site datarmor command=prepare-obs experiment=osse3d_gs21_multivar_unet
+
+singularity exec --nv --bind $DATAWORK:$DATAWORK,$SCRATCH:$SCRATCH,/home/ref-ocean-reanalysis \
+    $DATAWORK/containers/oceanml3d.sif \
+    oceanml3d command=prepare-obs experiment=osse3d_gs21_multivar_unet paths=datarmor
+```
+
+The first is the second with the site's details filled in from one file instead of retyped. Nothing
+is hidden: `run.sh` prints the command it is about to run.
+
+So a full preparation is **several** calls, in order, each its own job — that is why the runbooks walk
+through numbered steps rather than handing you one command. `run.sh` is what each of those steps
+calls.
+
+**It is not the only way in either.** The preparation scripts under `scripts/prepare/` are plain
+Python and take a `--config`; they are not `oceanml3d` sub-commands, so the runbooks call them
+through `singularity exec` directly. `run.sh` covers the CLI: `validate`, `prepare-obs`, `eofs`,
+`train`, `predict`.
+
 ## Quick start
 
 ```bash

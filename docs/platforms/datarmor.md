@@ -240,6 +240,11 @@ Expect `True Tesla V100-PCIE-32GB`. `False` is a missing `--nv`, nine times out 
 
 Then the project itself:
 
+`jobs/run.sh` runs **one** `oceanml3d` command — the one you give it — after sourcing
+`jobs/env/datarmor.sh` and wrapping it in the container. It is not a pipeline, and it does not
+replace the steps in F: those are several commands, in order, each its own job. It prints the
+command it is about to run, so you can always see what it did with your arguments.
+
 ```bash
 cd $DATAWORK/oceanml3d-core
 jobs/run.sh --site datarmor command=list-models
@@ -446,7 +451,8 @@ rsync -av $SCRATCH/oceanml3d/runs/<run>/ $DATAWORK/oceanml3d/runs/<run>/
 | Symptom | Cause |
 |---|---|
 | `nvidia-smi: Command not found` | you are on `datarmor3`, a login node. Or inside a container without `--nv`. |
-| `module: Command not found` in a job | batch does not read `~/.cshrc`; source the modules init first |
+| `module: command not found` from `jobs/run.sh` | `module` is a shell *function*, and a script gets a fresh shell that lacks it. `load_modules` in `jobs/env/_lib.sh` sources the init; if it cannot find yours, its message says where it looked. |
+| `module: Command not found` in a batch job | same cause; `.pbs` files source the modules init explicitly |
 | `Connection timed out` on `datacopy` | that host is not routed from where you are, not a bad password |
 | `530 Login incorrect` on `eftp` | the extranet account, which is not your Datarmor login |
 | A job queued for hours | the `sequentiel` routing queue sent a large `mem=` request to rare nodes |

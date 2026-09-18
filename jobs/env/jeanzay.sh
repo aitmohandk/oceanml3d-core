@@ -9,8 +9,8 @@
 #   * Singularity images are not run from an arbitrary path: they have to be registered in the
 #     centre's image area first (`idrcontmgr`). Check the current procedure.
 
-module purge
-module load singularity
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+load_modules singularity || return 1
 
 export OCEANML3D_DATA="${OCEANML3D_DATA:-$WORK/oceanml3d}"
 export OCEANML3D_PATHS="${OCEANML3D_PATHS:-jeanzay}"

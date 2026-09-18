@@ -4,8 +4,8 @@
 # keys are the sixteen in config/paths/local.yaml; copy that file and change the paths, not the keys
 # (test_a_site_file_does_not_invent_keys_of_its_own enforces exactly that).
 
-module purge
-module load singularity          # or `apptainer`, depending on what the centre exposes
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+load_modules singularity || return 1   # or `apptainer`, depending on what the centre exposes
 
 export OCEANML3D_DATA="${OCEANML3D_DATA:-$DATAWORK/oceanml3d}"
 export OCEANML3D_PATHS="${OCEANML3D_PATHS:-datarmor}"

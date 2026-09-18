@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-09-15: `module` from a script, and what `run.sh` actually is
+
+### `module: command not found`
+
+```
+jobs/env/datarmor.sh: line 7: module: command not found
+```
+
+`module` is a shell **function**, defined when your login shell sources the Modules init from its rc
+file. `jobs/run.sh` starts a fresh bash, which does not have it. Same cause as the csh batch trap
+already documented for `.pbs` jobs — I wrote that one down and did not notice it applied to the
+interactive path too.
+
+`jobs/env/_lib.sh` adds `load_modules`, which is a no-op when `module` already exists and otherwise
+sources the first init it finds (`$MODULESHOME/init/bash`, `/usr/share/Modules/init/bash`, the Lmod
+equivalents, `/etc/profile.d/`). When it finds none it says where it looked and which command reveals
+the right path, instead of failing on the next line with a message about something else. The Datarmor
+and Jean Zay site files use it.
+
+### What `run.sh` is
+
+The runbooks used `run.sh` as if it were a pipeline, then walked through numbered preparation steps,
+without ever saying what it does. It runs **one** `oceanml3d` command — the one you give it — and
+does three small things around it: source the site file, append `paths=<site>`, and run it in the
+container with the right binds and `--nv` when `OCEANML3D_SIF` is set.
+
+`jobs/README.md` now shows the equivalent `singularity exec …` line side by side, so the wrapper is
+legible rather than magic, and states the two things it is not: not a pipeline (a full preparation is
+several calls, in order, each its own job — hence the numbered steps), and not the only way in (the
+`scripts/prepare/` tools are plain Python with `--config`, not CLI sub-commands, which is why the
+runbooks call them through `singularity exec` directly).
+
 ## 2026-09-15: `jobs/run.sh --site`, because Datarmor's login shell is csh
 
 Every example in the runbooks was written `OCEANML3D_SITE=datarmor jobs/run.sh …`. That is bash
