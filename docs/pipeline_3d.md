@@ -8,6 +8,13 @@ This is the descendant of NOSC's `osse3d_gs_multivar_unet`. It reads a simulated
 horizontal current components on 21 depth levels, plus sea surface height. Sixty-four output
 variables.
 
+**This page is platform-independent: what the model is, what the data means, which command does
+what.** The step-by-step runbooks for a given centre — reserving a node, the exact paths, the local
+traps — are separate, because the two kinds of knowledge go stale on different schedules:
+
+* **`docs/platforms/datarmor.md`** — Ifremer, PBS Pro, V100 32 GB
+* **`docs/platforms/jeanzay.md`** — IDRIS, Slurm, V100 / A100 / H100
+
 Companions: `docs/gridded_models.md` (configuration reference — the `variables:` block, the catalog,
 patching, losses), `jobs/README.md` (how the scheduler layer works), `docs/data_preparation.md`
 (every recipe, including the surface-current tasks this page does not cover).
@@ -239,27 +246,22 @@ oceanml3d-eval run -b osse3d_gs21 -p outputs/<xp>/<run>/product/product.yaml
 
 ## 6. Site specifics
 
-### Datarmor (Ifremer) — PBS Pro
+Not repeated here. Each centre has its own runbook, and they differ in more than syntax — storage
+purges, which nodes have network, how a container is allowed to run:
 
-* Tesla V100-PCIE-32GB, driver 530.30.02 / CUDA 12.1. The container's `cu124` build runs there by
-  CUDA minor-version compatibility.
-* `nvidia-smi` does not exist on `datarmor3`: it is a login node. And inside a container it only
-  appears with `--nv` — `jobs/run.sh` passes it; a bare `singularity exec` will not.
-* PBS does not forward trailing arguments the way `sbatch` does, hence `OCEANML3D_ARGS`.
-* Use `$DATAWORK` for data and containers, `$SCRATCH` for run outputs. `jobs/env/datarmor.sh` binds
-  both into the container.
+| | `docs/platforms/datarmor.md` | `docs/platforms/jeanzay.md` |
+|---|---|---|
+| Scheduler | PBS Pro (`qsub`) | Slurm (`sbatch`, `srun`) |
+| GPU | Tesla V100 32 GB | V100 / A100 / H100 |
+| Precision | `16-mixed` | `bf16-mixed` on A100/H100, `16-mixed` on V100 |
+| Downloads run on | queue `ftp` | `--partition=prepost` |
+| Container | runs from `$DATAWORK` directly | registered with `idrcontmgr`, runs from `$SINGULARITY_ALLOWED_DIR` |
+| Data live on | `$SCRATCH`, master copy on `$DATAWORK` | `$SCRATCH`, archive on `$STORE` |
+| Purge | `$SCRATCH` after 10 days | `$SCRATCH` after 30 days without access |
+| The quota that bites | volume | **inodes** (500 000 on `$WORK`) |
 
-### Jean Zay (IDRIS) — Slurm
-
-* Partitions differ in GPU; pick the precision accordingly (table above).
-* **Compute nodes have no outbound network.** Every download in §3.1 and §3.2 must run on a pre/post
-  node. `prepare-obs` (§3.3) does not download anything and runs anywhere.
-* Container images are registered in the centre's image area rather than run from an arbitrary path
-  (`idrcontmgr`). **Confirm the current procedure in the IDRIS documentation** — this note is a
-  pointer, not an authority.
-* `--account=xxx@v100` and a `--qos` are mandatory; fill them into `jobs/slurm/train.sbatch`.
-
----
+Adding a third centre means one file in `docs/platforms/`, one in `jobs/env/`, and one in
+`config/paths/` — nothing in the code.
 
 ## 7. Known pitfalls
 

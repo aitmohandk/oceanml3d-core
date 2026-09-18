@@ -1,5 +1,84 @@
 # Changelog
 
+## 2026-09-15: Datarmor runbook — the local GLORYS mirror, and a transfer route that always works
+
+Two gaps in `docs/platforms/datarmor.md`, both present in NOSC's guide and both lost in the port.
+
+### GLORYS is already on Datarmor
+
+The runbook told you to download GLORYS from CMEMS. **Datarmor mirrors the central CMEMS products
+read-only under `/home/ref-<theme>/`, GLORYS12V1 (product 001-030) included.** Tens to hundreds of
+gigabytes fetched, stored and counted against quota, for data already on the filesystem — and the
+download is the slowest step of the whole preparation.
+
+`F.1` now starts there: locate the mirror, check it covers the domain, period and variables, and
+point a Datarmor variant of the recipe at it. No code changes — `regrid.py` reads whatever `input:`
+names — but one thing has to be right, and it fails in a misleading way: **the mirror must be in
+`OCEANML3D_BIND`**, or the path resolves to nothing inside the container and looks like a missing
+dataset rather than a missing mount. `jobs/env/datarmor.sh` now binds it by default.
+
+`F.2` adds what NOSC learned the hard way: eleven years go in a **PBS job array, one year per
+sub-job** (`#PBS -J 2010-2020`), not one monolithic job. A single job chains thousands of file opens
+on one core and saves nothing along the way, so one walltime overrun loses everything. A year that
+overruns is relaunched alone while the others stay done, and `regrid.py` skipping completed outputs
+makes relaunching the whole array safe.
+
+Also carried over: **`.pbs` jobs must call a `.py` file, never `python -c "…"`.** These run under
+csh, which cannot carry a multi-line double-quoted string — it fails with `Unmatched "`.
+
+### A transfer route that needs neither `datacopy` nor an extranet account
+
+The three routes were a table row each; the fallback had no command. Now all three are written out.
+It matters because the first two each have a failure mode that looks like something else:
+`datacopy` times out from outside even with the VPN (not routed, not a bad password), and `eftp`
+needs an **extranet** account that is distinct from the Datarmor login, has a different password by
+policy, and may not be active — `530 Login incorrect` is nearly always that.
+
+The third route always exists: you already reach `datarmor-access.ifremer.fr` over SSH, so the `.sif`
+can go there directly. Shared node, so for occasional transfers — but it works from anywhere, with
+the account you already have.
+
+## 2026-09-15: per-platform runbooks for Datarmor and Jean Zay
+
+`docs/pipeline_3d.md` carried one thin "site specifics" section for two centres that differ in more
+than syntax. Split into three, because the two kinds of knowledge go stale on different schedules:
+what the model is changes when the code changes; what a centre's `$SCRATCH` purge is changes when
+the centre decides.
+
+* **`docs/pipeline_3d.md`** — platform-independent: the task, the data, which command does what.
+* **`docs/platforms/datarmor.md`** — Ifremer, PBS Pro, V100 32 GB.
+* **`docs/platforms/jeanzay.md`** — IDRIS, Slurm, V100 / A100 / H100.
+
+Each runbook goes from building the image to the first training run, step by step, with the commands
+that reserve each kind of node and the paths that centre actually uses. Adapted from NOSC's
+`env/README_conteneur_datarmor.md` and `env/README_conteneur.md` — the operational knowledge in those
+files is hard-won and was not worth re-deriving — rewritten against this project's CLI, `jobs/` layer
+and container, and with the account and project names left as placeholders.
+
+### What differs between the two, and why one guide could not cover both
+
+| | Datarmor | Jean Zay |
+|---|---|---|
+| Scheduler | PBS Pro | Slurm |
+| Downloads run on | queue `ftp` | `--partition=prepost` |
+| Container | runs from `$DATAWORK` directly | registered with `idrcontmgr`, runs only from `$SINGULARITY_ALLOWED_DIR` |
+| `$SCRATCH` purge | 10 days | 30 days without access |
+| The quota that bites | volume | **inodes** — 500 000 on `$WORK`, project-wide |
+| Precision | `16-mixed` (V100 has no bf16) | `bf16-mixed` on A100/H100 |
+
+Both carry a pitfalls table of the failures that look like something else: `nvidia-smi: command not
+found` because you are on a login node *or* because `--nv` is missing; `Connection timed out` on
+`datacopy` meaning "not routed from here" rather than a bad password; `Multiple accounts available`
+on Jean Zay meaning `-A` is missing; and on both, a job dying on quota before the first epoch
+because Hydra wrote `outputs/` next to the clone instead of on `$SCRATCH`.
+
+Adding a third centre is now one file in `docs/platforms/`, one in `jobs/env/`, one in
+`config/paths/` — and nothing in the code.
+
+Points that IDRIS and Ifremer move on their own schedule (partition names, QoS lists, the module
+name for Singularity, the size of the image area) are marked `[confirm]` with the command that
+answers each in two minutes, rather than presented as settled.
+
 ## 2026-09-15: NOSC preparation fixes ported, and the 3D pipeline documented end to end
 
 ### What the recent NOSC work turned out to be
