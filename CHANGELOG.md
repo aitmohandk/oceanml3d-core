@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-09-15: `jobs/run.sh --site`, because Datarmor's login shell is csh
+
+Every example in the runbooks was written `OCEANML3D_SITE=datarmor jobs/run.sh …`. That is bash
+syntax. **Datarmor's default login shell is csh**, which reads the whole first word as a command name
+and answers:
+
+```
+OCEANML3D_SITE=datarmor: Command not found.
+```
+
+A guide whose very first check fails on the platform it is written for is worse than no guide. Fixed
+at the source rather than by adding a csh column to every example: `jobs/run.sh` now takes
+`--site <name>` (and `--site=<name>`), which works in any shell and is what the documentation uses
+throughout. The environment variable still works where the syntax does, and is what the job wrappers
+set.
+
+The Datarmor runbook also gains a shell note up front — `setenv NAME value` first, or prefix with
+`env`, for the variables that have no flag — and points out that batch scripts are a separate case,
+since a `.pbs` file declares its own interpreter on the first line.
+
+This is the second csh-shaped trap in that document. The other, carried over from NOSC, is that a
+`.pbs` job must call a `.py` file rather than `python -c "…"`, because csh cannot hold a multi-line
+double-quoted string.
+
 ## 2026-09-15: Datarmor runbook — the local GLORYS mirror, and a transfer route that always works
 
 Two gaps in `docs/platforms/datarmor.md`, both present in NOSC's guide and both lost in the port.
