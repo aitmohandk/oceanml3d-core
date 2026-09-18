@@ -1,4 +1,9 @@
-# Product format (contract with `oceanml3d-eval`) — v1
+# Product format (contract with `oceanml3d-eval`) — v2
+
+> v2 adds the optional pair `ensemble_size` + `coords.member`, so that probabilistic methods
+> (`enkf` with `return_ensemble: true`, flow-matching and diffusion samplers) are described by
+> the same manifest as a deterministic reconstruction. Backward compatible with v1: a manifest
+> without those keys is a deterministic product.
 
 The machine-readable contract is `oceanml3d/inference/product_contract.py`
 (`validate_manifest`), duplicated **byte for byte** in `oceanml3d-eval/oceanml3d_eval/product_contract.py`

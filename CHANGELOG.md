@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 4 (1/2) — dead code out, three drifted documents realigned
+
+### Removed
+
+Five modules in `oceanml3d/legacy/evaluation/` with no reference anywhere in the code:
+`run_l96_sweep.py`, `run_l96_sweep2.py`, `tune_l96_weak4dvar.py`, `experiment.py`,
+`sweep_qg_baselines.py`. The last was called by `batch/` scripts — at its pre-rename path, so those
+calls had been broken since the namespace move. The only surviving mentions are in `CHANGELOG.md`
+and in `reports/`, i.e. prose about what was done, which stays accurate.
+
+Also `archive/` (3 files), `PLAN_upstream.md`, `docs/MIGRATION_PLAN.md`, `docs/REORG_PLAN.md` — the
+planning documents for a migration that has happened — and `tests/legacy/generate_golden.py`, which
+still used the flat imports that stopped resolving when everything moved under `oceanml3d/`. The
+golden files it produced are committed and unchanged; `tests/golden/generate.py` is the live one.
+
+### Three documents that described a different repository
+
+* `adding_a_model.md` pointed at `oceanml3d/models/<name>/` and told you to register in
+  `oceanml3d/models/__init__.py`. Built-in gridded models live in `oceanml3d/models/ocean/<name>/`
+  since the transplant, and `models/__init__.py` is empty *on purpose*. Also: a forward-pass test is
+  not enough, and the file now says why — a model can return correctly shaped output and have learnt
+  nothing, and every other test passes in that state.
+* `product_format.md` was titled v1. The contract has been v2 since ensembles were added, with the
+  optional `ensemble_size` + `coords.member` pair; now documented, including its v1 compatibility.
+* `data_preparation.md` covered the five surface-current recipes and stopped there. The OSSE-3D half
+  — GLORYS truth, the ARGO coverage table, and `prepare-obs` for the simulated observing system —
+  was entirely absent, including the part that trips people up: the three keys `prepare-obs` writes
+  must be **declared** in the catalog before it runs.
+
+### A correction to this roadmap
+
+`docs/ROADMAP.md` claimed that taking `reports/` out of the repository would bring a clone from
+86 MB down to ~45 MB. That is wrong. Deleting files from `HEAD` does not shrink a clone: `git clone`
+fetches the whole history, and the blobs stay in it. Only rewriting history, or a shallow clone,
+changes the download. The case for moving `reports/` out is working-tree clarity, not clone size —
+a weaker argument, and it should be made honestly. Left in place for now.
+
 ## 2026-09-15: portability — one container, one runner, two schedulers, four sites
 
 **Summary:** the project targets several centres, not one. `container/`, `jobs/` and the site files
