@@ -1,5 +1,77 @@
 # Changelog
 
+## 2026-09-15: Zarr for the intermediate data
+
+Following the segfault: what is not parallelisable is narrow — entering the netCDF4/HDF5 C library
+from several **threads of one process**. Parallelism across *processes* is untouched, and is where
+the gain already is: the PBS array runs eleven years at once. Training in DDP is unaffected.
+
+**Zarr removes the restriction at its root.** A chunk is an independent object, there is no
+C-library global state, and concurrent reads are what the format was built for. So the intermediate
+files become Zarr, and reading them back can use `parallel: true` and `dask_scheduler: threads`.
+
+The two ends stay NetCDF, deliberately: the GLORYS mirror is read-only and not ours to convert, and
+the exported product is the contract with `oceanml3d-eval`.
+
+### Chunk size is not a detail
+
+Zarr means many small objects, and on Jean Zay the quota that bites is **inodes** — 500 000 on
+`$WORK`, shared across the project. For the Gulf Stream box (4018 days, 26 levels, 144x144, three 3D
+variables plus SSH, 26.3 GB):
+
+| `zarr_chunks` | objects | largest chunk |
+|---|---|---|
+| `{time: 1}` | 16 072 | 2 MB |
+| **`{time: 32}`** | **504** | **69 MB** |
+| `{time: 256}` | 64 | 552 MB |
+
+Daily chunks would spend 3% of the project's entire inode quota on one dataset; 256-day chunks are
+too coarse to read a patch from. `{time: 32}` is the shipped default, and `regrid.py` prints the
+count and the largest chunk before writing, warning past 50 000 objects.
+
+### What changed
+
+`regrid.py` writes a Zarr store when `output` ends in `.zarr`, with `zarr_chunks` stated in the
+recipe rather than inherited from whatever the read happened to produce.
+`scripts/prepare/recipes/glorys_gs_concat.yaml` and the `glorys_gs_multidepth` catalog key follow.
+
+Nothing downstream needed changing: `data/open.py` already dispatched on the `.zarr` extension, and
+`data/datamodule.py` has been writing its stacked cache as a Zarr store all along. The extension is
+the only switch — reverting is one character in the recipe and one in the catalog.
+
+## 2026-09-15: the segfault in `regrid.py`, and why it was not an error
+
+```
+[regrid] 415 input file(s)
+jobs/env/_lib.sh: line 40: 23487 Segmentation fault      singularity exec ...
+```
+
+The glob and the mounts were right — 415 files were found. The crash is in the read, and it is the
+`parallel=True` I ported from NOSC in the preparation fixes.
+
+**netCDF4/HDF5 is not thread-safe.** `open_mfdataset(parallel=True)` opens and preprocesses files
+from dask threads, so the C library is entered from several at once; when the build does not tolerate
+it, it does not raise, it dies. A Python traceback would have pointed at the line. A segfault points
+at `singularity exec`, which is why this looks like a container problem and is not one.
+
+Whether a given HDF5 build tolerates it depends on how it was compiled, so it cannot be decided in
+this file. Three changes, all defaulting to the safe side:
+
+* **`parallel` is now a recipe key, off by default.** Turn it on per recipe once you have seen it
+  work on that machine.
+* **The read and the `.load()` run on dask's synchronous scheduler**, for the same reason: a threaded
+  scheduler is the other way into the netCDF4 C library from several threads. This costs little here
+  — the work is I/O against one shared filesystem, not CPU — and `dask_scheduler: threads` in the
+  recipe restores the old behaviour.
+* **`HDF5_USE_FILE_LOCKING=FALSE`** is set by default. Lustre, which every one of these centres runs,
+  does not implement the POSIX locking HDF5 reaches for; left alone it gives either an error about
+  locking or a hang on the first open. Harmless here, the inputs being read-only.
+
+`[regrid]` now also prints the first and last file it matched, not only the count. **415 files for
+one year of a daily product is worth a second look** — the year appearing anywhere in a filename
+matches, so a mirror whose names carry a date range will pull in neighbours. The `time:` slice
+discards them afterwards, so the result is right and the read is larger than it needs to be.
+
 ## 2026-09-15: three things the first real `prepare_glorys` submission found
 
 A first run of `jobs/pbs/prepare_glorys.pbs` on Datarmor failed before reading a single file. Three

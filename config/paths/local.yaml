@@ -16,7 +16,10 @@ datasets:
 
   # --- OSSE-3D, Gulf Stream (config/data/osse3d_gs21.yaml) ---
   # Truth and statics: produced by the recipes in scripts/prepare/.
-  glorys_gs_multidepth: {path: glorys/glorys_gs_multidepth_2010-2020.nc, source: CMEMS GLORYS12 reanalysis}
+  # .zarr: the merge step writes a Zarr store, which is the right format for intermediate data --
+  # independent chunk objects, safe to read from threads, unlike NetCDF. open.py dispatches on
+  # the extension, so switching back to .nc is a one-character change here and in the recipe.
+  glorys_gs_multidepth: {path: glorys/glorys_gs_multidepth_2010-2020.zarr, source: CMEMS GLORYS12 reanalysis}
   glorys_gs_surface:    {path: glorys/glorys_gs_surface_2010-2020.nc, source: CMEMS GLORYS12 reanalysis, surface}
   bathy_gs:             {path: bathy/bathymetry_gs.nc, source: GEBCO on the GLORYS12 grid}
   argo_profiles_gs:     {path: argo/argo_profiles_gs.csv, source: scripts/prepare/argo_profiles.py}
