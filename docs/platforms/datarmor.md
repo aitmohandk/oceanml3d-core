@@ -240,6 +240,11 @@ Expect `True Tesla V100-PCIE-32GB`. `False` is a missing `--nv`, nine times out 
 
 Then the project itself:
 
+`jobs/run.sh` runs **one** `oceanml3d` command — the one you give it — after sourcing
+`jobs/env/datarmor.sh` and wrapping it in the container. It is not a pipeline, and it does not
+replace the steps in F: those are several commands, in order, each its own job. It prints the
+command it is about to run, so you can always see what it did with your arguments.
+
 ```bash
 cd $DATAWORK/oceanml3d-core
 jobs/run.sh --site datarmor command=list-models
@@ -270,90 +275,56 @@ Check it covers the domain (32–44 °N, 66–54 °W), the period (2010–2020),
 `vo`, `zos` on several depth levels. If it does, **skip the download entirely**: tens to hundreds of
 gigabytes you do not fetch, do not store, and do not count against your quota.
 
-Nothing in the code changes. `regrid.py` reads whatever `input:` points at, so a Datarmor variant of
-the recipe is the whole difference:
-
-```yaml
-# scripts/prepare/recipes/glorys_gs_multidepth.datarmor.yaml
-input: /home/ref-ocean-reanalysis/global-reanalysis-phy-001-030-daily/*/*.nc
-output: ${OCEANML3D_DATA}/by_year/glorys_gs_multidepth_2010.nc
-variables: {thetao: thetao, uo: uo, vo: vo, zos: zos}
-keep_depth: true
-method: none                 # native 1/12 deg kept; set a grid here to coarsen
-time: ["2010-01-01", "2011-01-01"]
-```
-
-The `download:` block is simply absent. **One thing to get right:** the mirror must be bound into the
-container, or the path resolves to nothing inside it. Add it in `jobs/env/datarmor.sh`:
+Nothing in the code changes, and there is no recipe to write: `scripts/prepare/recipes/
+glorys_gs_multidepth.datarmor.yaml` already reads from the mirror, with `${GLORYS_SRC}`, `${YEAR}`
+and `${NEXT}` filled in by `jobs/prepare.sh`. Point `GLORYS_SRC` at the exact directory in
+`jobs/env/datarmor.sh`:
 
 ```sh
-export OCEANML3D_BIND="$DATAWORK:$DATAWORK,$SCRATCH:$SCRATCH,/home/ref-ocean-reanalysis"
+export GLORYS_SRC=/home/ref-ocean-reanalysis/global-reanalysis-phy-001-030-daily
 ```
 
-Time one month interactively before launching eleven years. It validates the output *and* gives you
-the scale for sizing the walltime:
-
-```bash
-qsub -I -l walltime=00:30:00 -l mem=32g
-source /usr/share/Modules/init/bash && module load singularity
-cd $DATAWORK/oceanml3d-core
-OCEANML3D_DATA=$SCRATCH/oceanml3d/data \
-  singularity exec --bind $OCEANML3D_BIND $DATAWORK/containers/oceanml3d-2026-09.sif \
-  python scripts/prepare/regrid.py --config /tmp/glorys_one_month.yaml
-```
+**One thing has to be right, and it fails misleadingly:** the mirror must be in `OCEANML3D_BIND`, or
+the path resolves to nothing inside the container and looks like a missing dataset rather than a
+missing mount. `jobs/env/datarmor.sh` binds it by default.
 
 ### F.2 Eleven years: a PBS job array, one year per sub-job
 
-**Not one monolithic job.** A single job chains thousands of file opens on one core and saves nothing
-along the way: one walltime overrun and everything is lost. One sub-job per year, each independent,
-then a merge. A year that overruns is relaunched on its own (`qsub -J 2015-2015 …`) while the others
-stay done — and `regrid.py` skips a completed output, so relaunching the array is safe too.
-
-`jobs/pbs/prepare_glorys.pbs`:
+The job is in the repository — `jobs/pbs/prepare_glorys.pbs`. Submit it:
 
 ```csh
-#!/bin/csh
-#PBS -N o3d_glorys
-#PBS -q omp
-#PBS -l select=1:ncpus=8:mem=32g
-#PBS -l walltime=03:00:00
-#PBS -J 2010-2020
-#PBS -j oe
-#PBS -o logs/
-
-source /usr/share/Modules/init/csh    # mandatory in batch csh: defines `module`
-module load singularity
-cd $PBS_O_WORKDIR
-setenv OCEANML3D_DATA $SCRATCH/oceanml3d/data
-
-set YEAR = $PBS_ARRAY_INDEX
-@ NEXT = $YEAR + 1
-sed -e "s/__YEAR__/$YEAR/g" -e "s/__NEXT__/$NEXT/g" \
-    scripts/prepare/recipes/glorys_gs_multidepth.datarmor.yaml > /tmp/glorys_$YEAR.yaml
-
-singularity exec --bind $DATAWORK,$SCRATCH,/home/ref-ocean-reanalysis \
-  $DATAWORK/containers/oceanml3d-2026-09.sif \
-  python scripts/prepare/regrid.py --config /tmp/glorys_$YEAR.yaml
+qsub -v OCEANML3D_SITE=datarmor jobs/pbs/prepare_glorys.pbs
+qsub -v OCEANML3D_SITE=datarmor -J 2010-2012 jobs/pbs/prepare_glorys.pbs   # a subset
 ```
 
-Then merge the per-year files into the two the configs expect — same tool, `input:` a glob over
-`by_year/`, `output:` on `$DATAWORK` so the result survives the purge:
+**One year per sub-job, not one monolithic job.** A single job chains thousands of file opens on one
+core and saves nothing along the way, so one walltime overrun loses everything. A year that overruns
+is relaunched alone — `qsub -J 2015-2015 …` — while the others stay done, and `regrid.py` skips
+completed outputs, so relaunching the whole array is safe too.
 
-```bash
-qsub -q omp -l select=1:ncpus=4:mem=32g -l walltime=04:00:00 jobs/pbs/concat_glorys.pbs
+Then merge into the single file the configs expect:
+
+```csh
+qsub -v OCEANML3D_SITE=datarmor jobs/pbs/concat_glorys.pbs
 ```
 
-> **Why `.pbs` files calling a `.py`, rather than `python -c "…"` inline.** These jobs run under
-> **csh**, which cannot carry a multi-line double-quoted string: an inline program fails with
-> `Unmatched "`. A file sidesteps the quoting entirely. NOSC learned this the hard way.
+Both are ten lines of directives around `jobs/prepare.sh`, which is what actually does the work and
+which you can run interactively to debug:
+
+```csh
+qsub -I -l walltime=00:30:00 -l mem=32g
+jobs/prepare.sh --site datarmor glorys 2014
+```
+
+Time one year that way before submitting eleven. It validates the output and sizes the walltime.
 
 ### F.3 Downloads, when you do need them — queue `ftp`
 
 ARGO profiles are not mirrored, and neither is anything else you might add. Those go on the only
 queue with outbound network:
 
-```bash
-qsub -q ftp -l walltime=06:00:00 -l mem=32g jobs/pbs/prepare_argo.pbs
+```csh
+qsub -v OCEANML3D_SITE=datarmor jobs/pbs/prepare_argo.pbs
 ```
 
 The body runs `scripts/prepare/argo_profiles.py`: real profiles, QC on the standard flags, vertical
@@ -365,9 +336,8 @@ applies, `copernicusmarine login` once interactively first, and year by year.
 
 ### F.4 Simulate the observing system — no network needed
 
-```bash
-qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_ARGS="command=prepare-obs experiment=osse3d_gs21_multivar_unet" \
-     jobs/pbs/train.pbs
+```csh
+qsub -v OCEANML3D_SITE=datarmor jobs/pbs/prepare_obs.pbs
 ```
 
 Writes `pseudo_obs_ssh_gs`, `pseudo_obs_sst_gs`, `argo_virtual_thetao_gs21`. **Those three keys must
@@ -446,7 +416,8 @@ rsync -av $SCRATCH/oceanml3d/runs/<run>/ $DATAWORK/oceanml3d/runs/<run>/
 | Symptom | Cause |
 |---|---|
 | `nvidia-smi: Command not found` | you are on `datarmor3`, a login node. Or inside a container without `--nv`. |
-| `module: Command not found` in a job | batch does not read `~/.cshrc`; source the modules init first |
+| `module: command not found` from `jobs/run.sh` | `module` is a shell *function*, and a script gets a fresh shell that lacks it. `load_modules` in `jobs/env/_lib.sh` sources the init; if it cannot find yours, its message says where it looked. |
+| `module: Command not found` in a batch job | same cause; `.pbs` files source the modules init explicitly |
 | `Connection timed out` on `datacopy` | that host is not routed from where you are, not a bad password |
 | `530 Login incorrect` on `eftp` | the extranet account, which is not your Datarmor login |
 | A job queued for hours | the `sequentiel` routing queue sent a large `mem=` request to rare nodes |

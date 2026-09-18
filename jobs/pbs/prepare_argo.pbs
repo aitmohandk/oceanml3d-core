@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#PBS -N o3d_argo
+#PBS -q ftp
+#PBS -l walltime=06:00:00
+#PBS -l mem=32g
+#PBS -j oe
+#PBS -o logs/
+#
+# Queue `ftp`: the only Datarmor nodes with outbound network. ARGO profiles are not mirrored, so
+# this one really does download.
+#     qsub -v OCEANML3D_SITE=datarmor jobs/pbs/prepare_argo.pbs
+set -euo pipefail
+cd "${PBS_O_WORKDIR:-$PWD}"
+mkdir -p logs
+export OCEANML3D_SITE="${OCEANML3D_SITE:-datarmor}"
+exec jobs/prepare.sh argo

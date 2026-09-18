@@ -185,52 +185,47 @@ cannot run there** — while `copernicusmarine` lives in the image. Not a comput
 network. The pre/post node is the only one with all three properties, and it does not spend your GPU
 hours.
 
+Fill your account and `--partition=prepost` into the `##SBATCH` lines of
+`jobs/slurm/prepare_glorys.sbatch` and `jobs/slurm/prepare_argo.sbatch` (they ship commented out,
+since the account is yours), then:
+
 ```bash
-srun -A <project>@cpu --partition=prepost --time=10:00:00 --pty bash
-module load singularity
-cd $WORK/oceanml3d-core
+srun -A <project>@cpu --partition=prepost --time=01:00:00 --pty bash
+scontrol show partition prepost | grep -i maxtime      # confirm before trusting a long walltime
 
-scontrol show partition prepost | grep -i maxtime     # confirm before trusting ten hours
-
-# once, so every year does not re-ask:
-singularity exec --bind $WORK:$WORK,$SCRATCH:$SCRATCH \
-  $SINGULARITY_ALLOWED_DIR/oceanml3d-2026-09.sif copernicusmarine login
-
-for y in $(seq 2010 2020); do
-  echo "=== $y ==="
-  sed "s/2010-01-01/${y}-01-01/; s/2020-01-11/${y}-12-31/" \
-      scripts/prepare/recipes/glorys_gs_multidepth.yaml > /tmp/glorys_$y.yaml
-  singularity exec --bind $WORK:$WORK,$SCRATCH:$SCRATCH \
-    $SINGULARITY_ALLOWED_DIR/oceanml3d-2026-09.sif \
-    python scripts/prepare/download_copernicus.py --config /tmp/glorys_$y.yaml
-done
+# once, so every year does not re-ask for credentials
+jobs/prepare.sh --site jeanzay -- copernicusmarine login   # or run it inside the container directly
+exit
 ```
 
-`-A <project>@cpu`, not `@v100`: pre/post nodes are not GPU nodes. If ten hours is not enough,
-submit the same thing as a batch job on the same partition — the per-year loop resumes where it
-stopped.
+Point `GLORYS_SRC` at wherever GLORYS should come from in `jobs/env/jeanzay.sh` — `$DSDIR` if IDRIS
+already mirrors it, a download directory otherwise. **Look in `$DSDIR` first**: if the reanalysis is
+already there you save the download, the space and the inodes.
 
-### G.2 Subset and merge
-
-Same partition (no network needed, but plenty of memory is). `regrid.py` is idempotent and
-line-buffered: a walltime kill is resumed by resubmitting, and `tail -f` shows progress instead of
-nothing.
-
-Run it per year into `by_year/`, then once with a glob to merge.
-
-### G.3 ARGO coverage table — pre/post again (it downloads)
+### G.2 Eleven years: a Slurm array, one year per task
 
 ```bash
-singularity exec --bind $WORK:$WORK,$SCRATCH:$SCRATCH $OCEANML3D_SIF \
-  python scripts/prepare/argo_profiles.py --config scripts/prepare/recipes/argo_profiles_gs.yaml
+sbatch --export=ALL,OCEANML3D_SITE=jeanzay jobs/slurm/prepare_glorys.sbatch
+sbatch --export=ALL,OCEANML3D_SITE=jeanzay --array=2015 jobs/slurm/prepare_glorys.sbatch   # one year
+sbatch --export=ALL,OCEANML3D_SITE=jeanzay jobs/slurm/concat_glorys.sbatch
+```
+
+One year per task, for the same reason as everywhere: a monolithic job saves nothing along the way,
+so a walltime overrun loses the lot. `regrid.py` skips completed outputs, so resubmitting the array
+resumes rather than restarts.
+
+### G.3 ARGO coverage table — pre/post again, it downloads
+
+```bash
+sbatch --export=ALL,OCEANML3D_SITE=jeanzay jobs/slurm/prepare_argo.sbatch
 ```
 
 ### G.4 Simulate the observing system — anywhere
 
-`prepare-obs` downloads nothing, so it runs on a compute node like everything else.
+`prepare-obs` downloads nothing, so any node will do.
 
 ```bash
-jobs/run.sh --site jeanzay command=prepare-obs experiment=osse3d_gs21_multivar_unet
+sbatch --export=ALL,OCEANML3D_SITE=jeanzay jobs/slurm/prepare_obs.sbatch
 ```
 
 The three output keys must already be in `config/paths/jeanzay.yaml`.

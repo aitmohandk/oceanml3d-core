@@ -1,5 +1,76 @@
 # Changelog
 
+## 2026-09-15: the preparation jobs live in the repository now
+
+The Datarmor runbook printed a 25-line PBS array script for you to retype. That is the thing the
+`jobs/` layer exists to avoid: a script in a document is not tested, drifts from the code, and
+cannot be run interactively when it fails.
+
+Same three layers as before, extended to preparation:
+
+| | |
+|---|---|
+| `jobs/prepare.sh` | the work: `glorys <year>`, `concat`, `argo`, `obs` — scheduler-agnostic |
+| `jobs/pbs/{prepare_glorys,concat_glorys,prepare_argo,prepare_obs}.pbs` | directives only |
+| `jobs/slurm/{…}.sbatch` | the same four, as Slurm twins |
+| `jobs/env/_lib.sh` | `container_exec` and `load_site`, so `--nv` and the bind list are decided once |
+
+Each job file is about ten lines around `jobs/prepare.sh`, which is what actually runs and what you
+can execute by hand on an interactive node to see why a year failed. The PBS and Slurm versions
+differ **only** in their directives.
+
+### Templating without templating
+
+The recipes are read through `os.path.expandvars`, so a per-year recipe needs no `sed` step: export
+`YEAR` and `NEXT` and one file serves the whole array.
+`scripts/prepare/recipes/glorys_gs_multidepth.datarmor.yaml` reads from `${GLORYS_SRC}` and writes
+`by_year/…_${YEAR}.nc`; `glorys_gs_concat.yaml` merges them. `jobs/prepare.sh` prefers a
+`<recipe>.<site>.yaml` when one exists and falls back to the generic file, so a site with a different
+source is one recipe, not a fork of the pipeline.
+
+`GLORYS_SRC` moves into the site files, which is where it belongs: on Datarmor it points at the
+read-only CMEMS mirror, on Jean Zay at `$DSDIR` if IDRIS mirrors the reanalysis, or a download
+directory otherwise.
+
+### The runbooks got shorter
+
+`docs/platforms/datarmor.md` loses the inline array script and the inline recipe; `jeanzay.md` loses
+the inline download loop. What stays is the part a job file cannot express: why one year per sub-job
+rather than one monolithic job, why downloads go on queue `ftp` or `--partition=prepost`, and why the
+mirror has to be in `OCEANML3D_BIND` or the path resolves to nothing inside the container.
+
+## 2026-09-15: `module` from a script, and what `run.sh` actually is
+
+### `module: command not found`
+
+```
+jobs/env/datarmor.sh: line 7: module: command not found
+```
+
+`module` is a shell **function**, defined when your login shell sources the Modules init from its rc
+file. `jobs/run.sh` starts a fresh bash, which does not have it. Same cause as the csh batch trap
+already documented for `.pbs` jobs — I wrote that one down and did not notice it applied to the
+interactive path too.
+
+`jobs/env/_lib.sh` adds `load_modules`, which is a no-op when `module` already exists and otherwise
+sources the first init it finds (`$MODULESHOME/init/bash`, `/usr/share/Modules/init/bash`, the Lmod
+equivalents, `/etc/profile.d/`). When it finds none it says where it looked and which command reveals
+the right path, instead of failing on the next line with a message about something else. The Datarmor
+and Jean Zay site files use it.
+
+### What `run.sh` is
+
+The runbooks used `run.sh` as if it were a pipeline, then walked through numbered preparation steps,
+without ever saying what it does. It runs **one** `oceanml3d` command — the one you give it — and
+does three small things around it: source the site file, append `paths=<site>`, and run it in the
+container with the right binds and `--nv` when `OCEANML3D_SIF` is set.
+
+`jobs/README.md` now shows the equivalent `singularity exec …` line side by side, so the wrapper is
+legible rather than magic, and states the two things it is not: not a pipeline (a full preparation is
+several calls, in order, each its own job — hence the numbered steps), and not the only way in (the
+`scripts/prepare/` tools are plain Python with `--config`, not CLI sub-commands, which is why the
+runbooks call them through `singularity exec` directly).
+
 ## 2026-09-15: `jobs/run.sh --site`, because Datarmor's login shell is csh
 
 Every example in the runbooks was written `OCEANML3D_SITE=datarmor jobs/run.sh …`. That is bash

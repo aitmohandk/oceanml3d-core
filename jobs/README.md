@@ -6,7 +6,8 @@ Three layers, so that adding a scheduler or a site is a small file rather than a
 |---|---|---|
 | Scheduler | `jobs/slurm/*.sbatch`, `jobs/pbs/*.pbs` | how do I ask for resources? |
 | Site | `jobs/env/<site>.sh` | where is the environment and the data? |
-| Work | `jobs/run.sh` | what do I actually run? |
+| Work | `jobs/run.sh`, `jobs/prepare.sh` | what do I actually run? |
+| Shared | `jobs/env/_lib.sh` | loading modules, wrapping a command in the container |
 
 The wrappers hold directives and nothing else; the site files hold `module load`, paths and thread
 counts; `run.sh` composes the Hydra command and, if `OCEANML3D_SIF` is set, runs it in a container.
@@ -14,6 +15,35 @@ counts; `run.sh` composes the Hydra command and, if `OCEANML3D_SIF` is set, runs
 This replaces `batch/`, which held 166 Slurm scripts — 113 hard-coding one user's repository path,
 81 hard-coding that user's conda environment, and none usable under PBS. Adding a second scheduler
 that way would have made 332 files to keep in step.
+
+## What `run.sh` is, and is not
+
+**It is not a pipeline.** It runs **one** `oceanml3d` command, exactly the one you give it, and does
+three small things around it: source `jobs/env/<site>.sh` (modules, data root, thread count), append
+`paths=<site>` so the catalog matches, and — if `OCEANML3D_SIF` is set — run the command inside the
+container with the right binds and `--nv`.
+
+That is all. These two are the same command:
+
+```bash
+jobs/run.sh --site datarmor command=prepare-obs experiment=osse3d_gs21_multivar_unet
+
+singularity exec --nv --bind $DATAWORK:$DATAWORK,$SCRATCH:$SCRATCH,/home/ref-ocean-reanalysis \
+    $DATAWORK/containers/oceanml3d.sif \
+    oceanml3d command=prepare-obs experiment=osse3d_gs21_multivar_unet paths=datarmor
+```
+
+The first is the second with the site's details filled in from one file instead of retyped. Nothing
+is hidden: `run.sh` prints the command it is about to run.
+
+So a full preparation is **several** calls, in order, each its own job — that is why the runbooks walk
+through numbered steps rather than handing you one command. `run.sh` is what each of those steps
+calls.
+
+**It is not the only way in either.** The preparation scripts under `scripts/prepare/` are plain
+Python and take a `--config`; they are not `oceanml3d` sub-commands, so the runbooks call them
+through `singularity exec` directly. `run.sh` covers the CLI: `validate`, `prepare-obs`, `eofs`,
+`train`, `predict`.
 
 ## Quick start
 
@@ -32,6 +62,30 @@ qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_ARGS="experiment=nosc_15m_duacs" jobs/
 everywhere: `VAR=value command` is bash syntax, and Datarmor's default login shell is csh, which
 reads the whole first word as a command name. The flag works in any shell. The environment variable
 still works where the syntax does, and is what the job wrappers set.
+
+## What is in `jobs/`
+
+| File | Does |
+|---|---|
+| `run.sh` | one `oceanml3d` CLI command: `validate`, `prepare-obs`, `eofs`, `train`, `predict` |
+| `prepare.sh` | one preparation step: `glorys <year>`, `concat`, `argo`, `obs` |
+| `pbs/*.pbs`, `slurm/*.sbatch` | directives only; each is ~10 lines around one of the two above |
+| `env/<site>.sh` | modules, data root, thread count, container path, precision default |
+| `env/_lib.sh` | `load_modules`, `container_exec`, `load_site` — shared, so `--nv` and the bind list are decided once |
+
+A file in `env/` whose name starts with `_` is a shared library, not a site. The convention is
+load-bearing in two places: `load_site` filters it out of the "available sites" list, and
+`test_every_site_env_file_has_a_matching_paths_file_or_is_a_template` skips it rather than
+demanding it declare `OCEANML3D_PATHS`. Keep the prefix if you add another.
+
+Every job file has a twin in the other scheduler and they differ only in their directives, because
+the work is not in them. That is what makes a second scheduler cheap, and it is also why you can
+debug any of them interactively:
+
+```bash
+qsub -I -l walltime=00:30:00 -l mem=32g       # or srun --pty bash
+jobs/prepare.sh --site datarmor glorys 2014
+```
 
 ## Adding a site
 

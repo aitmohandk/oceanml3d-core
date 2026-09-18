@@ -1,0 +1,7 @@
+# Merge the per-year files written by the job array into the single file the configs expect.
+# ${YEAR} and ${NEXT} are the first and last year, exported by `jobs/prepare.sh concat`.
+input: ${OCEANML3D_DATA}/by_year/glorys_gs_multidepth_*.nc
+output: ${OCEANML3D_DATA}/glorys_gs_multidepth_${YEAR}-${NEXT}.nc
+variables: {thetao: thetao, uo: uo, vo: vo, zos: zos}
+keep_depth: true
+method: none
