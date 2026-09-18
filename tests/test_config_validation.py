@@ -157,3 +157,21 @@ def test_a_prepare_output_need_not_exist_but_must_be_declared():
     cfg = _cfg("data.prepare.pseudo_obs.ssh.output=not_a_key")
     problems = validate_config(cfg, catalog, build_variables(cfg))
     assert any("pseudo_obs.output 'not_a_key' is not in the catalog" in x for x in problems), problems
+
+
+def test_every_site_env_file_has_a_matching_paths_file_or_is_a_template():
+    """A site is two files: jobs/env/<site>.sh (environment) and config/paths/<site>.yaml (data).
+    A site script pointing at a catalog that does not exist fails only once a job is queued."""
+    import glob
+    import os
+    import re
+
+    for path in sorted(glob.glob("jobs/env/*.sh")):
+        site = os.path.splitext(os.path.basename(path))[0]
+        text = open(path).read()
+        m = re.search(r'OCEANML3D_PATHS="\$\{OCEANML3D_PATHS:-(\w+)\}"', text)
+        assert m, f"{path} must set OCEANML3D_PATHS"
+        declared = m.group(1)
+        assert declared == site, f"{path} points at paths={declared}, expected {site}"
+        # The paths file may legitimately not exist yet for a site nobody has configured; what must
+        # not happen is a site script silently pointing at another site's catalog.

@@ -1,0 +1,89 @@
+Bootstrap: docker
+From: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+# One image for every target platform. The build is pinned so that a `.sif` built today and one
+# built next year contain the same thing -- which is the entire point of shipping a container rather
+# than an environment file.
+#
+#   apptainer build oceanml3d.sif container/oceanml3d.def
+#   apptainer exec --nv oceanml3d.sif oceanml3d command=list-models
+#
+# WHY cu124 ON A 12.1 DRIVER
+# CUDA minor-version compatibility: a build against any CUDA 12.x runs on any driver that supports
+# 12.0 or later (>= 525). Datarmor reports driver 530.30.02 / CUDA 12.1, so cu124 is fine there, and
+# it is equally fine on newer drivers elsewhere. The alternative, cu118, would work too but gives up
+# performance on Ampere and Hopper; there is no cu121 wheel for torch 2.6.
+#
+# WHY torch 2.6
+# `monai>=1.5,<1.6` -- a hard dependency since MONAI's DiffusionModelUNet became the default gridded
+# trunk -- pins torch>=2.4.1,<2.7. 2.6.0 is the top of that window. Raising it means raising the
+# monai ceiling first, and monai 1.6 wants torch>=2.8.
+#
+# ARCHITECTURES COVERED by the cu124 wheels, i.e. the GPUs this image is expected to meet:
+#   sm_70  Tesla V100          Datarmor, Jean Zay (V100 partition)
+#   sm_75  Quadro RTX 8000     Odyssey
+#   sm_80  A100                Jean Zay
+#   sm_90  H100                Jean Zay (H100 partition)
+# Note for V100: fp16 mixed precision works, bf16 does not. Use `training.trainer.precision=16-mixed`
+# there, never `bf16-mixed`.
+
+%files
+    pyproject.toml /opt/oceanml3d/pyproject.toml
+    README.md      /opt/oceanml3d/README.md
+    oceanml3d      /opt/oceanml3d/oceanml3d
+
+%post
+    set -eux
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        python3.10 python3.10-venv python3-pip git ca-certificates libgl1 libglib2.0-0
+    rm -rf /var/lib/apt/lists/*
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+    ln -sf /usr/bin/python3 /usr/local/bin/python
+
+    python3 -m pip install --no-cache-dir -U pip setuptools wheel
+
+    # torch first, from the CUDA index, so the package install below cannot pull a different build.
+    python3 -m pip install --no-cache-dir \
+        torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+
+    # The package itself, so its metadata, console script and entry points are what gets exercised.
+    python3 -m pip install --no-cache-dir -e '/opt/oceanml3d[dev,zarr]'
+
+    python3 - <<'PY'
+import torch
+assert torch.__version__.startswith("2.6"), torch.__version__
+assert "+cu124" in torch.__version__, torch.__version__
+import monai, xarray, netCDF4, dask, einops, scipy  # noqa: F401
+print("built:", torch.__version__, "| monai", monai.__version__)
+PY
+
+%environment
+    export PYTHONDONTWRITEBYTECODE=1
+    export PYTHONUNBUFFERED=1
+    # Leave threading to the job script: every centre sizes cores differently, and the default of
+    # "one thread per core on the node" is wrong on a shared node.
+    export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}
+
+%runscript
+    exec oceanml3d "$@"
+
+%labels
+    org.opencontainers.image.title oceanml3d-core
+    org.opencontainers.image.licenses EUPL-1.2
+    cuda 12.4
+    torch 2.6.0+cu124
+
+%help
+    oceanml3d-core: 4DVarNet and flow matching for 3D multivariate ocean data assimilation.
+
+    The repository is mounted, not baked in: /opt/oceanml3d holds an editable install of the
+    package, but `config/` and the driver scripts live in the clone, because Hydra resolves
+    config_path relative to the file carrying @hydra.main. So run from a clone:
+
+        apptainer exec --nv --bind "$PWD":"$PWD" --pwd "$PWD" oceanml3d.sif \
+            oceanml3d experiment=nosc_15m_duacs paths=<site>
+
+    `--nv` is required: without it the container sees no driver and no GPU, and torch reports
+    cuda.is_available() == False with no other complaint.

@@ -354,6 +354,19 @@ Rien d'autre ne mérite d'être fait tant que la CI ne tourne pas.
 - [ ] Tests d'ordre et de bordure sur `reconstruct` (permutation, recouvrement insuffisant).
 - [x] Les 7 clés OSSE-3D (+ `lorenz96`) dans `config/paths/local.yaml` ; `validate_config` résout aussi `spec.mask` et le bloc `data.prepare` ; test sur les 10 expériences grillées. `odyssey.yaml` laissé à son propriétaire.
 
+### Lot P — Portabilité multi-plateformes — **fait le 2026-09-15**
+
+Absent de la première version, où la cible était Odyssey. Le projet vise en réalité plusieurs centres :
+Datarmor (PBS Pro, V100 32 Go), Jean Zay (Slurm, V100/A100/H100), Odyssey (Slurm, RTX 8000).
+
+- [x] `container/oceanml3d.def` : une image pour toutes les cibles (`torch 2.6.0+cu124`, sm_70 → sm_90).
+- [x] `jobs/run.sh` indépendant de l'ordonnanceur, + enveloppes `jobs/slurm/train.sbatch` et `jobs/pbs/train.pbs`.
+- [x] `jobs/env/{local,datarmor,jeanzay,odyssey}.sh` et `jobs/README.md`.
+- [x] Précision par GPU encodée par site (bf16 indisponible sur Volta et Turing).
+- [ ] **À faire par chaque centre :** remplir `config/paths/<site>.yaml` et `OCEANML3D_DATA`, puis construire le `.sif`.
+- [ ] Jean Zay : confirmer la procédure `idrcontmgr` et l'absence de réseau sur les nœuds de calcul.
+- [ ] Une fois un site opérationnel : remplir le critère d'acceptation du lot 1 (run complet des deux tâches, relevé mémoire).
+
 ### Lot 4 — Nettoyage (2 jours)
 
 - [ ] `batch/` : gabarit unique paramétré (`$REPO_ROOT`, `$CONDA_ENV`, `$OCEANML3D_DATA`) + conserver au plus une dizaine de scripts vivants ; sortir le reste.

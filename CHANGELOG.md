@@ -1,5 +1,55 @@
 # Changelog
 
+## 2026-09-15: portability — one container, one runner, two schedulers, four sites
+
+**Summary:** the project targets several centres, not one. `container/`, `jobs/` and the site files
+make the scheduler and the site parameters instead of assumptions.
+
+### Three layers
+
+| Layer | File | Answers |
+|---|---|---|
+| Scheduler | `jobs/slurm/*.sbatch`, `jobs/pbs/*.pbs` | how do I ask for resources? |
+| Site | `jobs/env/<site>.sh` | where is the environment and the data? |
+| Work | `jobs/run.sh` | what do I actually run? |
+
+`batch/` holds 166 Slurm scripts: 113 hard-code one user's repository path, 81 hard-code that user's
+conda environment, and none work under PBS. Adding a second scheduler by duplicating them would have
+produced 332 files to keep in step. Here a scheduler is ~15 lines of directives around `run.sh`, and
+a site is a handful of exports plus a `config/paths/<site>.yaml`.
+
+Sites shipped: `local`, `datarmor` (PBS Pro), `jeanzay` (Slurm), `odyssey` (Slurm). The last three
+are templates with their paths left to fill in — inventing another centre's layout would be worse
+than leaving the gap visible. `test_every_site_env_file_has_a_matching_paths_file_or_is_a_template`
+catches a site script pointing at another site's catalog, which otherwise surfaces only once a job
+is queued.
+
+### One container for every target
+
+`container/oceanml3d.def`: `torch 2.6.0+cu124`, which covers sm_70 (V100 — Datarmor, Jean Zay V100)
+through sm_75 (RTX 8000 — Odyssey), sm_80 (A100) and sm_90 (H100). CUDA minor-version compatibility
+means a cu124 build runs on any driver supporting CUDA 12.0 or later, so Datarmor's 530.30.02 /
+CUDA 12.1 is fine. torch 2.6 is the ceiling, not a preference: `monai>=1.5,<1.6` pins `torch<2.7`.
+
+The repository is bound, not baked in — Hydra resolves `config_path` relative to the file carrying
+`@hydra.main`, so the CLI runs from a clone even with the package installed. `--nv` is passed by
+`run.sh`; without it the container sees no driver and torch reports `cuda.is_available() == False`
+with no other complaint, which is a slow way to discover a typo.
+
+### Two things the hardware decides
+
+**bf16 is not available on Volta or Turing.** `bf16-mixed` fails on Datarmor's V100 and on Odyssey's
+RTX 8000; `16-mixed` is the one that works. Only Jean Zay's A100/H100 partitions get bf16. The site
+files set the right default.
+
+**`surface_currents_15m` may not fit on a 32 GB V100 with the default trunk.** Patch 560x1440,
+~224M parameters: roughly 3.6 GB of weights, optimiser state and gradients, plus an estimated
+15-20 GB of activations at `precision: 32`. Tight, and untested. Escalation order if it does not
+fit: `16-mixed`, then `model.num_res_blocks=1`, then one fewer level in `model.widths`.
+`osse3d_gs21` at 144x144 is comfortable anywhere. And level 0 must never appear in
+`model.attention_levels` for that task — attention over 806,400 positions is not something to tune
+around.
+
 ## 2026-09-15: roadmap lot 3 (2/2) — the whole gridded path in one test, and a job that runs it
 
 ### The end-to-end chain was covered step by step and never as a chain
