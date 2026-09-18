@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-09-15: Zarr for the intermediate data
+
+Following the segfault: what is not parallelisable is narrow — entering the netCDF4/HDF5 C library
+from several **threads of one process**. Parallelism across *processes* is untouched, and is where
+the gain already is: the PBS array runs eleven years at once. Training in DDP is unaffected.
+
+**Zarr removes the restriction at its root.** A chunk is an independent object, there is no
+C-library global state, and concurrent reads are what the format was built for. So the intermediate
+files become Zarr, and reading them back can use `parallel: true` and `dask_scheduler: threads`.
+
+The two ends stay NetCDF, deliberately: the GLORYS mirror is read-only and not ours to convert, and
+the exported product is the contract with `oceanml3d-eval`.
+
+### Chunk size is not a detail
+
+Zarr means many small objects, and on Jean Zay the quota that bites is **inodes** — 500 000 on
+`$WORK`, shared across the project. For the Gulf Stream box (4018 days, 26 levels, 144x144, three 3D
+variables plus SSH, 26.3 GB):
+
+| `zarr_chunks` | objects | largest chunk |
+|---|---|---|
+| `{time: 1}` | 16 072 | 2 MB |
+| **`{time: 32}`** | **504** | **69 MB** |
+| `{time: 256}` | 64 | 552 MB |
+
+Daily chunks would spend 3% of the project's entire inode quota on one dataset; 256-day chunks are
+too coarse to read a patch from. `{time: 32}` is the shipped default, and `regrid.py` prints the
+count and the largest chunk before writing, warning past 50 000 objects.
+
+### What changed
+
+`regrid.py` writes a Zarr store when `output` ends in `.zarr`, with `zarr_chunks` stated in the
+recipe rather than inherited from whatever the read happened to produce.
+`scripts/prepare/recipes/glorys_gs_concat.yaml` and the `glorys_gs_multidepth` catalog key follow.
+
+Nothing downstream needed changing: `data/open.py` already dispatched on the `.zarr` extension, and
+`data/datamodule.py` has been writing its stacked cache as a Zarr store all along. The extension is
+the only switch — reverting is one character in the recipe and one in the catalog.
+
 ## 2026-09-15: the segfault in `regrid.py`, and why it was not an error
 
 ```
