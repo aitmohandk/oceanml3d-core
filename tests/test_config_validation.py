@@ -175,3 +175,27 @@ def test_every_site_env_file_has_a_matching_paths_file_or_is_a_template():
         assert declared == site, f"{path} points at paths={declared}, expected {site}"
         # The paths file may legitimately not exist yet for a site nobody has configured; what must
         # not happen is a site script silently pointing at another site's catalog.
+
+
+def test_regrid_recipe_rejects_depth_indices_without_keep_depth(tmp_path):
+    """`depth_indices` selects positions on the source depth axis; with `keep_depth` false the axis
+    is dropped first, so the selection could never apply and the recipe silently produced a surface
+    file. Ported from the NOSC preparation fixes."""
+    import pytest as _pytest
+
+    from scripts.prepare.regrid import run
+
+    recipe = {"input": str(tmp_path / "*.nc"), "output": str(tmp_path / "out.nc"),
+              "variables": {"thetao": "thetao"}, "keep_depth": False, "depth_indices": [0, 2]}
+    with _pytest.raises(ValueError, match="keep_depth"):
+        run(recipe)
+
+
+def test_regrid_is_idempotent(tmp_path):
+    """These jobs get killed on walltime; a re-run that restarts from scratch never finishes."""
+    from scripts.prepare.regrid import run
+
+    out = tmp_path / "already_there.nc"
+    out.write_bytes(b"")                       # content irrelevant: existence is the contract
+    recipe = {"input": str(tmp_path / "*.nc"), "output": str(out), "variables": {}}
+    assert run(recipe) == out                  # no input files, yet it returns without reading
