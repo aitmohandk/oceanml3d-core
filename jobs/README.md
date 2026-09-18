@@ -73,6 +73,11 @@ still works where the syntax does, and is what the job wrappers set.
 | `env/<site>.sh` | modules, data root, thread count, container path, precision default |
 | `env/_lib.sh` | `load_modules`, `container_exec`, `load_site` — shared, so `--nv` and the bind list are decided once |
 
+A file in `env/` whose name starts with `_` is a shared library, not a site. The convention is
+load-bearing in two places: `load_site` filters it out of the "available sites" list, and
+`test_every_site_env_file_has_a_matching_paths_file_or_is_a_template` skips it rather than
+demanding it declare `OCEANML3D_PATHS`. Keep the prefix if you add another.
+
 Every job file has a twin in the other scheduler and they differ only in their directives, because
 the work is not in them. That is what makes a second scheduler cheap, and it is also why you can
 debug any of them interactively:

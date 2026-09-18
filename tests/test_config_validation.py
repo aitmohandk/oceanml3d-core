@@ -168,6 +168,11 @@ def test_every_site_env_file_has_a_matching_paths_file_or_is_a_template():
 
     for path in sorted(glob.glob("jobs/env/*.sh")):
         site = os.path.splitext(os.path.basename(path))[0]
+        # A leading underscore means a shared library, not a site -- `_lib.sh` holds load_modules,
+        # container_exec and load_site. Same convention `load_site` uses when it lists the available
+        # sites in its error message; if you add another, keep the prefix.
+        if site.startswith("_"):
+            continue
         text = open(path).read()
         m = re.search(r'OCEANML3D_PATHS="\$\{OCEANML3D_PATHS:-(\w+)\}"', text)
         assert m, f"{path} must set OCEANML3D_PATHS"
