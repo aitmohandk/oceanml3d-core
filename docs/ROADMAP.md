@@ -393,7 +393,11 @@ Datarmor (PBS Pro, V100 32 Go), Jean Zay (Slurm, V100/A100/H100), Odyssey (Slurm
   à 143 dans `oceanml3d/legacy/` et 2 dans `legacy/` ; 24 dans le code vivant, corrigés.
   **Correction : aucun des 27 `B023` n'est un bug** — deux `def closure()` LBFGS consommées dans la
   même itération. Réserve exemptée par `per-file-ignores`, décision consignée dans `pyproject.toml`.
-- [ ] Décider du sort des 27 commits amont non repris (backbone MONAI FDV1-Stier, `prior_hidden_channels`, truncated-BPTT, campagne QG S0/S1) : reprise manuelle chiffrée, ou abandon acté dans `PROVENANCE.md`.
+- [x] **Commits amont triés** (44 au 2026-09-15, et non 27) : `docs/upstream_triage.md`. 41/44 sont de la science L96/QG
+  touchant uniquement la réserve. Décision : pas de remote de suivi, reprise à la main, revue une à deux fois par an.
+  **Une trouvaille** : le domaine `lon: [-180, 180]` de `surface_currents_15m` est globalement périodique et les deux troncs
+  padent à zéro → couture artificielle à l'antiméridien, sur le Pacifique, invisible dans la perte comme dans les métriques.
+  Correctif proposé (opt-in, circulaire en longitude seulement) en attente du run d'acceptation du lot 1.
 - [ ] Profondeur comme dimension de patch (`PatchArray` est déjà générique sur `DIMS`).
 
 ---

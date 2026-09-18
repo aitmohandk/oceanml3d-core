@@ -34,7 +34,7 @@ class TestBaselinesConfigYaml:
         from hydra.core.global_hydra import GlobalHydra
         GlobalHydra.instance().clear()
         import hydra
-        with hydra.initialize_config_dir(config_dir=os.path.join(os.path.dirname(__file__), "..", "config", "legacy")):
+        with hydra.initialize_config_dir(version_base="1.3", config_dir=os.path.join(os.path.dirname(__file__), "..", "config", "legacy")):
             cfg = hydra.compose(config_name="baselines/dws20")
             assert cfg.baselines.da_window_steps == 20
 
@@ -42,7 +42,7 @@ class TestBaselinesConfigYaml:
         from hydra.core.global_hydra import GlobalHydra
         GlobalHydra.instance().clear()
         import hydra
-        with hydra.initialize_config_dir(config_dir=os.path.join(os.path.dirname(__file__), "..", "config", "legacy")):
+        with hydra.initialize_config_dir(version_base="1.3", config_dir=os.path.join(os.path.dirname(__file__), "..", "config", "legacy")):
             cfg = hydra.compose(config_name="baselines/dws100")
             assert cfg.baselines.da_window_steps == 100
 
@@ -50,7 +50,7 @@ class TestBaselinesConfigYaml:
         from hydra.core.global_hydra import GlobalHydra
         GlobalHydra.instance().clear()
         import hydra
-        with hydra.initialize_config_dir(config_dir=os.path.join(os.path.dirname(__file__), "..", "config", "legacy")):
+        with hydra.initialize_config_dir(version_base="1.3", config_dir=os.path.join(os.path.dirname(__file__), "..", "config", "legacy")):
             cfg = hydra.compose(
                 config_name="lorenz63_default",
                 overrides=["baselines.da_window_steps=50"],
@@ -61,7 +61,7 @@ class TestBaselinesConfigYaml:
         from hydra.core.global_hydra import GlobalHydra
         GlobalHydra.instance().clear()
         import hydra
-        with hydra.initialize_config_dir(config_dir=os.path.join(os.path.dirname(__file__), "..", "config", "legacy")):
+        with hydra.initialize_config_dir(version_base="1.3", config_dir=os.path.join(os.path.dirname(__file__), "..", "config", "legacy")):
             cfg = hydra.compose(
                 config_name="lorenz63_default",
                 overrides=["baselines.batch_size=256"],
