@@ -125,7 +125,10 @@ runnable, just out of the way. `oceanml3d/legacy/README.md` is the only document
   script that carries the decorator)
 - `legacy/` — the toy driver scripts: `train.py`, `eval_*.py`, `run_experiment*.py`, …
 - `reports/` — Report generation scripts
-- `batch/` — SLURM batch scripts for HPC
+- `jobs/` — how to run on a cluster: `run.sh` (scheduler-agnostic), `slurm/` and `pbs/` wrappers,
+  `env/<site>.sh` per centre. `container/oceanml3d.def` builds the image.
+- `legacy/batch/` — the inherited SLURM scripts. Reserve, not runnable as they stand (they
+  hard-code one user's paths and environment, and assume Slurm). See `legacy/batch/README.md`.
 - `tests/` — Unit and integration tests, for both families
 
 ## Key Conventions

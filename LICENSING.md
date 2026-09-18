@@ -50,7 +50,7 @@ of it is now distributed under EUPL-1.2; the table records where the code came f
 | Path | Origin |
 |---|---|
 | `oceanml3d/models/ocean/`, `oceanml3d/obs/`, `oceanml3d/inference/`, `oceanml3d/catalog.py`, `oceanml3d/variables.py`, `oceanml3d/registry.py`, `oceanml3d/data/{open,patches,datamodule,transforms,augment}.py`, `scripts/prepare/` | NOSC (reworked) |
-| `oceanml3d/legacy/` (models, evaluation, data, conf, training), `legacy/` (the 20 driver scripts), `config/legacy/`, `demos/`, `reports/`, `batch/` | `4dvarnet-fm-opencode` @ `2c709f6` |
+| `oceanml3d/legacy/` (models, evaluation, data, conf, training), `legacy/` (the 20 driver scripts), `config/legacy/`, `legacy/batch/`, `demos/`, `reports/` | `4dvarnet-fm-opencode` @ `2c709f6` |
 | `oceanml3d/cli.py`, `oceanml3d/config_schema.py`, `oceanml3d/models/ocean/nn/unet_monai.py`, `oceanml3d/training/{loss_grouping,weights,vertical_modes,callbacks}.py`, `config/`, `docs/`, most of `tests/` | written for this repository |
 
 `oceanml3d/models/ocean/nn/unet_monai.py` wraps `monai.networks.nets.DiffusionModelUNet`

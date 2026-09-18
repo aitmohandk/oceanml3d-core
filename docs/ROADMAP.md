@@ -369,7 +369,7 @@ Datarmor (PBS Pro, V100 32 Go), Jean Zay (Slurm, V100/A100/H100), Odyssey (Slurm
 
 ### Lot 4 — Nettoyage (2 jours)
 
-- [ ] `batch/` : gabarit unique paramétré (`$REPO_ROOT`, `$CONDA_ENV`, `$OCEANML3D_DATA`) + conserver au plus une dizaine de scripts vivants ; sortir le reste.
+- [x] `batch/` → `legacy/batch/` (déplacé, pas supprimé : plusieurs scripts encodent des campagnes dont les résultats sont dans `reports/`). Remplacé fonctionnellement par `jobs/` au lot portabilité. `legacy/batch/README.md` explique le statut.
 - [ ] `reports/` hors du dépôt (release GitHub, ou dépôt d'artefacts). Ramène le clone de 86 Mo à ~45 Mo.
 - [ ] Supprimer les 4 modules jamais référencés, `archive/`, `tests/legacy/generate_golden.py`, `PLAN_upstream.md`, `docs/MIGRATION_PLAN.md`, `docs/REORG_PLAN.md`.
 - [x] ~~Sous-répertoires `config/experiment/{toy,gridded}/`~~ — fait par le passage en `config/legacy/`.

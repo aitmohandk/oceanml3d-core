@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 4 (2/2) — `batch/` moves to `legacy/batch/`
+
+**Moved, not deleted.** Several of these scripts encode campaigns whose results are written up in
+`reports/`, and reading the script is sometimes the only way to recover exactly what was run. What
+the move does is stop them looking like the way to run this project.
+
+They are not runnable as they stand. Measured over the 166 job scripts:
+
+| | |
+|---|---|
+| Hard-coding `/Odyssey/private/rfablet/Python/4dvarnet-fm-opencode` | 113 |
+| Hard-coding another user's conda environment | 81 |
+| Inline Python with flat imports that stopped resolving at the namespace move | 4 |
+| Mentioning `oceanml3d` at all | 8 |
+
+Some also call `evaluation/sweep_qg_baselines.py`, which was deleted earlier in this lot — at its
+pre-rename path, so those calls had been broken since the transplant either way. And all of them
+assume Slurm, which rules out Datarmor and any other PBS site.
+
+`jobs/` replaces them functionally. `legacy/batch/README.md` says what the numbers are and how to
+recover a campaign from one of these files: read it for the *parameters* — Hydra overrides, resource
+request, sweep ranges — and express those through `jobs/`, rather than repairing paths that describe
+one machine and one person's account.
+
+`README.md`, `AGENTS.md` and the provenance table in `LICENSING.md` follow the move.
+
+Lot 4 is complete.
+
 ## 2026-09-15: roadmap lot 4 (1/2) — dead code out, three drifted documents realigned
 
 ### Removed
