@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-09-15: three things the first real `prepare_glorys` submission found
+
+A first run of `jobs/pbs/prepare_glorys.pbs` on Datarmor failed before reading a single file. Three
+separate defects, all in code written but never executed against a real filesystem.
+
+### `FATAL: mount source /…/oceanml3d doesn't exist`
+
+`container_exec` bound `$OCEANML3D_DATA` without creating it. It is an **output** directory: on a
+first run it does not exist, and Singularity refuses to start at all rather than creating it — so a
+missing `mkdir` reads as a configuration error. `container_exec` now creates it, and skips any other
+bind whose source is absent, naming it. One typo in `OCEANML3D_BIND` used to take the whole job down
+with a message about mounting.
+
+### `Could not find any nv files on this host!`
+
+`--nv` was passed unconditionally, including on Datarmor's `omp` queue, which has no GPU. Harmless,
+but it prints a line that looks like a failure in a log otherwise about data. `--nv` is now passed
+only where a driver is present (`/dev/nvidiactl`, or `nvidia-smi` on PATH); `OCEANML3D_NV=1` forces
+it and `OCEANML3D_NV=0` suppresses it.
+
+### The glob that could not have worked
+
+```python
+inputs = sorted(Path().glob(recipe["input"]))
+```
+
+`Path().glob()` raises `NotImplementedError: Non-relative patterns are unsupported` on an absolute
+pattern — which every real recipe has. It had never fired because the recipes shipped until now used
+relative paths in the tests. Replaced by `glob.glob(pattern, recursive=True)`, which also makes `**`
+descend, as the per-year GLORYS recipes need against a mirror laid out by year and month. The
+resolved list is passed to `open_mfdataset` rather than the pattern, since xarray globs but does not
+recurse.
+
+The "no file matches" message now adds the thing that is actually wrong nine times out of ten inside
+a container: **an unbound path is empty, not missing**, so the error blames the pattern when the
+mount is at fault.
+
 ## 2026-09-15: the preparation jobs live in the repository now
 
 The Datarmor runbook printed a 25-line PBS array script for you to retype. That is the thing the
