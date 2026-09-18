@@ -62,32 +62,69 @@ Host datarmor
     ServerAliveInterval 60
 ```
 
-Transferring the image (several GB) depends on where you are, because the two dedicated hosts are
-not routed from the same networks. **A `connect to host … port 22: Connection timed out` is not a
-bad password — it means that host is not reachable from where you are**, typically `datacopy` from
-outside even with the VPN.
+Transferring the image (several GB) depends on where you are, because the dedicated hosts are not
+routed from the same networks. **A `connect to host … port 22: Connection timed out` is not a bad
+password — it means that host is not reachable from where you are**, typically `datacopy` from
+outside, even with the VPN. Three routes, in order of preference.
 
-| From | Host | Protocol | Credentials |
-|---|---|---|---|
-| An Ifremer building | `datacopy.ifremer.fr` | scp / sftp / rsync | intranet |
-| Outside | `eftp.ifremer.fr` | FTP, exposes `$SCRATCH/eftp` | **extranet** (a different account) |
-| Either, occasionally | `datarmor-access.ifremer.fr` | rsync | intranet |
+**1. From an Ifremer building (or a VPN that routes the whole internal network).** The dedicated
+host is `datacopy.ifremer.fr`: scp / sftp / rsync over SSH, intranet credentials. Check it answers
+before starting a multi-gigabyte transfer:
 
 ```bash
-rsync -avP oceanml3d-2026-09.sif <login>@datacopy.ifremer.fr:        # lands in $HOME
+ssh <login>@datacopy.ifremer.fr        # must ask for a password, not time out
+rsync -avP oceanml3d-2026-09.sif <login>@datacopy.ifremer.fr:      # lands in your Datarmor $HOME
 ```
 
-`530 Login incorrect` on `eftp` almost always means the extranet account: it is distinct from your
-Datarmor login, Ifremer forbids sharing the password, and it may not be active. Created from
-`teletravail.ifremer.fr`, password reset at `https://www.ifremer.fr/chpass/`. The third row avoids
-it entirely — the access node is shared, so use it for occasional transfers, not routinely.
+FileZilla over SFTP does the same. If `datacopy` times out while `datarmor-access` answers, your VPN
+does not route that host — use route 3.
 
-Park the image on `$DATAWORK`:
+**2. From outside.** `eftp.ifremer.fr` speaks **FTP** with **extranet** credentials and exposes
+`$SCRATCH/eftp` of your Datarmor account.
+
+```bash
+# a. create the landing directory, from an SSH session on Datarmor
+ssh datarmor
+mkdir -p $SCRATCH/eftp
+exit
+
+# b. from your machine, FTP with EXTRANET credentials (lftp, or FileZilla in FTP mode)
+lftp -u <extranet-login> eftp.ifremer.fr
+#   cd eftp
+#   put oceanml3d-2026-09.sif
+#   bye
+```
+
+> **The extranet account is not your Datarmor account.** Different password — Ifremer forbids making
+> them identical — and possibly not active yet. A `530 Login incorrect` on `eftp` is nearly always
+> this. Created from `teletravail.ifremer.fr` (credentials sent to your Ifremer mail), password reset
+> at `https://www.ifremer.fr/chpass/`. Route 3 avoids the account entirely.
+
+**3. Fallback, from anywhere: the access node itself.** You already reach
+`datarmor-access.ifremer.fr` over SSH — it is how you log in — so you can drop the `.sif` there
+directly. It needs no extranet account and no particular routing.
+
+```bash
+ssh datarmor 'mkdir -p ~/containers'
+rsync -avP oceanml3d-2026-09.sif <login>@datarmor-access.ifremer.fr:containers/
+```
+
+Keep this for occasional transfers: the access node is shared, and is not meant to carry large
+repeated transfers. But when `datacopy` is unroutable and the extranet account is not working, it is
+the route that always exists.
+
+`rsync -avP` shows progress and resumes an interrupted transfer, which matters over several
+gigabytes; `scp` stays silent until it finishes.
+
+**Whichever route you took, park the image on `$DATAWORK`.** Neither `$HOME` (50 GB, backed up) nor
+`$SCRATCH` (purged after 10 days) is the right home for it:
 
 ```bash
 ssh datarmor
 mkdir -p $DATAWORK/containers
-mv ~/oceanml3d-2026-09.sif $DATAWORK/containers/
+mv $SCRATCH/eftp/oceanml3d-2026-09.sif $DATAWORK/containers/    # route 2
+# or
+mv ~/containers/oceanml3d-2026-09.sif $DATAWORK/containers/     # routes 1 and 3
 ```
 
 ---
@@ -118,8 +155,9 @@ echo 'setenv OCEANML3D_DATA $DATAWORK/oceanml3d/data' >> ~/.cshrc
 bring checkpoints and products back from `$SCRATCH` after every campaign. Never leave the only copy
 of a result on `$SCRATCH` — ten days untouched and it is gone.
 
-Before checking whether `/home/ref-ocean-reanalysis` already mirrors the GLORYS you need, look:
-downloading fifty gigabytes that are already on the filesystem is a common waste.
+**`/home/ref-…` is not a footnote.** Datarmor mirrors the central CMEMS products read-only, GLORYS
+included, so the download step most guides start with is usually unnecessary here. See F.1 before
+fetching anything.
 
 ---
 
@@ -202,71 +240,127 @@ queued job failing on a typo costs a day.
 
 ## F. Prepare the data
 
-### F.1 Downloads go on the `ftp` queue
+### F.1 GLORYS is already on Datarmor — do not download it
 
-The only nodes with outbound network. `jobs/pbs/prepare_download.pbs`:
+**This is the single biggest time saver on this platform, and the easiest to miss.** Datarmor mirrors
+the central CMEMS products read-only under `/home/ref-<theme>/`. GLORYS12V1 (product 001-030) is
+there:
 
 ```bash
-#!/usr/bin/env bash
-#PBS -N o3d_download
-#PBS -q ftp
-#PBS -l walltime=20:00:00
-#PBS -l mem=16g
+ls /home/ref-ocean-reanalysis/
+ls /home/ref-ocean-reanalysis/global-reanalysis-phy-001-030-daily/
+ncdump -h <one-file>.nc | head -50
+```
+
+Check it covers the domain (32–44 °N, 66–54 °W), the period (2010–2020), and carries `thetao`, `uo`,
+`vo`, `zos` on several depth levels. If it does, **skip the download entirely**: tens to hundreds of
+gigabytes you do not fetch, do not store, and do not count against your quota.
+
+Nothing in the code changes. `regrid.py` reads whatever `input:` points at, so a Datarmor variant of
+the recipe is the whole difference:
+
+```yaml
+# scripts/prepare/recipes/glorys_gs_multidepth.datarmor.yaml
+input: /home/ref-ocean-reanalysis/global-reanalysis-phy-001-030-daily/*/*.nc
+output: ${OCEANML3D_DATA}/by_year/glorys_gs_multidepth_2010.nc
+variables: {thetao: thetao, uo: uo, vo: vo, zos: zos}
+keep_depth: true
+method: none                 # native 1/12 deg kept; set a grid here to coarsen
+time: ["2010-01-01", "2011-01-01"]
+```
+
+The `download:` block is simply absent. **One thing to get right:** the mirror must be bound into the
+container, or the path resolves to nothing inside it. Add it in `jobs/env/datarmor.sh`:
+
+```sh
+export OCEANML3D_BIND="$DATAWORK:$DATAWORK,$SCRATCH:$SCRATCH,/home/ref-ocean-reanalysis"
+```
+
+Time one month interactively before launching eleven years. It validates the output *and* gives you
+the scale for sizing the walltime:
+
+```bash
+qsub -I -l walltime=00:30:00 -l mem=32g
+source /usr/share/Modules/init/bash && module load singularity
+cd $DATAWORK/oceanml3d-core
+OCEANML3D_SITE=datarmor OCEANML3D_DATA=$SCRATCH/oceanml3d/data \
+  singularity exec --bind $OCEANML3D_BIND $DATAWORK/containers/oceanml3d-2026-09.sif \
+  python scripts/prepare/regrid.py --config /tmp/glorys_one_month.yaml
+```
+
+### F.2 Eleven years: a PBS job array, one year per sub-job
+
+**Not one monolithic job.** A single job chains thousands of file opens on one core and saves nothing
+along the way: one walltime overrun and everything is lost. One sub-job per year, each independent,
+then a merge. A year that overruns is relaunched on its own (`qsub -J 2015-2015 …`) while the others
+stay done — and `regrid.py` skips a completed output, so relaunching the array is safe too.
+
+`jobs/pbs/prepare_glorys.pbs`:
+
+```csh
+#!/bin/csh
+#PBS -N o3d_glorys
+#PBS -q omp
+#PBS -l select=1:ncpus=8:mem=32g
+#PBS -l walltime=03:00:00
+#PBS -J 2010-2020
 #PBS -j oe
 #PBS -o logs/
 
-source /usr/share/Modules/init/bash
+source /usr/share/Modules/init/csh    # mandatory in batch csh: defines `module`
 module load singularity
 cd $PBS_O_WORKDIR
+setenv OCEANML3D_DATA $SCRATCH/oceanml3d/data
 
-# once, interactively, before the first run:
-#   singularity exec $OCEANML3D_SIF copernicusmarine login
-for y in $(seq 2010 2020); do
-  echo "=== $y ==="
-  sed "s/2010-01-01/${y}-01-01/; s/2020-01-11/${y}-12-31/" \
-      scripts/prepare/recipes/glorys_gs_multidepth.yaml > /tmp/glorys_$y.yaml
-  singularity exec --bind $DATAWORK,$SCRATCH $OCEANML3D_SIF \
-      python scripts/prepare/download_copernicus.py --config /tmp/glorys_$y.yaml
-done
+set YEAR = $PBS_ARRAY_INDEX
+@ NEXT = $YEAR + 1
+sed -e "s/__YEAR__/$YEAR/g" -e "s/__NEXT__/$NEXT/g" \
+    scripts/prepare/recipes/glorys_gs_multidepth.datarmor.yaml > /tmp/glorys_$YEAR.yaml
+
+singularity exec --bind $DATAWORK,$SCRATCH,/home/ref-ocean-reanalysis \
+  $DATAWORK/containers/oceanml3d-2026-09.sif \
+  python scripts/prepare/regrid.py --config /tmp/glorys_$YEAR.yaml
 ```
 
-`copernicusmarine login` once, interactively, or every year re-asks for credentials.
-
-**Year by year, always.** Eleven years in one job is what exceeds walltime, and a per-year loop
-resumes where it stopped.
-
-### F.2 Subset and merge — GPU not needed, memory is
+Then merge the per-year files into the two the configs expect — same tool, `input:` a glob over
+`by_year/`, `output:` on `$DATAWORK` so the result survives the purge:
 
 ```bash
-qsub -q sequentiel -l walltime=10:00:00 -l mem=64g jobs/pbs/prepare_regrid.pbs
+qsub -q omp -l select=1:ncpus=4:mem=32g -l walltime=04:00:00 jobs/pbs/concat_glorys.pbs
 ```
 
-The body runs `scripts/prepare/regrid.py` per year into `by_year/`, then once more with a glob to
-merge. `regrid.py` is idempotent — a completed output is skipped — so a walltime kill is resumed by
-resubmitting, not restarted. Its log is line-buffered, so `tail -f` on the `.o` file shows progress
-rather than nothing until the end.
+> **Why `.pbs` files calling a `.py`, rather than `python -c "…"` inline.** These jobs run under
+> **csh**, which cannot carry a multi-line double-quoted string: an inline program fails with
+> `Unmatched "`. A file sidesteps the quoting entirely. NOSC learned this the hard way.
 
-### F.3 ARGO coverage table — `ftp` queue again
+### F.3 Downloads, when you do need them — queue `ftp`
+
+ARGO profiles are not mirrored, and neither is anything else you might add. Those go on the only
+queue with outbound network:
 
 ```bash
 qsub -q ftp -l walltime=06:00:00 -l mem=32g jobs/pbs/prepare_argo.pbs
 ```
 
-Real profiles, QC on the standard flags, vertical interpolation, and the coverage table: where and
-when a float was, and how deep. The values are discarded — F.4 replaces them with the truth.
+The body runs `scripts/prepare/argo_profiles.py`: real profiles, QC on the standard flags, vertical
+interpolation, and the coverage table — where and when a float was, and how deep. The values are
+discarded; F.4 replaces them with the truth.
 
-### F.4 Simulate the observing system — no network
+If you ever do need GLORYS from CMEMS (a domain or period the mirror does not cover), the same queue
+applies, `copernicusmarine login` once interactively first, and year by year.
+
+### F.4 Simulate the observing system — no network needed
 
 ```bash
-qsub -q sequentiel -l walltime=04:00:00 -l mem=64g -- \
-     jobs/pbs/train.pbs   # with OCEANML3D_ARGS="command=prepare-obs experiment=osse3d_gs21_multivar_unet"
+qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_ARGS="command=prepare-obs experiment=osse3d_gs21_multivar_unet" \
+     jobs/pbs/train.pbs
 ```
 
 Writes `pseudo_obs_ssh_gs`, `pseudo_obs_sst_gs`, `argo_virtual_thetao_gs21`. **Those three keys must
 already be in `config/paths/datarmor.yaml`** — they are outputs, but the simulator learns where to
 write from the catalog.
 
-### F.5 Keep the master copy
+### F.5 Keep the master copy off `$SCRATCH`
 
 ```bash
 rsync -av $SCRATCH/oceanml3d/data/ $DATAWORK/oceanml3d/data/
@@ -345,3 +439,6 @@ rsync -av $SCRATCH/oceanml3d/runs/<run>/ $DATAWORK/oceanml3d/runs/<run>/
 | Prepared data gone | `$SCRATCH`, ten days untouched |
 | `torch.cuda.is_available()` is `False` | `--nv` missing |
 | Quota exceeded before the first epoch | Hydra wrote `outputs/` into `$HOME` or `$DATAWORK`; set `hydra.run.dir` |
+| `no file matches /home/ref-…` inside the container | the mirror is not in `OCEANML3D_BIND`; the path exists on the host and not in the container |
+| `Unmatched "` from a `.pbs` job | csh cannot carry a multi-line double-quoted string. Call a `.py` file, never `python -c`. |
+| A whole GLORYS job lost on walltime | one monolithic job saves nothing along the way. Use the `-J` array, one year per sub-job (F.2). |

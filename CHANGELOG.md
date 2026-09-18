@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-09-15: Datarmor runbook — the local GLORYS mirror, and a transfer route that always works
+
+Two gaps in `docs/platforms/datarmor.md`, both present in NOSC's guide and both lost in the port.
+
+### GLORYS is already on Datarmor
+
+The runbook told you to download GLORYS from CMEMS. **Datarmor mirrors the central CMEMS products
+read-only under `/home/ref-<theme>/`, GLORYS12V1 (product 001-030) included.** Tens to hundreds of
+gigabytes fetched, stored and counted against quota, for data already on the filesystem — and the
+download is the slowest step of the whole preparation.
+
+`F.1` now starts there: locate the mirror, check it covers the domain, period and variables, and
+point a Datarmor variant of the recipe at it. No code changes — `regrid.py` reads whatever `input:`
+names — but one thing has to be right, and it fails in a misleading way: **the mirror must be in
+`OCEANML3D_BIND`**, or the path resolves to nothing inside the container and looks like a missing
+dataset rather than a missing mount. `jobs/env/datarmor.sh` now binds it by default.
+
+`F.2` adds what NOSC learned the hard way: eleven years go in a **PBS job array, one year per
+sub-job** (`#PBS -J 2010-2020`), not one monolithic job. A single job chains thousands of file opens
+on one core and saves nothing along the way, so one walltime overrun loses everything. A year that
+overruns is relaunched alone while the others stay done, and `regrid.py` skipping completed outputs
+makes relaunching the whole array safe.
+
+Also carried over: **`.pbs` jobs must call a `.py` file, never `python -c "…"`.** These run under
+csh, which cannot carry a multi-line double-quoted string — it fails with `Unmatched "`.
+
+### A transfer route that needs neither `datacopy` nor an extranet account
+
+The three routes were a table row each; the fallback had no command. Now all three are written out.
+It matters because the first two each have a failure mode that looks like something else:
+`datacopy` times out from outside even with the VPN (not routed, not a bad password), and `eftp`
+needs an **extranet** account that is distinct from the Datarmor login, has a different password by
+policy, and may not be active — `530 Login incorrect` is nearly always that.
+
+The third route always exists: you already reach `datarmor-access.ifremer.fr` over SSH, so the `.sif`
+can go there directly. Shared node, so for occasional transfers — but it works from anywhere, with
+the account you already have.
+
 ## 2026-09-15: per-platform runbooks for Datarmor and Jean Zay
 
 `docs/pipeline_3d.md` carried one thin "site specifics" section for two centres that differ in more

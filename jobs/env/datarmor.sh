@@ -11,7 +11,11 @@ export OCEANML3D_DATA="${OCEANML3D_DATA:-$DATAWORK/oceanml3d}"
 export OCEANML3D_PATHS="${OCEANML3D_PATHS:-datarmor}"
 export OCEANML3D_SIF="${OCEANML3D_SIF:-$DATAWORK/containers/oceanml3d.sif}"
 export OCEANML3D_CONTAINER_CMD="${OCEANML3D_CONTAINER_CMD:-singularity}"
-export OCEANML3D_BIND="${OCEANML3D_BIND:-$DATAWORK:$DATAWORK,$SCRATCH:$SCRATCH}"
+# /home/ref-ocean-reanalysis holds Datarmor's read-only CMEMS mirror, GLORYS12V1 included. Bound
+# in so the preparation recipes can read it directly instead of downloading tens to hundreds of
+# gigabytes that are already on the filesystem. Without the bind the path resolves to nothing
+# inside the container, which looks like a missing dataset rather than a missing mount.
+export OCEANML3D_BIND="${OCEANML3D_BIND:-$DATAWORK:$DATAWORK,$SCRATCH:$SCRATCH,/home/ref-ocean-reanalysis}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 
 # V100 does fp16 but NOT bf16. `bf16-mixed` fails here; `16-mixed` is the one that works.
