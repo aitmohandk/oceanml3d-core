@@ -265,7 +265,7 @@ def test_param_head_unet_configs_instantiate():
 
     for name, src in [("C4a_param_head_unet_true", "true"),
                       ("C4b_param_head_unet_l1b", "l1b")]:
-        with initialize(config_path="../config/legacy", version_base=None):
+        with initialize(config_path="../config/legacy", version_base="1.3"):
             cfg = compose(config_name=f"experiment/{name}")
         assert cfg.model.model_type == "param_head_unet"
         assert cfg.model.param_head_unet.state_source == src

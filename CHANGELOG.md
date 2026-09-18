@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-09-15: roadmap lot 5 (2/2) — upstream triaged, and a seam over the Pacific
+
+### The 44 upstream commits, reviewed
+
+`docs/upstream_triage.md` goes through every commit published on `4dvarnet-fm-opencode` since the
+import point (`2c709f6`, PR #174) up to `a83b12d` (PR #221). **Forty-one of forty-four are L96 or QG
+science, and every file they touch is in this repository's reserve.** Upstream is a methodology bench
+on toy systems; this repository took that methodology to gridded ocean data. Adopting those commits
+would mean maintaining a research programme this project is not running.
+
+Decision recorded: **no tracking remote**, individual items taken by hand, review once or twice a
+year rather than continuously. Re-reading 44 commits cost an afternoon and produced one finding — a
+good trade once, a bad one monthly.
+
+A small validation in passing: upstream gated its whole test tree (#215) and paid down its ruff debt
+(#187) in the same weeks this repository did both from its own audit, neither knowing about the
+other. Convergent fixes to the same inherited problem.
+
+### The finding: global longitude meets zero padding
+
+`2bb4f6c` moved the QG trunk to circular padding because convolving a doubly-periodic field with
+zero padding invents a boundary where the domain wraps.
+
+**The same defect is here.** `config/data/surface_currents_15m.yaml` declares `lon: [-180, 180]` — a
+globally periodic field, 1440 points. Both live trunks pad with zeros: `unet_nosc.py` uses
+`nn.Conv2d(..., padding=pad)`, whose `padding_mode` defaults to `"zeros"`, and MONAI's
+`DiffusionModelUNet` does the same. Every convolution straddling the antimeridian sees zeros where
+the ocean continues, at every level. With five levels the receptive field is on the order of a
+hundred cells, so the affected band is wide, it sits over the Pacific, and nothing in the loss or the
+metrics singles it out: the error is simply part of the reported skill.
+
+**Not fixed in this commit, deliberately.** `unet_nosc.py` is frozen by its own docstring — it is how
+pre-MONAI runs are reproduced — so the fix belongs elsewhere; and circular padding changes results,
+which makes it a modelling decision needing a before/after on real data. Blocked on the same lot 1
+acceptance run as everything else. The proposed shape, the reason latitude must *not* wrap, and the
+equivariance test that would pin it are in the triage document.
+
+### Also
+
+Ten Hydra `initialize`/`initialize_config_dir` calls in tests pinned to `version_base="1.3"`. They
+were emitting `Hydra14MigrationWarning` on every CI run — eleven of the nineteen warnings — and
+Hydra 1.4 turns that behaviour into an error. `test_param_head.py` was explicitly passing
+`version_base=None`, which is the opt-in to the legacy behaviour rather than a fix.
+
 ## 2026-09-15: roadmap lot 5 (1/2) — the full lint set is now the gate, not a target
 
 ### The backlog was in the reserve, not in the code anyone runs
