@@ -107,3 +107,79 @@ def test_datarmor_glorys_glob_anchors_the_validity_year():
     assert not fnmatch.fnmatch(name.format("20020130", "20020206"), pat)
     assert not fnmatch.fnmatch(name.format("20220209", "20220216"), pat)
     assert not fnmatch.fnmatch(name.format("20191231", "20200108"), pat)
+
+
+# --- resolution (NOSC's --target-res) -------------------------------------------------------------
+
+from scripts.prepare.regrid import domain_grid, resolution_of  # noqa: E402
+
+GS = {"lat": [32, 44], "lon": [-66, -54]}
+
+
+def _native(tmp_path, lat_desc=False, lon360=False, t0s=("2010-01-01", "2010-01-03")):
+    """A 1/12-deg-like source whose cell centres do NOT fall on the domain bounds."""
+    lat = np.arange(20.0 + 1 / 24, 56.0, 1 / 12)
+    lon = (np.arange(280.0 + 1 / 24, 320.0, 1 / 12) if lon360 else np.arange(-80.0 + 1 / 24, -40.0, 1 / 12))
+    if lat_desc:
+        lat = lat[::-1]
+    for i, t0 in enumerate(t0s):
+        time = xr.date_range(t0, periods=2, freq="D")
+        field = np.broadcast_to(lat[:, None] + 0 * lon[None, :], (2, lat.size, lon.size)).astype("f4")
+        xr.Dataset({"zos": (("time", "latitude", "longitude"), field)},
+                   coords={"time": time, "latitude": lat, "longitude": lon}).to_netcdf(tmp_path / f"n{i}.nc")
+
+
+def _recipe(tmp_path, res, out="out.nc", **kw):
+    return {"input": str(tmp_path / "n*.nc"), "output": str(tmp_path / out),
+            "variables": {"zos": "zos"}, "domain": GS, "resolution": res, "method": "none", **kw}
+
+
+def test_resolution_placeholder_means_native():
+    for raw in (None, "", "${OCEANML3D_TARGET_RES}", "native"):
+        assert resolution_of({"resolution": raw, "domain": GS}) is None
+    assert resolution_of({"resolution": "0.25", "domain": GS}) == 0.25
+    with pytest.raises(ValueError, match="domain"):
+        resolution_of({"resolution": 0.25})
+    with pytest.raises(ValueError):
+        resolution_of({"resolution": -1, "domain": GS})
+
+
+def test_domain_grid_is_nosc_target_grid():
+    lat, lon = domain_grid(GS, 0.25)
+    assert lat[0] == 32 and lat[-1] == 44 and lat.size == 49
+    assert lon[0] == -66 and lon[-1] == -54 and lon.size == 49
+
+
+@pytest.mark.parametrize("lat_desc,lon360", [(False, False), (True, True)])
+def test_run_at_quarter_degree_lands_on_the_shared_grid_without_nan(tmp_path, lat_desc, lon360):
+    _native(tmp_path, lat_desc, lon360)
+    out = run(_recipe(tmp_path, 0.25))
+    with xr.open_dataset(out) as ds:
+        lat, lon = domain_grid(GS, 0.25)
+        np.testing.assert_allclose(ds.lat, lat)
+        np.testing.assert_allclose(ds.lon, lon)
+        assert not bool(ds.zos.isnull().any()), "edge nodes need source cells on both sides"
+        np.testing.assert_allclose(ds.zos.isel(time=0), np.broadcast_to(lat[:, None], (49, 49)), atol=1e-4)
+        assert ds.attrs["oceanml3d_resolution"] == "0.25"
+
+
+def test_an_output_at_another_resolution_is_refused_not_skipped(tmp_path):
+    _native(tmp_path)
+    run(_recipe(tmp_path, 0.25))
+    with pytest.raises(RuntimeError, match="resolution 0.25"):
+        run(_recipe(tmp_path, "${OCEANML3D_TARGET_RES}"))
+    run(_recipe(tmp_path, "${OCEANML3D_TARGET_RES}"), force=True)
+    with xr.open_dataset(tmp_path / "out.nc") as ds:
+        assert ds.attrs["oceanml3d_resolution"] == "native"
+
+
+def test_merge_refuses_inputs_at_different_resolutions(tmp_path):
+    _native(tmp_path, t0s=("2010-01-01",))
+    run(_recipe(tmp_path, 0.25, out="by_year_a.nc"))
+    (tmp_path / "n0.nc").rename(tmp_path / "n0.nc.bak")
+    _native(tmp_path, t0s=("2010-01-05",))
+    run(_recipe(tmp_path, 0.5, out="by_year_b.nc"))
+    merge = {"input": str(tmp_path / "by_year_*.nc"), "output": str(tmp_path / "all.nc"),
+             "variables": {"zos": "zos"}, "method": "none"}
+    with pytest.raises(RuntimeError, match="different resolutions"):
+        run(merge)

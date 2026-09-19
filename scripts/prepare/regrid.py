@@ -8,6 +8,7 @@ Recipe (YAML):
     grid: {lat: [-80, 90, 0.25], lon: [-180, 180, 0.25]}   # or  reference: /path/ref.nc
     time: ["2010-01-01", "2022-01-01"]
     domain: {lat: [32, 44], lon: [-66, -54]}           # subdomain, cut per file before any read
+    resolution: 0.25                                   # regular grid at this step (deg) over `domain`
     max_gb: 100                                        # refuse larger uncompressed outputs
     method: linear                                     # linear | nearest | conservative (xesmf)
     keep_depth: true                                   # keep the depth axis (3D tasks)
@@ -25,6 +26,13 @@ recipe reading these back can set ``parallel: true`` and ``dask_scheduler: threa
 
 Keep the two ends as they are: the GLORYS mirror is read-only and not ours to convert, and the
 exported product stays NetCDF because that is the contract with ``oceanml3d-eval``.
+
+``resolution`` is NOSC's ``--target-res``: a regular grid at that spacing, anchored on the ``domain``
+bounds (``arange(lo, hi + res/2, res)``), bilinear by default. It depends only on the domain and the
+step -- not on the source -- so every product prepared with the same pair lands on exactly the same
+grid, which ``data/open.py`` then requires. Recipes write ``resolution: ${OCEANML3D_TARGET_RES}``:
+unset, the placeholder stays literal and the native grid is kept. The value is recorded in the
+output's attributes, and an existing output at another resolution is refused rather than skipped.
 
 CAREFUL WITH ``depth_indices``. It selects *positions on the source file's depth axis*, and the
 positions it leaves are what the data config's own ``depth_index`` then addresses. Change this list
@@ -114,6 +122,49 @@ def _select_domain(ds: xr.Dataset, domain: dict) -> xr.Dataset:
     return ds
 
 
+def resolution_of(recipe: dict) -> float | None:
+    """The recipe's target step in degrees, or None for the native grid.
+
+    ``${OCEANML3D_TARGET_RES}`` left unexpanded (variable unset), empty, ``native`` and ``null`` all
+    mean native. Anything else must be a positive number.
+    """
+    raw = recipe.get("resolution")
+    if raw is None or (isinstance(raw, str) and (raw.strip() in ("", "native", "none", "null")
+                                                 or raw.strip().startswith("$"))):
+        return None
+    res = float(raw)
+    if res <= 0:
+        raise ValueError(f"resolution must be a positive step in degrees, got {raw!r}")
+    if not recipe.get("domain") or not {"lat", "lon"} <= set(recipe["domain"]):
+        raise ValueError("`resolution` needs `domain: {lat: [lo, hi], lon: [lo, hi]}`: the target grid "
+                         "is anchored on those bounds so every product lands on the same one")
+    if "grid" in recipe or "reference" in recipe:
+        raise ValueError("give either `resolution` (with `domain`) or `grid`/`reference`, not both")
+    return res
+
+
+def domain_grid(domain: dict, res: float) -> tuple[np.ndarray, np.ndarray]:
+    """Regular grid at ``res`` anchored on the lower domain bounds -- NOSC's ``target_grid``."""
+    (la0, la1), (lo0, lo1) = sorted(map(float, domain["lat"])), map(float, domain["lon"])
+    lat = np.arange(la0, la1 + 0.5 * res, res)
+    lon = np.arange(lo0, lo1 + 0.5 * res, res)
+    return np.round(lat, 10), np.round(lon, 10)
+
+
+def _to_resolution(ds: xr.Dataset, domain: dict, res: float, method: str) -> xr.Dataset:
+    """Interpolate a domain-cut dataset onto ``domain_grid(domain, res)``.
+
+    Longitudes are first put in the convention the domain is written in (a 0..360 file against a
+    -66..-54 box would otherwise interpolate to all-NaN), and both axes sorted ascending, which
+    ``interp`` needs.
+    """
+    if min(map(float, domain["lon"])) < 0:
+        ds = ds.assign_coords(lon=((ds.lon + 180) % 360) - 180)
+    ds = ds.sortby("lat").sortby("lon")
+    lat, lon = domain_grid(domain, res)
+    return ds.interp(lat=lat, lon=lon, method=method)
+
+
 def _preprocess(ds: xr.Dataset, recipe: dict) -> xr.Dataset:
     """Per-file work, pushed into ``open_mfdataset(preprocess=...)`` on purpose.
 
@@ -132,12 +183,25 @@ def _preprocess(ds: xr.Dataset, recipe: dict) -> xr.Dataset:
         # Before anything is read: a GLORYS file is the whole globe at 1/12 deg (2041 x 4320 x 50),
         # and the Gulf Stream box is 1/400th of it. This key used to be accepted and ignored, which
         # on a year of files meant a 1949 GB write and an OOM kill.
-        ds = _select_domain(ds, recipe["domain"])
+        res = resolution_of(recipe)
+        domain = recipe["domain"]
+        if res is not None:
+            # One target step of margin, so the edge nodes of the target grid have source cells on
+            # both sides: the native cell centres rarely fall exactly on the domain bounds.
+            domain = {k: [float(min(v)) - res, float(max(v)) + res] if k in ("lat", "lon") else v
+                      for k, v in domain.items()}
+        ds = _select_domain(ds, domain)
     if "depth" in ds.dims:
         if not recipe.get("keep_depth", False):
             ds = ds.isel(depth=0, drop=True)
         elif recipe.get("depth_indices"):
             ds = ds.isel(depth=list(recipe["depth_indices"]))
+    res = resolution_of(recipe)
+    if res is not None:
+        # Per file, after the cut and the depth selection, as NOSC does: each global file is reduced
+        # to the box and the kept levels before it is interpolated and merged.
+        method = recipe.get("method", "linear")
+        ds = _to_resolution(ds, recipe["domain"], res, "linear" if method == "none" else method)
     return ds
 
 
@@ -145,15 +209,32 @@ def run(recipe: dict, *, force: bool = False) -> Path:
     path = Path(recipe["output"])
     # Idempotent. These jobs are long enough to be killed on walltime, and a re-run that starts from
     # scratch every time never finishes. Delete the file, or pass --force, to rebuild.
+    res = resolution_of(recipe)
+    label = "native" if res is None else f"{res:g}"
     if path.exists() and not force:
-        print(f"[regrid] {path} already exists, skipped (--force to rebuild)")
+        # Same file name at every resolution, so a skip must check which one is on disk: otherwise
+        # switching OCEANML3D_TARGET_RES silently reuses the previous grid. A recipe that names no
+        # resolution (the merge step) must match what its inputs carry instead.
+        found = _stored_resolution(path)
+        expected = label if "resolution" in recipe else _first_input_resolution(recipe)
+        if found is not None and expected is not None and found != expected:
+            raise RuntimeError(f"{path} exists at resolution {found}, expected {expected}. "
+                               f"Delete it (and the files derived from it) or pass --force.")
+        print(f"[regrid] {path} already exists (resolution {found or 'unrecorded'}), skipped "
+              f"(--force to rebuild)")
         return path
 
     if recipe.get("keep_depth") is False and recipe.get("depth_indices"):
         raise ValueError("recipe sets depth_indices but keep_depth is false: the depth axis is "
                          "dropped before the selection could apply. Set keep_depth: true.")
 
-    open_kw: dict = {"combine": "by_coords", "preprocess": lambda d: _preprocess(d, recipe)}
+    seen: set[str] = set()
+
+    def _pre(d: xr.Dataset) -> xr.Dataset:
+        seen.add(str(d.attrs.get("oceanml3d_resolution", "unrecorded")))
+        return _preprocess(d, recipe)
+
+    open_kw: dict = {"combine": "by_coords", "preprocess": _pre}
     if "chunks" in recipe:
         # Only when the recipe asks. Forcing a time chunking that does not match how the files are
         # stored re-fragments every read, and the compressed write then streams through that
@@ -190,12 +271,21 @@ def run(recipe: dict, *, force: bool = False) -> Path:
     with dask.config.set(scheduler=recipe.get("dask_scheduler", "synchronous")):
         ds = xr.open_mfdataset(inputs, **open_kw)
 
+    if len(seen - {"unrecorded"}) > 1:
+        # combine="by_coords" would take the union of the grids and pad each file with NaN.
+        raise RuntimeError(f"input files were prepared at different resolutions {sorted(seen)}: "
+                           f"re-prepare them at one (see OCEANML3D_TARGET_RES) before merging")
     ds = ds.rename({k: v for k, v in recipe["variables"].items() if k in ds.data_vars})
     if "time" in recipe:
         ds = ds.sel(time=slice(*recipe["time"]))
 
     method = recipe.get("method", "linear")
-    if method == "none":
+    if res is not None:
+        out = ds                    # already on the target grid, per file in _preprocess
+        print(f"[regrid] resolution {res:g} deg on the domain grid: "
+              f"{ds.sizes['lat']} x {ds.sizes['lon']} (lat x lon), "
+              f"{'linear' if method == 'none' else method}")
+    elif method == "none":
         out = ds
     else:
         lat, lon = target_grid(recipe)
@@ -207,6 +297,12 @@ def run(recipe: dict, *, force: bool = False) -> Path:
             out = ds.interp(lat=lat, lon=lon, method=method)
 
     out = out.astype(np.float32)
+    if res is not None or "resolution" in recipe:
+        out.attrs["oceanml3d_resolution"] = label
+    elif method == "none":
+        out.attrs["oceanml3d_resolution"] = str(ds.attrs.get("oceanml3d_resolution", "native"))
+    else:
+        out.attrs["oceanml3d_resolution"] = "grid"
     gb = out.nbytes / 1e9
     print(f"[regrid] writing {path} ({dict(out.sizes)}, {gb:.2f} GB uncompressed)")
     check_size(gb, recipe)
@@ -225,6 +321,21 @@ def run(recipe: dict, *, force: bool = False) -> Path:
     ds.close()
     print(f"[regrid] done: {path}")
     return path
+
+
+def _stored_resolution(path: Path) -> str | None:
+    try:
+        opener = xr.open_zarr if path.suffix == ".zarr" else xr.open_dataset
+        with opener(path) as ds:
+            value = ds.attrs.get("oceanml3d_resolution")
+    except Exception:  # noqa: BLE001 -- an unreadable file is reported by whoever reads it next
+        return None
+    return None if value is None else str(value)
+
+
+def _first_input_resolution(recipe: dict) -> str | None:
+    matches = sorted(glob.glob(str(recipe["input"]), recursive=True))
+    return _stored_resolution(Path(matches[0])) if matches else None
 
 
 DEFAULT_MAX_GB = 100.0

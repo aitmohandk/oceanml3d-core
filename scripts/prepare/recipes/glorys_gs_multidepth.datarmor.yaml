@@ -20,7 +20,12 @@ time: ["${YEAR}-01-01", "${YEAR}-12-31"]   # inclusive: NEXT-01-01 would belong 
 domain: {lat: [32, 44], lon: [-66, -54]}   # cut in each file before it is read (~145 x 145 of 2041 x 4320)
 max_gb: 20              # a year of this box is ~4.6 GB (50 levels); anything near 20 means the recipe misfired
 keep_depth: true        # 3D task: the depth axis is the point
-method: none            # native 1/12 deg; put a `grid:` here to coarsen
+
+# Target resolution in degrees, NOSC's NOSC_TARGET_RES. Unset -> native 1/12 deg. Set it for the
+# whole chain, not one step: `jobs/prepare.sh --res 0.25 ...` or `qsub -v ...,OCEANML3D_TARGET_RES=0.25`.
+# The grid is regular, anchored on `domain`, identical for every product prepared with the same pair.
+resolution: ${OCEANML3D_TARGET_RES}
+method: none            # native grid when `resolution` is unset; bilinear onto it when set
 
 # Deliberately no `depth_indices`: store every level the source carries and let the task select.
 # The data config's `depth_index` addresses positions in THIS file, so reducing here silently
