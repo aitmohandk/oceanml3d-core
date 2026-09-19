@@ -238,3 +238,13 @@ def test_the_glorys_chain_paths_meet():
     merged = concat["output"].replace("${YEAR}-${NEXT}", "2010-2020")
     assert merged == "${OCEANML3D_DATA}/" + catalog["glorys_gs_multidepth"]["path"]
     assert argo["truth"] == merged
+
+
+def test_zarr_stores_are_format_2_and_the_inode_count_is_exact(tmp_path, capsys):
+    pytest.importorskip("zarr")
+    _native(tmp_path)
+    out = run(_recipe(tmp_path, 0.25, out="y.zarr", zarr_chunks={"time": 1}))
+    assert (out / ".zgroup").exists() and not (out / "zarr.json").exists()
+    announced = int(capsys.readouterr().out.split(" inodes")[0].rsplit("-> ", 1)[1])
+    actual = 1 + sum(len(d) + len(f) for _, d, f in os.walk(out))
+    assert announced == actual

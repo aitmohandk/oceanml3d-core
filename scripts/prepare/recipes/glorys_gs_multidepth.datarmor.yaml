@@ -14,7 +14,7 @@
 input: ${GLORYS_SRC}/**/*_mean_${YEAR}????_R*.nc
 # Zarr, like every intermediate: only the read side is NetCDF (the mirror, which is not ours).
 output: ${OCEANML3D_DATA}/by_year/glorys_gs_multidepth_${YEAR}.zarr
-zarr_chunks: {time: 32}   # ~12 chunks per variable and year
+zarr_chunks: {time: 32}   # ~12 chunks per variable and year: 80 inodes per year in Zarr format 2
 
 variables: {thetao: thetao, uo: uo, vo: vo, zos: zos}
 time: ["${YEAR}-01-01", "${YEAR}-12-31"]   # inclusive: NEXT-01-01 would belong to two years

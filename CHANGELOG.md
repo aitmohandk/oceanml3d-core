@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-19: Zarr format 2 pinned, and the inode count made exact
+
+**Summary:** `regrid.py` writes Zarr format 2 and prints the real inode count of each store
+(chunks, metadata files, directories), checked against `os.walk` in the tests.
+
+**Files modified:** `scripts/prepare/regrid.py` — `_write_zarr`; the two GLORYS recipes' comments;
+`tests/test_regrid_domain.py`.
+
+**Rationale:** Per-year Zarr raised the inode question. Measured on the Gulf Stream box with
+`{time: 32}`: one year is 80 inodes in format 2 and 210 in format 3; the eleven-year store is 536
+and 1 920. zarr-python 3 defaults to format 3, which nests every chunk key in directories
+(`c/<t>/0/0/0`), so the choice of library version alone would have multiplied the count by 2.5–3.5.
+Pinned to 2, the whole GLORYS chain is ~1 400 inodes (11 × 80 + 536), against quotas in the hundreds
+of thousands; NetCDF per year would be 11. The count previously printed covered data chunks only,
+not metadata, directories or coordinates.
+
+**Verification:** `pytest tests/test_regrid_domain.py` — 19 passed.
+
+
 ## 2026-09-19: Every intermediate is Zarr, and the GLORYS chain paths meet
 
 **Summary:** The per-year GLORYS step now writes `by_year/glorys_gs_multidepth_<year>.zarr`

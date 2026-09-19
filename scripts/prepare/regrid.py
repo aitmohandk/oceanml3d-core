@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import inspect
 import os
 import shutil
 import sys
@@ -384,38 +385,52 @@ def _write_zarr(out: xr.Dataset, path: Path, recipe: dict, scheduler: str) -> No
     thread-safety problem that forces `parallel: false` on the netCDF path simply does not arise.
     Reading these back, `parallel: true` and `dask_scheduler: threads` are safe.
 
-    The cost is inodes, and on Jean Zay that is the quota that bites: 500 000 on `$WORK`, shared
-    across the project. Chunk size is therefore not a detail. For the GLORYS Gulf Stream box --
-    4018 days, 26 levels, 144x144, three 3D variables plus SSH -- `{time: 32}` with whole depth and
-    horizontal slabs gives ~69 MB chunks and about 400 objects. The same data in daily chunks would
-    be ~16 000. Aim for tens to hundreds of megabytes, aligned on how the data is read: for this
-    project, spatial patches traversed in time.
+    The cost is inodes: every chunk is a file. Two choices keep that small.
+
+    **Zarr format 2, pinned.** zarr-python 3 writes format 3 by default, which nests every chunk
+    key in directories (``c/<t>/0/0/0``): measured on one year of the Gulf Stream box, 210 inodes
+    against 80 in format 2, and 1 920 against 536 for the eleven-year store. Format 2 keeps flat
+    keys (``<t>.0.0.0``) and is what every reader of this project handles.
+
+    **Chunks of tens of megabytes.** ``{time: 32}`` with whole depth and horizontal slabs: ~12
+    chunks per variable and year. Daily chunks would multiply the count by 32.
+
+    The whole GLORYS chain then costs ~1 400 inodes (eleven yearly stores plus the merged one)
+    against quotas in the hundreds of thousands -- Jean Zay's ``$WORK`` allows 500 000 for the
+    project. The count printed below is the real one: chunks, metadata files and directories.
     """
     chunks = recipe.get("zarr_chunks") or {"time": 32}
     chunks = {d: min(int(n), out.sizes[d]) for d, n in chunks.items() if d in out.sizes}
     out = out.chunk({**{d: out.sizes[d] for d in out.dims}, **chunks})
 
-    n_objects, biggest = 0, 0.0
-    for var in out.data_vars.values():
+    n_chunks, biggest = 0, 0.0
+    for name, var in out.variables.items():
+        if name in out.dims:        # dimension coordinates are indexes, written as a single chunk
+            n_chunks += 1
+            continue
         per_var, nbytes = 1, var.dtype.itemsize
         for dim, size in zip(var.dims, var.shape, strict=True):
             step = chunks.get(dim, size)
             per_var *= -(-size // step)
             nbytes *= min(step, size)
-        n_objects += per_var
+        n_chunks += per_var
         biggest = max(biggest, nbytes)
-    print(f"[regrid] zarr chunks {chunks} -> ~{n_objects} chunk objects, "
-          f"largest {biggest / 1e6:.0f} MB uncompressed")
-    if n_objects > 50_000:
-        print(f"[regrid] WARNING: {n_objects} objects is a lot of inodes. On Jean Zay $WORK allows "
-              f"500 000 for the whole project. Increase zarr_chunks.")
+    # format 2: per array a directory, .zarray and .zattrs; per store the root, .zgroup, .zattrs
+    # and .zmetadata. Checked against os.walk in tests/test_regrid_domain.py.
+    inodes = n_chunks + 3 * len(out.variables) + 4
+    print(f"[regrid] zarr chunks {chunks} -> {inodes} inodes ({n_chunks} chunks), "
+          f"largest chunk {biggest / 1e6:.0f} MB uncompressed")
+    if inodes > 50_000:
+        print(f"[regrid] WARNING: {inodes} inodes is a lot. On Jean Zay $WORK allows 500 000 for the "
+              f"whole project. Increase zarr_chunks.")
 
     # Encodings inherited from netCDF inputs (chunksizes, zlib, contiguous, ...) are not valid Zarr
     # encodings and some make to_zarr raise; let xarray pick Zarr's own.
     for var in out.variables.values():
         var.encoding = {}
+    kw = {"zarr_format": 2} if "zarr_format" in inspect.signature(out.to_zarr).parameters else {}
     with dask.config.set(scheduler=scheduler):
-        out.to_zarr(path, mode="w", consolidated=True)
+        out.to_zarr(path, mode="w", consolidated=True, **kw)
 
 
 if __name__ == "__main__":

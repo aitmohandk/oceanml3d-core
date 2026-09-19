@@ -15,7 +15,8 @@ keep_depth: true
 method: none
 
 # Whole depth and horizontal slabs, 32 days per chunk. On the Gulf Stream box (4018 days, 26 levels,
-# 144x144, three 3D variables plus SSH) that is ~504 objects of at most 69 MB, for 26 GB of data.
+# 144x144, three 3D variables plus SSH) that is 504 chunks of at most 69 MB -- 536 inodes with the
+# metadata, in Zarr format 2, which regrid.py pins (format 3 nests chunk keys in directories: 1 920).
 # Daily chunks would give 16 000 objects -- on Jean Zay, 3% of the project's entire $WORK inode quota
 # for one dataset. 256-day chunks give 64 objects of 552 MB, too coarse to read a patch from.
 zarr_chunks: {time: 32}
