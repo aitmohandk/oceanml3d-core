@@ -8,7 +8,7 @@ download:
   depth: [0, 200]
   output: ${OCEANML3D_RAW}/glorys_gs
 input: ${OCEANML3D_RAW}/glorys_gs/*.nc
-output: ${OCEANML3D_DATA}/glorys_gs_multidepth_2010-2020.nc
+output: ${OCEANML3D_DATA}/glorys/glorys_gs_multidepth_2010-2020.zarr
 variables: {thetao: thetao, uo: uo, vo: vo}
 keep_depth: true
 domain: {lat: [32, 44], lon: [-66, -54]}

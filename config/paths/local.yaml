@@ -20,7 +20,9 @@ datasets:
   # independent chunk objects, safe to read from threads, unlike NetCDF. open.py dispatches on
   # the extension, so switching back to .nc is a one-character change here and in the recipe.
   glorys_gs_multidepth: {path: glorys/glorys_gs_multidepth_2010-2020.zarr, source: CMEMS GLORYS12 reanalysis}
-  glorys_gs_surface:    {path: glorys/glorys_gs_surface_2010-2020.nc, source: CMEMS GLORYS12 reanalysis, surface}
+  # Same store: `zos` has no depth axis and `lat` is a coordinate, so no separate surface file is
+  # needed -- and nothing in the preparation writes one.
+  glorys_gs_surface:    {path: glorys/glorys_gs_multidepth_2010-2020.zarr, source: CMEMS GLORYS12 reanalysis, surface}
   bathy_gs:             {path: bathy/bathymetry_gs.nc, source: GEBCO on the GLORYS12 grid}
   argo_profiles_gs:     {path: argo/argo_profiles_gs.csv, source: scripts/prepare/argo_profiles.py}
   # Written by `oceanml3d command=prepare-obs`. They have to be declared *before* it runs -- that is

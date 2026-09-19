@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-09-19: Zarr format 2 pinned, and the inode count made exact
+
+**Summary:** `regrid.py` writes Zarr format 2 and prints the real inode count of each store
+(chunks, metadata files, directories), checked against `os.walk` in the tests.
+
+**Files modified:** `scripts/prepare/regrid.py` — `_write_zarr`; the two GLORYS recipes' comments;
+`tests/test_regrid_domain.py`.
+
+**Rationale:** Per-year Zarr raised the inode question. Measured on the Gulf Stream box with
+`{time: 32}`: one year is 80 inodes in format 2 and 210 in format 3; the eleven-year store is 536
+and 1 920. zarr-python 3 defaults to format 3, which nests every chunk key in directories
+(`c/<t>/0/0/0`), so the choice of library version alone would have multiplied the count by 2.5–3.5.
+Pinned to 2, the whole GLORYS chain is ~1 400 inodes (11 × 80 + 536), against quotas in the hundreds
+of thousands; NetCDF per year would be 11. The count previously printed covered data chunks only,
+not metadata, directories or coordinates.
+
+**Verification:** `pytest tests/test_regrid_domain.py` — 19 passed.
+
+
+## 2026-09-19: Every intermediate is Zarr, and the GLORYS chain paths meet
+
+**Summary:** The per-year GLORYS step now writes `by_year/glorys_gs_multidepth_<year>.zarr`
+instead of NetCDF; the merge reads those stores with threads and writes
+`glorys/glorys_gs_multidepth_<first>-<last>.zarr`, which is where the catalog, the ARGO recipe and
+`glorys_gs_surface` now all point. Outputs are written under `.tmp.<name>` and renamed at the end.
+
+**Files modified:** `scripts/prepare/regrid.py` — `engine="zarr"` for store inputs, atomic
+write-then-rename, netCDF encodings dropped before `to_zarr`;
+`scripts/prepare/recipes/{glorys_gs_multidepth.datarmor,glorys_gs_multidepth,glorys_gs_concat,argo_profiles_gs}.yaml`;
+`config/paths/local.yaml` — `glorys_gs_surface` is the same store; `jobs/prepare.sh`;
+`docs/pipeline_3d.md`, `docs/platforms/datarmor.md`, `docs/gridded_models.md`,
+`docs/data_preparation.md`; `tests/test_regrid_domain.py`.
+
+**Rationale:** The Zarr change of 2026-09-15 converted only the merge; the per-year files stayed
+NetCDF, so a Datarmor run produced `.nc` where Zarr was expected. Following the chain further showed
+it did not connect: the merge wrote to `$OCEANML3D_DATA/` while the catalog reads
+`$OCEANML3D_DATA/glorys/`, the ARGO recipe still expected a `.nc` truth, and no step produced the
+`glorys_gs_surface` file (its only contents, `zos` and `lat`, are in the merged store). The rename at
+the end matters more for Zarr than for NetCDF: a store is a directory, so a killed write leaves
+something that exists, and the idempotent skip would have taken it for complete.
+
+**Verification:** `pytest tests/test_regrid_domain.py` — 18 passed, including per-year Zarr → threaded
+merge, an interrupted write leaving nothing behind, and a test that the recipe and catalog paths meet.
+
+
 ## 2026-09-19: Target resolution, as NOSC's `--target-res`
 
 **Summary:** The GLORYS preparation takes a target grid step again. `regrid.py` gains a
