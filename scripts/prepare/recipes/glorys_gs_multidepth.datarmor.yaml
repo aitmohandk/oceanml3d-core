@@ -6,13 +6,19 @@
 #
 # ${YEAR} and ${NEXT} are exported by jobs/prepare.sh -- the recipe is read through
 # os.path.expandvars, so one file serves every year of the array with no templating step.
-input: ${GLORYS_SRC}/**/*${YEAR}*.nc
+#
+# The glob anchors ${YEAR} on the VALIDITY date. Mirror files are named
+#     mercatorglorys12v1_gl12_mean_<validity YYYYMMDD>_R<production YYYYMMDD>.nc
+# and a bare `*${YEAR}*` also matches the production date: `*2020*` caught R2002**0206**, and the
+# 2020 job read 415 files spanning 2002-2022.
+input: ${GLORYS_SRC}/**/*_mean_${YEAR}????_R*.nc
 output: ${OCEANML3D_DATA}/by_year/glorys_gs_multidepth_${YEAR}.nc
 
 variables: {thetao: thetao, uo: uo, vo: vo, zos: zos}
-time: ["${YEAR}-01-01", "${NEXT}-01-01"]
+time: ["${YEAR}-01-01", "${YEAR}-12-31"]   # inclusive: NEXT-01-01 would belong to two years
 
-domain: {lat: [32, 44], lon: [-66, -54]}
+domain: {lat: [32, 44], lon: [-66, -54]}   # cut in each file before it is read (~145 x 145 of 2041 x 4320)
+max_gb: 20              # a year of this box is ~4.6 GB (50 levels); anything near 20 means the recipe misfired
 keep_depth: true        # 3D task: the depth axis is the point
 method: none            # native 1/12 deg; put a `grid:` here to coarsen
 
