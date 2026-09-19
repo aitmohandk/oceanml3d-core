@@ -82,11 +82,44 @@ def pointcloud_from_gdac_file(ds: xr.Dataset, value_vars=VALUE_VARS) -> xr.Datas
     return xr.Dataset({k: ("N_POINTS", v) for k, v in data.items() if v is not None})
 
 
+INDEX_NAMES = ("ar_index_global_prof.txt", "ar_index_global_prof.txt.gz")
+
+
+def prof_files_from_index(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date) -> list[Path] | None:
+    """The ``<dac>/<wmo>/<wmo>_prof.nc`` files of the floats with a profile in the box and period.
+
+    Every GDAC ships ``ar_index_global_prof.txt``: one line per profile with its date and position.
+    Filtering it first means opening the few hundred floats that crossed the box instead of all
+    ~20 000 in the archive -- minutes instead of hours on a shared filesystem. Returns ``None`` when
+    the mirror has no index, so the caller can fall back to scanning.
+    """
+    root = Path(gdac_dir)
+    index = next((root / n for n in INDEX_NAMES if (root / n).exists()), None)
+    if index is None:
+        return None
+    df = pd.read_csv(index, comment="#", usecols=["file", "date", "latitude", "longitude"],
+                     dtype={"file": str, "date": str})
+    t = pd.to_datetime(df["date"].str.slice(0, 14), format="%Y%m%d%H%M%S", errors="coerce")
+    keep = (df.latitude.between(lat_min, lat_max) & df.longitude.between(lon_min, lon_max)
+            & (t >= pd.Timestamp(start_date)) & (t <= pd.Timestamp(end_date)))
+    # aoml/1900722/profiles/D1900722_061.nc -> aoml/1900722/1900722_prof.nc. Index paths are relative
+    # to the `dac/` directory, which sits next to the index in a standard GDAC tree.
+    base = root / "dac" if (root / "dac").is_dir() else root
+    floats = sorted({"/".join(f.split("/")[:2]) for f in df.loc[keep, "file"]})
+    print(f"[argo] index {index.name}: {int(keep.sum())} profiles in box/period, {len(floats)} floats")
+    return [base / f / f"{f.split('/')[1]}_prof.nc" for f in floats]
+
+
 def fetch_argo_profiles_local(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date,
                               file_glob="**/*_prof.nc", **_) -> xr.Dataset:
-    files = sorted(Path(gdac_dir).glob(file_glob))
+    """Read a local GDAC mirror (``/home/ref-argo/gdac`` on Datarmor) instead of downloading."""
+    files = prof_files_from_index(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date)
+    if files is None:
+        print(f"[argo] WARNING: no ar_index_global_prof.txt under {gdac_dir}; scanning every "
+              f"{file_glob} file instead, which on a full GDAC takes hours")
+        files = sorted(Path(gdac_dir).glob(file_glob))
     if not files:
-        raise RuntimeError(f"no GDAC profile files under {gdac_dir} ({file_glob})")
+        raise RuntimeError(f"no GDAC profile file for the box/period under {gdac_dir}")
     t0, t1 = pd.Timestamp(start_date), pd.Timestamp(end_date)
     clouds = []
     for f in files:
@@ -101,6 +134,7 @@ def fetch_argo_profiles_local(gdac_dir, lon_min, lon_max, lat_min, lat_max, star
                 & (pc.LONGITUDE.values <= lon_max) & (t >= t0) & (t <= t1))
         if keep.any():
             clouds.append(pc.isel(N_POINTS=keep))
+    print(f"[argo] {len(clouds)}/{len(files)} file(s) contributed")
     return xr.concat(clouds, dim="N_POINTS") if clouds else xr.Dataset()
 
 

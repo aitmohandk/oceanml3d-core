@@ -12,8 +12,8 @@ means, and is worth reading first.
   queue is **`gpuq`**.
 * **Containers run directly.** Drop the `.sif` on `$DATAWORK` and run it with `singularity exec`. No
   import step, no imposed directory.
-* **Compute nodes have no Internet.** One queue does: **`ftp`**. Every download — GLORYS through
-  `copernicusmarine`, ARGO through `argopy` — must be submitted there.
+* **Compute nodes have no Internet.** One queue does: **`ftp`**. You should rarely need it: GLORYS
+  and the Argo GDAC are both mirrored under `/home/ref-*` (F.1, F.3). Only a real download goes there.
 
 > **Your login shell is probably csh.** That is Datarmor's default, and it changes how you set a
 > variable for one command. `VAR=value command` is bash syntax; csh reads the whole first word as a
@@ -326,21 +326,33 @@ jobs/prepare.sh --site datarmor glorys 2014
 
 Time one year that way before submitting eleven. It validates the output and sizes the walltime.
 
-### F.3 Downloads, when you do need them — queue `ftp`
+### F.3 ARGO is on Datarmor too — read the GDAC mirror
 
-ARGO profiles are not mirrored, and neither is anything else you might add. Those go on the only
-queue with outbound network:
+Ifremer hosts Coriolis, one of the two Argo global data centres, and the native GDAC is mirrored
+read-only. Check it once:
+
+```bash
+ls /home/ref-argo/gdac/                                  # dac/ and ar_index_global_prof.txt
+head -12 /home/ref-argo/gdac/ar_index_global_prof.txt
+```
+
+`scripts/prepare/recipes/argo_profiles_gs.datarmor.yaml` reads it (`source: gdac`,
+`gdac_dir: ${ARGO_GDAC}`, set to `/home/ref-argo/gdac` in `jobs/env/datarmor.sh`, which also binds
+`/home/ref-argo`). So this runs on a **CPU queue, not `ftp`**, with no `argopy`:
 
 ```csh
 qsub -v OCEANML3D_SITE=datarmor jobs/pbs/prepare_argo.pbs
 ```
 
-The body runs `scripts/prepare/argo_profiles.py`: real profiles, QC on the standard flags, vertical
+The global index is read first, so only the floats that crossed the box in the period are opened —
+a few hundred files instead of the ~20 000 of the archive. Without the index the reader falls back to
+scanning every `*_prof.nc`, says so, and takes hours. Then: QC on the standard flags, vertical
 interpolation, and the coverage table — where and when a float was, and how deep. The values are
-discarded; F.4 replaces them with the truth.
+discarded; F.4 replaces them with the truth. Output: `$OCEANML3D_DATA/argo/argo_profiles_gs.csv`.
 
-If you ever do need GLORYS from CMEMS (a domain or period the mirror does not cover), the same queue
-applies, `copernicusmarine login` once interactively first, and year by year.
+**Downloads, when you really need one** — a product the centre does not mirror, or GLORYS outside
+the mirror's coverage — go on the only queue with outbound network, `ftp`
+(`copernicusmarine login` once interactively first, and year by year).
 
 ### F.4 Simulate the observing system — no network needed
 

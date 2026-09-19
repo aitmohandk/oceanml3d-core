@@ -52,3 +52,42 @@ def test_gdac_pointcloud_flatten():
     pc = argo.pointcloud_from_gdac_file(ds)
     assert pc.sizes["N_POINTS"] == 4 and list(pc.PRES_QC.values) == [1, 1, 1, 9]
     assert argo.filter_by_qc(pc, ["PRES_QC"]).sizes["N_POINTS"] == 3
+
+
+def _prof(path, lat, lon, date, wmo):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    xr.Dataset({"PRES": (("N_PROF", "N_LEVELS"), [[5.0, 15.0]]),
+                "TEMP": (("N_PROF", "N_LEVELS"), [[20.0, 19.0]]),
+                "PRES_QC": (("N_PROF", "N_LEVELS"), [[b"1", b"1"]]),
+                "TEMP_QC": (("N_PROF", "N_LEVELS"), [[b"1", b"1"]]),
+                "LATITUDE": ("N_PROF", [lat]), "LONGITUDE": ("N_PROF", [lon]),
+                "JULD": ("N_PROF", pd.to_datetime([date]).values),
+                "POSITION_QC": ("N_PROF", [b"1"]), "JULD_QC": ("N_PROF", [b"1"]),
+                "PLATFORM_NUMBER": ("N_PROF", [wmo.encode()]), "CYCLE_NUMBER": ("N_PROF", [1])}).to_netcdf(path)
+
+
+def test_local_gdac_opens_only_the_floats_the_index_selects(tmp_path, monkeypatch):
+    """A GDAC laid out like /home/ref-argo/gdac: index at the root, paths relative to dac/."""
+    _prof(tmp_path / "dac/aoml/1900001/1900001_prof.nc", 40.0, -60.0, "2015-06-01", "1900001")   # in the box
+    _prof(tmp_path / "dac/coriolis/6900002/6900002_prof.nc", 10.0, -20.0, "2015-06-01", "6900002")  # outside
+    (tmp_path / "ar_index_global_prof.txt").write_text(
+        "# Title : Profile directory file of the Argo Global Data Assembly Center\n"
+        "file,date,latitude,longitude,ocean,profiler_type,institution,date_update\n"
+        "aoml/1900001/profiles/R1900001_001.nc,20150601000000,40.0,-60.0,A,846,AO,20160101000000\n"
+        "coriolis/6900002/profiles/R6900002_001.nc,20150601000000,10.0,-20.0,A,846,IF,20160101000000\n"
+        "aoml/1900001/profiles/R1900001_002.nc,20090101000000,40.0,-60.0,A,846,AO,20160101000000\n")
+    files = argo.prof_files_from_index(tmp_path, -66, -54, 32, 44, "2010-01-01", "2020-01-11")
+    assert files == [tmp_path / "dac/aoml/1900001/1900001_prof.nc"]
+
+    opened = []
+    real_open = xr.open_dataset
+    monkeypatch.setattr(argo.xr, "open_dataset", lambda f, *a, **k: opened.append(f) or real_open(f, *a, **k))
+    pc = argo.fetch_argo_profiles_local(tmp_path, -66, -54, 32, 44, "2010-01-01", "2020-01-11")
+    assert opened == files and pc.sizes["N_POINTS"] == 2
+
+
+def test_local_gdac_without_index_falls_back_to_scanning(tmp_path):
+    _prof(tmp_path / "aoml/1900001/1900001_prof.nc", 40.0, -60.0, "2015-06-01", "1900001")
+    assert argo.prof_files_from_index(tmp_path, -66, -54, 32, 44, "2010-01-01", "2020-01-11") is None
+    pc = argo.fetch_argo_profiles_local(tmp_path, -66, -54, 32, 44, "2010-01-01", "2020-01-11")
+    assert pc.sizes["N_POINTS"] == 2

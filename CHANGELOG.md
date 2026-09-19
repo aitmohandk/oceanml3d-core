@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-09-19: ARGO from Datarmor's GDAC mirror, not downloaded
+
+**Summary:** On Datarmor the ARGO coverage table is built from the read-only Argo GDAC mirror
+(`/home/ref-argo/gdac`) on a CPU queue, instead of `argopy` on the `ftp` queue. The local reader
+reads the GDAC's global profile index first and opens only the floats that crossed the box.
+
+**Files modified:** `oceanml3d/obs/argo.py` — `prof_files_from_index`, used by
+`fetch_argo_profiles_local`; `scripts/prepare/recipes/argo_profiles_gs.datarmor.yaml` (new);
+`scripts/prepare/recipes/argo_profiles_gs.yaml` and `argo_profiles.py` docstring — output under
+`argo/`, where the catalog looks; `jobs/prepare.sh` — site recipe preferred; `jobs/env/datarmor.sh`
+— `ARGO_GDAC`, `/home/ref-argo` bound; `jobs/pbs/prepare_argo.pbs` — `omp` queue;
+`docs/platforms/datarmor.md` F.3, `docs/pipeline_3d.md` §3.2; tests.
+
+**Rationale:** The `source: gdac` reader was ported from NOSC but nothing used it: the recipe, the
+job and the doc all downloaded, and the doc even said ARGO was not mirrored while its own storage
+table listed `/home/ref-argo`. Ifremer hosts Coriolis, one of the two Argo GDACs. As ported, the
+reader also globbed every `*_prof.nc` of the archive (~20 000 floats) and opened each one; the
+index (`ar_index_global_prof.txt`, one line per profile with date and position) reduces that to
+the few hundred floats that matter. Without an index it still scans, and says so. The recipe's
+output also missed the catalog path (`argo/argo_profiles_gs.csv`); the chain test now checks it.
+
+**Verification:** `pytest tests/test_argo.py tests/test_regrid_domain.py` — 24 passed.
+
+
 ## 2026-09-19: Zarr format 2 pinned, and the inode count made exact
 
 **Summary:** `regrid.py` writes Zarr format 2 and prints the real inode count of each store
