@@ -5,4 +5,4 @@ truth: ${OCEANML3D_DATA}/glorys/glorys_gs_multidepth_2010-2020.zarr
 depth_indices: [0, 2, 4, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
 value_var: TEMP
 spike_thresholds: {TEMP: 2.0}
-output: ${OCEANML3D_DATA}/argo_profiles_gs.csv
+output: ${OCEANML3D_DATA}/argo/argo_profiles_gs.csv   # catalog key argo_profiles_gs

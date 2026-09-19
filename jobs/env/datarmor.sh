@@ -15,7 +15,7 @@ export OCEANML3D_CONTAINER_CMD="${OCEANML3D_CONTAINER_CMD:-singularity}"
 # in so the preparation recipes can read it directly instead of downloading tens to hundreds of
 # gigabytes that are already on the filesystem. Without the bind the path resolves to nothing
 # inside the container, which looks like a missing dataset rather than a missing mount.
-export OCEANML3D_BIND="${OCEANML3D_BIND:-$DATAWORK:$DATAWORK,$SCRATCH:$SCRATCH,/home/ref-ocean-reanalysis}"
+export OCEANML3D_BIND="${OCEANML3D_BIND:-$DATAWORK:$DATAWORK,$SCRATCH:$SCRATCH,/home/ref-ocean-reanalysis,/home/ref-argo}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 
 # Where GLORYS comes from. Datarmor mirrors the central CMEMS products read-only, GLORYS12V1
@@ -23,6 +23,10 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 # `ls /home/ref-ocean-reanalysis/` -- the product name is the part that moves.
 export GLORYS_SRC="${GLORYS_SRC:-/home/ref-ocean-reanalysis/global-reanalysis-phy-001-030-daily}"
 export GLORYS_YEARS="${GLORYS_YEARS:-2010:2020}"
+
+# Argo: the native GDAC is mirrored too (Ifremer hosts Coriolis, one of the two Argo GDACs), so the
+# coverage table is built locally on a CPU queue -- no argopy, no `ftp` queue.
+export ARGO_GDAC="${ARGO_GDAC:-/home/ref-argo/gdac}"
 
 # V100 does fp16 but NOT bf16. `bf16-mixed` fails here; `16-mixed` is the one that works.
 export OCEANML3D_EXTRA="${OCEANML3D_EXTRA:-training.trainer.precision=16-mixed}"

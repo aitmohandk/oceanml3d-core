@@ -130,10 +130,13 @@ What to keep in mind:
 ### 3.2 ARGO coverage table and statics
 
 ```bash
-python scripts/prepare/argo_profiles.py --config scripts/prepare/recipes/argo_profiles_gs.yaml
+jobs/prepare.sh --site <site> argo
 ```
 
-Downloads real ARGO profiles, applies QC on the standard flags, interpolates vertically, and writes
+Reads real ARGO profiles — from a local GDAC mirror when the site has one
+(`argo_profiles_gs.<site>.yaml`, `source: gdac`: Datarmor's `/home/ref-argo/gdac`, read through its
+global index so only the floats in the box are opened), otherwise downloaded with `argopy`, which
+needs outbound network. Then it applies QC on the standard flags, interpolates vertically, and writes
 the **coverage table**: where and when a float was, and how deep it reached. The values are thrown
 away — §3.3 replaces them with the truth. That is what makes the ARGO input *virtual*: real
 geometry, simulated values.

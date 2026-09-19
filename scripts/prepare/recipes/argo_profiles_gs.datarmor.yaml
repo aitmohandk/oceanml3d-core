@@ -1,0 +1,15 @@
+# ARGO coverage table on Datarmor, from the centre's read-only Argo GDAC mirror: no download, no
+# `ftp` queue. Ifremer hosts Coriolis, one of the two Argo global data centres, and
+# /home/ref-argo/gdac is the native GDAC tree (<dac>/<wmo>/<wmo>_prof.nc + ar_index_global_prof.txt).
+# The index is read first, so only the floats that crossed the box are opened.
+#
+# Bind /home/ref-argo into the container (jobs/env/datarmor.sh does): unbound, the path is empty.
+source: gdac
+gdac_dir: ${ARGO_GDAC}
+bbox: [-66, -54, 32, 44]
+time: ["2010-01-01", "2020-01-11"]
+truth: ${OCEANML3D_DATA}/glorys/glorys_gs_multidepth_2010-2020.zarr
+depth_indices: [0, 2, 4, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+value_var: TEMP
+spike_thresholds: {TEMP: 2.0}
+output: ${OCEANML3D_DATA}/argo/argo_profiles_gs.csv

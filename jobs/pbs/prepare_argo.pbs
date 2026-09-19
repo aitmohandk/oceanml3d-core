@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 #PBS -N o3d_argo
-#PBS -q ftp
-#PBS -l walltime=06:00:00
-#PBS -l mem=32g
+#PBS -q omp
+#PBS -l select=1:ncpus=4:mem=32g
+#PBS -l walltime=02:00:00
 #PBS -j oe
 #PBS -o logs/
 #
-# Queue `ftp`: the only Datarmor nodes with outbound network. ARGO profiles are not mirrored, so
-# this one really does download.
+# A CPU queue, not `ftp`: Datarmor mirrors the Argo GDAC under /home/ref-argo/gdac and
+# scripts/prepare/recipes/argo_profiles_gs.datarmor.yaml reads it, so nothing is downloaded. Only a
+# site without a mirror falls back to argopy and needs outbound network (`-q ftp` on the qsub line).
 #     qsub -v OCEANML3D_SITE=datarmor jobs/pbs/prepare_argo.pbs
 set -euo pipefail
 cd "${PBS_O_WORKDIR:-$PWD}"

@@ -1,15 +1,15 @@
 """Build the ARGO profile coverage table for virtual floats (`oceanml3d prepare-obs`).
 
 Recipe (YAML):
-    source: argopy                     # argopy | gdac
-    gdac_dir: /home/ref-argo/gdac      # if source: gdac
+    source: argopy                     # argopy (downloads) | gdac (local mirror, no network)
+    gdac_dir: /home/ref-argo/gdac      # if source: gdac -- Datarmor mirrors the Argo GDAC
     bbox: [-66, -54, 32, 44]           # lon_min lon_max lat_min lat_max
     time: ["2010-01-01", "2020-01-01"]
-    truth: ${OCEANML3D_DATA}/glorys_gs_multidepth_2010-2020.nc   # gives depth values for the indices
+    truth: ${OCEANML3D_DATA}/glorys/glorys_gs_multidepth_2010-2020.zarr   # depth values for the indices
     depth_indices: [0, 2, 4, ...]
     value_var: TEMP
     spike_thresholds: {TEMP: 2.0}
-    output: ${OCEANML3D_DATA}/argo_profiles_gs.csv
+    output: ${OCEANML3D_DATA}/argo/argo_profiles_gs.csv
 """
 from __future__ import annotations
 

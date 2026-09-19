@@ -24,7 +24,8 @@ usage: jobs/prepare.sh [--site <name>] [--res <deg>] <step> [args]
 steps:
   glorys <year>   subset one year of GLORYS truth from the site's source into by_year/
   concat          merge the per-year files into the consolidated file the configs expect
-  argo            download ARGO profiles and build the coverage table   (needs network)
+  argo            ARGO coverage table: from the site's GDAC mirror if it has one
+                  (argo_profiles_gs.<site>.yaml), else downloaded   (then needs network)
   obs             simulate the observing system: pseudo-obs and virtual ARGO
   all             argo, then obs -- the steps that do not need a year loop
 
@@ -34,6 +35,7 @@ environment:
   GLORYS_SRC         where GLORYS comes from. On Datarmor the read-only mirror
                      /home/ref-ocean-reanalysis/global-reanalysis-phy-001-030-daily -- there is no
                      reason to download what the centre already stores.
+  ARGO_GDAC          local Argo GDAC mirror, read by argo_profiles_gs.<site>.yaml
   GLORYS_YEARS       first:last, used by `concat` for the output label (default 2010:2020)
   OCEANML3D_TARGET_RES  target grid step in degrees (or --res). Unset: native grid. Use the same
                      value for every step: files at different resolutions are refused, not mixed.
@@ -89,8 +91,14 @@ step_concat() {
 }
 
 step_argo() {
-    say "ARGO profiles and coverage table (this one needs outbound network)"
-    container_exec python scripts/prepare/argo_profiles.py --config "$RECIPES/argo_profiles_gs.yaml"
+    local recipe="$RECIPES/argo_profiles_gs.$SITE.yaml"
+    if [[ -f "$recipe" ]]; then
+        say "ARGO profiles and coverage table from ${ARGO_GDAC:-the gdac_dir in $recipe}"
+    else
+        recipe="$RECIPES/argo_profiles_gs.yaml"
+        say "ARGO profiles and coverage table, downloaded with argopy (needs outbound network)"
+    fi
+    container_exec python scripts/prepare/argo_profiles.py --config "$recipe"
 }
 
 step_obs() {
