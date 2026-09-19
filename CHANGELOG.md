@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-09-19: Target resolution, as NOSC's `--target-res`
+
+**Summary:** The GLORYS preparation takes a target grid step again. `regrid.py` gains a
+`resolution:` key (degrees); the GLORYS recipes set it to `${OCEANML3D_TARGET_RES}`, which
+`jobs/prepare.sh --res` or `qsub -v OCEANML3D_TARGET_RES=…` fills in. Unset means native 1/12°.
+
+**Files modified:** `scripts/prepare/regrid.py` — `resolution_of`, `domain_grid` (NOSC's
+`target_grid`), per-file interpolation in `_preprocess`, resolution recorded in the output attributes;
+`scripts/prepare/recipes/glorys_gs_multidepth{,.datarmor}.yaml`; `jobs/prepare.sh` — `--res`;
+`docs/pipeline_3d.md` §3.1a, `docs/platforms/datarmor.md`; `tests/test_regrid_domain.py`.
+
+**Rationale:** NOSC's `prepare_glorys_osse.py --target-res` / `NOSC_TARGET_RES` had no equivalent
+here: `grid:` existed but had to be spelled out per recipe and was not tied to the domain. As in NOSC
+the grid is anchored on the domain bounds and depends on nothing else, so all products prepared with
+the same domain and step share it exactly. Two safeguards NOSC did not have, because file names do
+not carry the resolution: an existing output at another resolution is refused rather than skipped,
+and the merge refuses inputs at mixed resolutions (`combine="by_coords"` would otherwise take the
+union of the grids and pad with NaN). The domain is cut with one target step of margin so the edge
+nodes are interpolated, not NaN.
+
+**Verification:** `pytest tests/test_regrid_domain.py` — 15 passed (native and quarter-degree, both
+latitude orders and longitude conventions, refusal on resolution change, refusal of a mixed merge).
+
+
 ## 2026-09-19: `domain` is applied, and the GLORYS glob matches only its year
 
 The Datarmor run for 2020 was killed after announcing

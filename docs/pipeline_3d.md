@@ -93,6 +93,34 @@ keep_depth: true
 method: none
 ```
 
+### 3.1a Choosing the resolution
+
+GLORYS is 1/12°, and that is what you get by default. To work coarser — NOSC's `--target-res` /
+`NOSC_TARGET_RES` — set one variable for the whole preparation:
+
+```bash
+jobs/prepare.sh --site datarmor --res 0.25 glorys 2010        # or OCEANML3D_TARGET_RES=0.25
+qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_TARGET_RES=0.25 jobs/pbs/prepare_glorys.pbs
+```
+
+The GLORYS recipes carry `resolution: ${OCEANML3D_TARGET_RES}`; unset, it means native. When set,
+each file is cut to the domain (plus one cell of margin) and interpolated bilinearly onto a regular
+grid **anchored on the domain bounds** — `arange(lo, hi + res/2, res)`, 49 × 49 for the Gulf Stream
+box at 0.25°. The grid depends only on the domain and the step, never on the source, so every product
+prepared with the same pair lands on exactly the same grid; `data/open.py` refuses one that does not.
+
+What to keep in mind:
+
+- **One resolution per data directory.** File names do not carry it. The value is written in each
+  output's attributes, and `regrid.py` refuses to skip — or to merge — files at another resolution
+  instead of silently mixing them. Simplest: `OCEANML3D_DATA=$DATAWORK/oceanml3d/res0.25`.
+- **The task's patch must fit.** `osse3d_gs21` uses 144 × 144 patches, i.e. the native box. At 0.25°
+  the box is 49 × 49: `data.patch.lat=48 data.patch.lon=48 data.stride.lat=40 data.stride.lon=40`.
+- **Everything downstream follows the truth grid**: the pseudo-obs and virtual ARGO are simulated on
+  it. The bathymetry is the exception — regrid it onto the prepared truth with `reference:`.
+- Bilinear from 1/12° to 1/4° is what NOSC did; it subsamples rather than averages. For
+  an area mean, `method: conservative` needs `xesmf` in the image.
+
 ### 3.2 ARGO coverage table and statics
 
 ```bash

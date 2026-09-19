@@ -11,5 +11,7 @@ input: ${OCEANML3D_RAW}/glorys_gs/*.nc
 output: ${OCEANML3D_DATA}/glorys_gs_multidepth_2010-2020.nc
 variables: {thetao: thetao, uo: uo, vo: vo}
 keep_depth: true
-method: none          # native 1/12 deg grid kept: no interpolation
+domain: {lat: [32, 44], lon: [-66, -54]}
+resolution: ${OCEANML3D_TARGET_RES}   # unset -> native 1/12 deg; e.g. 0.25 -> bilinear on the domain grid
+method: none
 time: ["2010-01-01", "2020-01-11"]

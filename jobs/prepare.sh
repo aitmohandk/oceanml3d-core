@@ -19,7 +19,7 @@ source "$REPO_ROOT/jobs/env/_lib.sh"
 
 usage() {
     cat >&2 <<'USAGE'
-usage: jobs/prepare.sh [--site <name>] <step> [args]
+usage: jobs/prepare.sh [--site <name>] [--res <deg>] <step> [args]
 
 steps:
   glorys <year>   subset one year of GLORYS truth from the site's source into by_year/
@@ -35,6 +35,8 @@ environment:
                      /home/ref-ocean-reanalysis/global-reanalysis-phy-001-030-daily -- there is no
                      reason to download what the centre already stores.
   GLORYS_YEARS       first:last, used by `concat` for the output label (default 2010:2020)
+  OCEANML3D_TARGET_RES  target grid step in degrees (or --res). Unset: native grid. Use the same
+                     value for every step: files at different resolutions are refused, not mixed.
 USAGE
     exit 2
 }
@@ -44,6 +46,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --site) OCEANML3D_SITE="$2"; shift 2 ;;
         --site=*) OCEANML3D_SITE="${1#--site=}"; shift ;;
+        --res) export OCEANML3D_TARGET_RES="$2"; shift 2 ;;
+        --res=*) export OCEANML3D_TARGET_RES="${1#--res=}"; shift ;;
         -h|--help) usage ;;
         *) ARGS+=("$1"); shift ;;
     esac
@@ -72,7 +76,8 @@ step_glorys() {
     export YEAR="$year" NEXT="$((year + 1))"
     local recipe="$RECIPES/glorys_gs_multidepth.$SITE.yaml"
     [[ -f "$recipe" ]] || recipe="$RECIPES/glorys_gs_multidepth.yaml"
-    say "GLORYS $YEAR from ${GLORYS_SRC:-the input: in the recipe} -> $OCEANML3D_DATA/by_year"
+    say "GLORYS $YEAR from ${GLORYS_SRC:-the input: in the recipe} -> $OCEANML3D_DATA/by_year" \
+        "(resolution ${OCEANML3D_TARGET_RES:-native})"
     container_exec python scripts/prepare/regrid.py --config "$recipe"
 }
 

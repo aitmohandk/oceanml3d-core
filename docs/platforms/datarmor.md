@@ -302,6 +302,14 @@ core and saves nothing along the way, so one walltime overrun loses everything. 
 is relaunched alone — `qsub -J 2015-2015 …` — while the others stay done, and `regrid.py` skips
 completed outputs, so relaunching the whole array is safe too.
 
+**Resolution.** Native 1/12° by default. For another step — what `NOSC_TARGET_RES` did — pass it
+to the whole chain, in its own data directory ([pipeline_3d.md §3.1a](../pipeline_3d.md)):
+
+```csh
+qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_TARGET_RES=0.25,OCEANML3D_DATA=$DATAWORK/oceanml3d/res0.25 \
+     jobs/pbs/prepare_glorys.pbs
+```
+
 Then merge into the single file the configs expect:
 
 ```csh
