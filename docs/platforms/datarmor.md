@@ -427,6 +427,8 @@ rsync -av $SCRATCH/oceanml3d/runs/<run>/ $DATAWORK/oceanml3d/runs/<run>/
 | `no file matches /home/ref-…` inside the container | the mirror is not in `OCEANML3D_BIND`. An unbound path is *empty*, not missing, so the error is about the pattern rather than the mount. |
 | `FATAL: mount source … doesn't exist` | a bind path that does not exist on the host. `$OCEANML3D_DATA` is an output directory and is created for you now; anything else in `OCEANML3D_BIND` is skipped with a reason. |
 | `Segmentation fault` from `singularity exec`, after `[regrid] N input file(s)` | netCDF4/HDF5 is not thread-safe and the C library dies rather than raising. `parallel` is off by default and the read runs on dask's synchronous scheduler; turn `parallel: true` on per recipe only once you have seen it work here. |
+| `Killed` after `[regrid] writing … lat': 2041, 'lon': 4320 …` | the whole globe is being written: the recipe has no `domain:`, or a `regrid.py` older than 2026-09-19 ignored it. Now refused up front by `max_gb`. |
+| `[regrid] N input file(s)` far from 365, with other years in the first/last names | the input glob matched the `_R<production date>` part of the names. Anchor the year on the validity date: `*_mean_${YEAR}????_R*.nc`. |
 | An error about HDF5 file locking, or a hang on the first open | Lustre does not implement the locking HDF5 wants. `regrid.py` sets `HDF5_USE_FILE_LOCKING=FALSE`; other tools may need it exported too. |
 | `Could not find any nv files on this host!` | `--nv` on a CPU queue. Harmless, and no longer printed: `--nv` is passed only where a driver is present. Force it with `OCEANML3D_NV=1`. |
 | `Unmatched "` from a `.pbs` job | csh cannot carry a multi-line double-quoted string. Call a `.py` file, never `python -c`. |

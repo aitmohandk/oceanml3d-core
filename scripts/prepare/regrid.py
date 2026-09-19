@@ -7,6 +7,8 @@ Recipe (YAML):
     variables: {adt: zos, ugos: ugos, vgos: vgos}   # rename on the fly
     grid: {lat: [-80, 90, 0.25], lon: [-180, 180, 0.25]}   # or  reference: /path/ref.nc
     time: ["2010-01-01", "2022-01-01"]
+    domain: {lat: [32, 44], lon: [-66, -54]}           # subdomain, cut per file before any read
+    max_gb: 100                                        # refuse larger uncompressed outputs
     method: linear                                     # linear | nearest | conservative (xesmf)
     keep_depth: true                                   # keep the depth axis (3D tasks)
     depth_indices: [0, 2, 4]                           # positions on the SOURCE depth axis
@@ -70,6 +72,48 @@ def target_grid(recipe: dict) -> tuple[np.ndarray, np.ndarray]:
     return lat, lon
 
 
+def _lon_to(convention_max: float, x: float) -> float:
+    """Express longitude ``x`` in the convention of a coordinate whose maximum is ``convention_max``."""
+    if convention_max > 180:
+        return x % 360
+    return ((x + 180) % 360) - 180 if x > 180 else x
+
+
+def _select_domain(ds: xr.Dataset, domain: dict) -> xr.Dataset:
+    """Cut ``ds`` to ``domain`` = ``{lat: [lo, hi], lon: [lo, hi]}``, inclusive bounds.
+
+    By position, from a mask, rather than ``sel(lat=slice(...))``: a label slice silently returns an
+    *empty* array when the stored axis is descending, and a longitude range given in -180..180
+    against a 0..360 file (or the reverse) matches nothing at all. Both conventions occur across the
+    products this script reads. A box that crosses the seam of the file's convention (e.g. -10..10 on
+    a 0..360 axis) is returned in -180..180, sorted, so it stays contiguous.
+    """
+    for dim in ("lat", "lon"):
+        if dim not in domain:
+            continue
+        if dim not in ds.dims:
+            raise KeyError(f"recipe domain has {dim!r} but the data has no {dim!r} dimension "
+                           f"(dims: {dict(ds.sizes)})")
+        lo, hi = (float(v) for v in domain[dim])
+        coord = ds[dim].values
+        if dim == "lon" and hi - lo >= 360:
+            continue
+        if dim == "lon":
+            top = float(np.nanmax(coord))
+            lo, hi = _lon_to(top, lo), _lon_to(top, hi)
+            mask = (coord >= lo) & (coord <= hi) if lo <= hi else (coord >= lo) | (coord <= hi)
+        else:
+            mask = (coord >= min(lo, hi)) & (coord <= max(lo, hi))
+        idx = np.nonzero(mask)[0]
+        if idx.size == 0:
+            raise ValueError(f"domain {dim}={domain[dim]} selects nothing: the data spans "
+                             f"{float(np.nanmin(coord))}..{float(np.nanmax(coord))}")
+        ds = ds.isel({dim: idx})
+        if dim == "lon" and lo > hi:
+            ds = ds.assign_coords(lon=((ds.lon + 180) % 360) - 180).sortby("lon")
+    return ds
+
+
 def _preprocess(ds: xr.Dataset, recipe: dict) -> xr.Dataset:
     """Per-file work, pushed into ``open_mfdataset(preprocess=...)`` on purpose.
 
@@ -84,6 +128,11 @@ def _preprocess(ds: xr.Dataset, recipe: dict) -> xr.Dataset:
     wanted = [v for v in recipe["variables"] if v in ds.data_vars]
     if wanted:
         ds = ds[wanted]
+    if recipe.get("domain"):
+        # Before anything is read: a GLORYS file is the whole globe at 1/12 deg (2041 x 4320 x 50),
+        # and the Gulf Stream box is 1/400th of it. This key used to be accepted and ignored, which
+        # on a year of files meant a 1949 GB write and an OOM kill.
+        ds = _select_domain(ds, recipe["domain"])
     if "depth" in ds.dims:
         if not recipe.get("keep_depth", False):
             ds = ds.isel(depth=0, drop=True)
@@ -158,8 +207,9 @@ def run(recipe: dict, *, force: bool = False) -> Path:
             out = ds.interp(lat=lat, lon=lon, method=method)
 
     out = out.astype(np.float32)
-    print(f"[regrid] writing {path} "
-          f"({dict(out.sizes)}, {out.nbytes / 1e9:.2f} GB uncompressed)")
+    gb = out.nbytes / 1e9
+    print(f"[regrid] writing {path} ({dict(out.sizes)}, {gb:.2f} GB uncompressed)")
+    check_size(gb, recipe)
     path.parent.mkdir(parents=True, exist_ok=True)
     scheduler = recipe.get("dask_scheduler", "synchronous")
 
@@ -175,6 +225,26 @@ def run(recipe: dict, *, force: bool = False) -> Path:
     ds.close()
     print(f"[regrid] done: {path}")
     return path
+
+
+DEFAULT_MAX_GB = 100.0
+
+
+def check_size(gb: float, recipe: dict) -> None:
+    """Refuse an output larger than ``max_gb`` (default 100) before anything is read.
+
+    Everything this script writes is a regional box: a few GB per year, tens for a decade. An output
+    in the hundreds of GB means the recipe did not do what it says -- a domain not applied, a glob
+    that matched other years -- and the job would otherwise spend its walltime reading the globe
+    before the node kills it. Raise ``max_gb`` in the recipe if the size is really intended.
+    """
+    limit = float(recipe.get("max_gb", DEFAULT_MAX_GB))
+    if gb > limit:
+        raise RuntimeError(
+            f"output would be {gb:.1f} GB uncompressed, above max_gb={limit:g}. Check `domain`, "
+            f"`time` and the `input` glob (the file list above); set max_gb in the recipe if "
+            f"this size is intended."
+        )
 
 
 def _write_zarr(out: xr.Dataset, path: Path, recipe: dict, scheduler: str) -> None:

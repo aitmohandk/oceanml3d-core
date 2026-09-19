@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-09-19: `domain` is applied, and the GLORYS glob matches only its year
+
+The Datarmor run for 2020 was killed after announcing
+`{'time': 366, 'depth': 50, 'lat': 2041, 'lon': 4320}, 1949.15 GB uncompressed` -- the whole globe.
+Two independent defects:
+
+- **`domain:` was accepted and ignored.** `regrid.py` never read the key, and with `method: none`
+  nothing else cut the grid. It is now applied in the per-file `preprocess`, before any read, by
+  position from a mask: a label slice returns an empty array on a descending latitude axis, and a
+  -180..180 box matches nothing on a 0..360 file. A box crossing the seam of the file's convention
+  comes back in -180..180, sorted. A domain that selects nothing is an error.
+- **`*${YEAR}*` matched the production date.** Mirror files are
+  `mercatorglorys12v1_gl12_mean_<validity>_R<production>.nc`, and `*2020*` caught `R2002`**`0206`**:
+  415 files from 2002 to 2022. The Datarmor recipe now uses `*_mean_${YEAR}????_R*.nc`, and its time
+  window ends on `${YEAR}-12-31` so no day belongs to two yearly files.
+
+And a guard so the next such mistake costs seconds, not a walltime: `regrid.py` refuses an output
+above `max_gb` uncompressed (100 by default, 20 in the per-year GLORYS recipe, where a year of the
+box is ~4.6 GB), with the file list and sizes already printed above the error.
+
 ## 2026-09-15: Zarr for the intermediate data
 
 Following the segfault: what is not parallelisable is narrow — entering the netCDF4/HDF5 C library
