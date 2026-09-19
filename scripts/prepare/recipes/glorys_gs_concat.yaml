@@ -6,8 +6,9 @@
 # independent object with no C-library global state, so reading this back is safe from threads: the
 # netCDF thread-safety problem that forces `parallel: false` on the per-year step does not apply
 # here, and the training data loader benefits from the same property.
-input: ${OCEANML3D_DATA}/by_year/glorys_gs_multidepth_*.nc
-output: ${OCEANML3D_DATA}/glorys_gs_multidepth_${YEAR}-${NEXT}.zarr
+input: ${OCEANML3D_DATA}/by_year/glorys_gs_multidepth_*.zarr
+# Under glorys/, where the catalog (config/paths/*.yaml, key glorys_gs_multidepth) looks for it.
+output: ${OCEANML3D_DATA}/glorys/glorys_gs_multidepth_${YEAR}-${NEXT}.zarr
 
 variables: {thetao: thetao, uo: uo, vo: vo, zos: zos}
 keep_depth: true
@@ -19,6 +20,6 @@ method: none
 # for one dataset. 256-day chunks give 64 objects of 552 MB, too coarse to read a patch from.
 zarr_chunks: {time: 32}
 
-# Safe on the *output* side regardless; the read side stays conservative because the inputs are
-# still NetCDF. Once the per-year step also writes .zarr, both can be turned up here.
-dask_scheduler: synchronous
+# Both ends are Zarr now, so threads are safe: the netCDF4/HDF5 restriction does not apply.
+parallel: true
+dask_scheduler: threads

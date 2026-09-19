@@ -318,8 +318,8 @@ all seven. Paste this into your site file:
 ```yaml
   # --- OSSE-3D, Gulf Stream (config/data/osse3d_gs21.yaml) ---
   # truth, produced by scripts/prepare/recipes/glorys_gs_multidepth.yaml
-  glorys_gs_multidepth:     {path: glorys/glorys_gs_multidepth_2010-2020.nc, source: CMEMS GLORYS12 reanalysis}
-  glorys_gs_surface:        {path: glorys/glorys_gs_surface_2010-2020.nc}
+  glorys_gs_multidepth:     {path: glorys/glorys_gs_multidepth_2010-2020.zarr, source: CMEMS GLORYS12 reanalysis}
+  glorys_gs_surface:        {path: glorys/glorys_gs_multidepth_2010-2020.zarr}   # same store: zos, lat
   bathy_gs:                 {path: bathy/bathymetry_gs.nc, source: GEBCO on the GLORYS12 grid}
   # ARGO coverage table, produced by scripts/prepare/argo_profiles.py
   argo_profiles_gs:         {path: argo/argo_profiles_gs.csv}

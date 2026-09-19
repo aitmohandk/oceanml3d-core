@@ -183,3 +183,58 @@ def test_merge_refuses_inputs_at_different_resolutions(tmp_path):
              "variables": {"zos": "zos"}, "method": "none"}
     with pytest.raises(RuntimeError, match="different resolutions"):
         run(merge)
+
+
+# --- Zarr end to end: per-year stores, merged with threads -----------------------------------------
+
+def test_per_year_zarr_then_threaded_merge(tmp_path):
+    pytest.importorskip("zarr")
+    src = tmp_path / "src"
+    src.mkdir()
+    for i, t0 in enumerate(["2010-01-01", "2010-01-03", "2011-01-01"]):
+        _globe(lat_desc=True, t0=t0).to_netcdf(src / f"f_{t0[:4]}_{i}.nc")
+    for year in ("2010", "2011"):
+        run({"input": str(src / f"f_{year}_*.nc"),
+             "output": str(tmp_path / "by_year" / f"g_{year}.zarr"),
+             "variables": {"thetao": "thetao", "zos": "zos"}, "domain": GS,
+             "resolution": "${OCEANML3D_TARGET_RES}", "keep_depth": True, "method": "none",
+             "zarr_chunks": {"time": 32}})
+    assert not list((tmp_path / "by_year").glob(".tmp.*")), "temporary stores must be renamed away"
+    out = run({"input": str(tmp_path / "by_year" / "g_*.zarr"),
+               "output": str(tmp_path / "glorys" / "all.zarr"),
+               "variables": {"thetao": "thetao", "zos": "zos"}, "keep_depth": True, "method": "none",
+               "parallel": True, "dask_scheduler": "threads"})
+    with xr.open_zarr(out) as ds:
+        assert dict(ds.sizes) == {"time": 6, "depth": 3, "lat": 7, "lon": 7}
+        assert ds.attrs["oceanml3d_resolution"] == "native"
+
+
+def test_an_interrupted_write_leaves_nothing_to_skip(tmp_path, monkeypatch):
+    pytest.importorskip("zarr")
+    import scripts.prepare.regrid as regrid
+
+    _native(tmp_path)
+
+    def boom(*a, **k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(regrid, "_write_zarr", boom)
+    with pytest.raises(KeyboardInterrupt):
+        run(_recipe(tmp_path, 0.25, out="y.zarr"))
+    assert not (tmp_path / "y.zarr").exists()
+    monkeypatch.undo()
+    assert run(_recipe(tmp_path, 0.25, out="y.zarr")).exists()
+
+
+def test_the_glorys_chain_paths_meet():
+    """Per-year output -> merge input -> merge output -> catalog key and ARGO truth."""
+    rec = REPO / "scripts/prepare/recipes"
+    per_year = yaml.safe_load((rec / "glorys_gs_multidepth.datarmor.yaml").read_text())["output"]
+    concat = yaml.safe_load((rec / "glorys_gs_concat.yaml").read_text())
+    argo = yaml.safe_load((rec / "argo_profiles_gs.yaml").read_text())
+    catalog = yaml.safe_load((REPO / "config/paths/local.yaml").read_text())["datasets"]
+    assert per_year.endswith(".zarr") and concat["input"].endswith(".zarr")
+    assert fnmatch.fnmatch(per_year.replace("${YEAR}", "2010"), concat["input"])
+    merged = concat["output"].replace("${YEAR}-${NEXT}", "2010-2020")
+    assert merged == "${OCEANML3D_DATA}/" + catalog["glorys_gs_multidepth"]["path"]
+    assert argo["truth"] == merged

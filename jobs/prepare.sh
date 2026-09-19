@@ -84,7 +84,7 @@ step_glorys() {
 step_concat() {
     export YEAR="${YEARS%%:*}" NEXT="${YEARS##*:}"
     local recipe="$RECIPES/glorys_gs_concat.yaml"
-    say "merging $OCEANML3D_DATA/by_year/*.nc -> $OCEANML3D_DATA (label $YEAR-$NEXT)"
+    say "merging $OCEANML3D_DATA/by_year/*.zarr -> $OCEANML3D_DATA/glorys (label $YEAR-$NEXT)"
     container_exec python scripts/prepare/regrid.py --config "$recipe"
 }
 

@@ -17,7 +17,7 @@ Paths use `${OCEANML3D_RAW}` (downloads) and `${OCEANML3D_DATA}` (catalog root).
 | Step | Tool | Output (catalog key) |
 |---|---|---|
 | GLORYS12 truth, 21 levels | `download_copernicus.py` → `regrid.py recipes/glorys_gs_multidepth.yaml` | `glorys_gs_multidepth` |
-| GLORYS12 truth, surface | same recipe, surface selection | `glorys_gs_surface` |
+| GLORYS12 truth, surface | the same Zarr store (`zos` has no depth axis) | `glorys_gs_surface` |
 | Bathymetry on the GLORYS grid | `regrid.py` (GEBCO → 1/12°) | `bathy_gs` |
 | ARGO coverage table | `argo_profiles.py recipes/argo_profiles_gs.yaml` | `argo_profiles_gs` |
 

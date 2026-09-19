@@ -78,19 +78,25 @@ python scripts/prepare/download_copernicus.py --config scripts/prepare/recipes/g
 python scripts/prepare/regrid.py --config scripts/prepare/recipes/glorys_gs_multidepth.yaml
 ```
 
-**Do it one year at a time and merge.** Eleven years in one job is what kills walltime. Point the
-recipe's `input` at one year's files, its `output` at `…_<year>.nc`, then merge. `regrid.py` is
-idempotent — a completed output is skipped — so a job killed on walltime is resumed by resubmitting,
-not restarted.
+**Do it one year at a time and merge.** Eleven years in one job is what kills walltime. Each year
+goes to `by_year/glorys_gs_multidepth_<year>.zarr`, then the merge writes the store the catalog
+reads. `regrid.py` is idempotent — a completed output is skipped — so a job killed on walltime is
+resumed by resubmitting, not restarted. Outputs are written under `.tmp.<name>` and renamed at the
+end, so a killed job never leaves a half-written store that the next run would skip.
 
-The merge is the same tool with a glob:
+**Every intermediate is Zarr**; NetCDF is only what is read from outside (the GLORYS files) and what
+is exported (the product). The merge is the same tool with a glob, and since both ends are Zarr it
+reads with threads:
 
 ```yaml
-input: ${OCEANML3D_RAW}/glorys_gs/by_year/glorys_gs_multidepth_*.nc
-output: ${OCEANML3D_DATA}/glorys_gs_multidepth_2010-2020.nc
-variables: {thetao: thetao, uo: uo, vo: vo}
+input: ${OCEANML3D_DATA}/by_year/glorys_gs_multidepth_*.zarr
+output: ${OCEANML3D_DATA}/glorys/glorys_gs_multidepth_${YEAR}-${NEXT}.zarr
+variables: {thetao: thetao, uo: uo, vo: vo, zos: zos}
 keep_depth: true
 method: none
+zarr_chunks: {time: 32}
+parallel: true
+dask_scheduler: threads
 ```
 
 ### 3.1a Choosing the resolution

@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import glob
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -263,6 +264,9 @@ def run(recipe: dict, *, force: bool = False) -> Path:
             open_kw["parallel"] = True
     else:
         inputs = pattern
+    if str(inputs if isinstance(inputs, str) else inputs[0]).rstrip("/").endswith(".zarr"):
+        # Zarr stores are directories; without the engine xarray tries them as netCDF and fails.
+        open_kw["engine"] = "zarr"
     # Pass the resolved list rather than the pattern: xarray does its own globbing, but not `**`.
     # The synchronous scheduler for the same reason as `parallel` above: the read goes through the
     # netCDF4 C library, and a threaded scheduler is the other way to reach it from several threads
@@ -309,18 +313,32 @@ def run(recipe: dict, *, force: bool = False) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     scheduler = recipe.get("dask_scheduler", "synchronous")
 
+    # Written under a hidden temporary name and renamed at the end. The skip above tests only for
+    # existence, so a job killed mid-write must not leave something at `path`: a half-written Zarr
+    # store is a directory that exists, and the next run would have skipped it as complete.
+    tmp = path.with_name(f".tmp.{path.name}")
+    _remove(tmp)
     if path.suffix == ".zarr":
-        _write_zarr(out, path, recipe, scheduler)
+        _write_zarr(out, tmp, recipe, scheduler)
     else:
         # Materialise before writing. A subdomained, depth-reduced box is a few GB at most, and one
         # in-memory write beats streaming a compressed write through a dask graph by a long way.
         with dask.config.set(scheduler=scheduler):
             out = out.load()
-        out.to_netcdf(path, encoding={v: {"zlib": True, "complevel": 4} for v in out.data_vars})
+        out.to_netcdf(tmp, encoding={v: {"zlib": True, "complevel": 4} for v in out.data_vars})
     out.close()
     ds.close()
+    _remove(path)
+    os.replace(tmp, path)
     print(f"[regrid] done: {path}")
     return path
+
+
+def _remove(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    elif path.exists():
+        path.unlink()
 
 
 def _stored_resolution(path: Path) -> str | None:
@@ -392,6 +410,10 @@ def _write_zarr(out: xr.Dataset, path: Path, recipe: dict, scheduler: str) -> No
         print(f"[regrid] WARNING: {n_objects} objects is a lot of inodes. On Jean Zay $WORK allows "
               f"500 000 for the whole project. Increase zarr_chunks.")
 
+    # Encodings inherited from netCDF inputs (chunksizes, zlib, contiguous, ...) are not valid Zarr
+    # encodings and some make to_zarr raise; let xarray pick Zarr's own.
+    for var in out.variables.values():
+        var.encoding = {}
     with dask.config.set(scheduler=scheduler):
         out.to_zarr(path, mode="w", consolidated=True)
 
