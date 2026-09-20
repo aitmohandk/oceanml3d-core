@@ -15,12 +15,15 @@ Ordered by what blocks the next result.
       `nosc_15m_duacs` on real data, with time and memory recorded in `CHANGELOG.md`. Everything
       else in this section is small; this is the one that tells us the pipeline holds at scale.
       Blocked only on the data preparation finishing on Datarmor.
-- [ ] **`bathy_gs` has no recipe.** The catalog key exists and `osse3d_gs21` reads it as a static
-      input; nothing produces it. GEBCO regridded onto the prepared truth with `regrid.py`
-      (`reference:` pointing at the truth) — see `docs/data_preparation.md`.
-- [ ] **`config/paths/datarmor.yaml` does not exist.** `jobs/env/datarmor.sh` sets
-      `OCEANML3D_PATHS=datarmor`; the file has to be written from `config/paths/local.yaml`, with
-      the same sixteen keys and this centre's paths. Same for `jeanzay`.
+- [ ] **`bathy_gs` — deferred, not dropped.** The static input is off (`bathy: null` in
+      `config/data/osse3d_gs21.yaml`): the first thing to validate is the simple model, and the key
+      has no producer. Once there is a recipe — GEBCO regridded onto the prepared truth with
+      `regrid.py`, `reference:` pointing at the truth (`docs/data_preparation.md`) — `ablation=bathy`
+      puts it back with no other change. `test_every_source_of_the_osse_task_is_produced_by_something`
+      is what stops a source without a producer coming back in.
+- [x] **`config/paths/datarmor.yaml` and `config/paths/jeanzay.yaml`** now exist, carrying local's
+      sixteen keys with each centre's root; `test_every_site_env_file_has_a_matching_paths_file`
+      keeps `jobs/env/<site>.sh` and the catalog in step.
 - [ ] **Record the licence permission** in `LICENSING.md` (who granted it, when, reference), and
       put SPDX headers on the Python files — here and in `oceanml3d-eval`.
 - [ ] **`cache: true` for the OSSE-3D configs**: decide on the evidence of the full run.

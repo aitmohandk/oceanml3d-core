@@ -130,14 +130,21 @@ you save both the download and the quota.
 
 ## E. Configure the site
 
+Both files ship filled in; what is left to you is the account in `jobs/slurm/*.sbatch`.
+
 ```bash
 cd $WORK/oceanml3d-core
-cp config/paths/local.yaml config/paths/jeanzay.yaml     # paths only, keep all 16 keys
+$EDITOR config/paths/jeanzay.yaml     # the sixteen keys, rooted at OCEANML3D_DATA; paths only, never keys
 $EDITOR jobs/env/jeanzay.sh
 ```
 
+`$WORK`, not `$SCRATCH`: `$SCRATCH` is purged, and the Zarr stores cost inodes rather than volume —
+`$WORK` allows 500 000 for the project and the whole GLORYS chain is about 1 400. If the `$WORK`
+quota is the binding constraint, move `OCEANML3D_DATA` to `$SCRATCH` and re-prepare after a purge,
+rather than splitting the catalog between the two.
+
 ```sh
-export OCEANML3D_DATA="${OCEANML3D_DATA:-$SCRATCH/oceanml3d/data}"
+export OCEANML3D_DATA="${OCEANML3D_DATA:-$WORK/oceanml3d}"
 export OCEANML3D_PATHS=jeanzay
 export OCEANML3D_SIF="$SINGULARITY_ALLOWED_DIR/oceanml3d-2026-09.sif"
 export OCEANML3D_CONTAINER_CMD=singularity

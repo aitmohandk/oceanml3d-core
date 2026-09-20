@@ -122,6 +122,9 @@ What typically goes there:
 
 ## Adding a site
 
+`local`, `datarmor`, `jeanzay` and `odyssey` already exist, the first three with a complete catalog;
+`odyssey` deliberately carries the surface datasets only. For a new one:
+
 1. `cp jobs/env/local.sh jobs/env/<site>.sh` and fill in the environment and `OCEANML3D_DATA`.
 2. `cp config/paths/local.yaml config/paths/<site>.yaml` and change the **paths**, not the keys —
    `test_a_site_file_does_not_invent_keys_of_its_own` enforces that, because a key only one site

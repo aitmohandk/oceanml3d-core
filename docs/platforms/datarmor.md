@@ -177,21 +177,23 @@ fetching anything.
 
 ## D. Configure the site
 
-Two files. **Paths only — never keys.**
+Two files, and both ship filled in. **Paths only — never keys**, if you change them.
 
 ```bash
 cd $DATAWORK/oceanml3d-core
-cp config/paths/local.yaml config/paths/datarmor.yaml     # edit the paths, keep all 16 keys
-$EDITOR jobs/env/datarmor.sh                              # OCEANML3D_DATA, OCEANML3D_SIF
+$EDITOR config/paths/datarmor.yaml     # the sixteen keys, rooted at OCEANML3D_DATA
+$EDITOR jobs/env/datarmor.sh           # OCEANML3D_DATA, OCEANML3D_SIF
 ```
 
 `test_a_site_file_does_not_invent_keys_of_its_own` enforces the "paths only" rule: a key only your
-site knows is either a typo or a key the other sites silently lack.
+site knows is either a typo or a key the other sites silently lack. Nothing in the catalog points at
+`/home/ref-*`: the read-only CMEMS and Argo mirrors are read by the preparation recipes
+(`GLORYS_SRC`, `ARGO_GDAC`), not by the catalog, which only describes what this project produced.
 
-`jobs/env/datarmor.sh` should end up with:
+`jobs/env/datarmor.sh` ships with:
 
 ```sh
-export OCEANML3D_DATA="${OCEANML3D_DATA:-$DATAWORK/oceanml3d/data}"
+export OCEANML3D_DATA="${OCEANML3D_DATA:-$DATAWORK/oceanml3d}"
 export OCEANML3D_PATHS=datarmor
 export OCEANML3D_SIF="$DATAWORK/containers/oceanml3d-2026-09.sif"
 export OCEANML3D_CONTAINER_CMD=singularity

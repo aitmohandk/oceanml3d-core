@@ -343,18 +343,20 @@ Relative paths are resolved against `root`; `${VAR}` is expanded; a real path pa
 expected is passed through unchanged. Adding a machine means copying `local.yaml` to
 `<site>.yaml` and running with `paths=<site>` — nothing else changes.
 
-### 5.1 Known gap: the OSSE-3D keys are not in any shipped catalog
+### 5.1 The OSSE-3D keys, and the two rules a site file follows
 
-`config/data/osse3d_gs21.yaml` references seven keys that **neither `local.yaml` nor `odyssey.yaml`
-defines**: `glorys_gs_surface`, `glorys_gs_multidepth`, `bathy_gs`, `pseudo_obs_ssh_gs`,
-`pseudo_obs_sst_gs`, `argo_profiles_gs`, `argo_virtual_thetao_gs21`. `command=validate` will report
-all seven. Paste this into your site file:
+`local.yaml`, `datarmor.yaml` and `jeanzay.yaml` all carry the sixteen keys of the gridded path,
+including the seven the OSSE-3D task reads (`glorys_gs_surface`, `glorys_gs_multidepth`,
+`bathy_gs`, `argo_profiles_gs`, and the three `prepare-obs` outputs). `odyssey.yaml` is deliberately
+partial: it carries the surface datasets only, and `command=validate` reports the rest as missing
+if you try the OSSE task there.
 
 ```yaml
   # --- OSSE-3D, Gulf Stream (config/data/osse3d_gs21.yaml) ---
-  # truth, produced by scripts/prepare/recipes/glorys_gs_multidepth.yaml
+  # truth, produced by scripts/prepare/recipes/glorys_gs_multidepth.yaml then _concat.yaml
   glorys_gs_multidepth:     {path: glorys/glorys_gs_multidepth_2010-2020.zarr, source: CMEMS GLORYS12 reanalysis}
   glorys_gs_surface:        {path: glorys/glorys_gs_multidepth_2010-2020.zarr}   # same store: zos, lat
+  # declared, not produced, and not read: the task ships with `bathy: null` (see `ablation=bathy`)
   bathy_gs:                 {path: bathy/bathymetry_gs.nc, source: GEBCO on the GLORYS12 grid}
   # ARGO coverage table, produced by scripts/prepare/argo_profiles.py
   argo_profiles_gs:         {path: argo/argo_profiles_gs.csv}
@@ -368,6 +370,16 @@ The last three are *outputs* of `prepare-obs`. They must be in the catalog **bef
 that is how the simulator knows where to write. This is why the CLI validates the config twice:
 once without the catalog (`check_config(cfg, variables=variables)`), then runs `prepare-obs`, then
 once with it.
+
+Two rules, both enforced by `tests/test_config_validation.py`:
+
+* **A site file changes paths, never keys.** A key only one site knows is a typo, or a key the
+  others silently lack (`test_a_site_file_does_not_invent_keys_of_its_own`), and a site that claims
+  the OSSE task must define every key it resolves.
+* **Every key a task reads has a producer** — a recipe in `scripts/prepare/recipes/` whose `output`
+  is that path, or `prepare-obs`. A key with nothing filling it validates cleanly and then stops the
+  training run on a missing file, which is exactly what `bathy_gs` did
+  (`test_every_source_of_the_osse_task_is_produced_by_something`).
 
 ---
 
@@ -627,7 +639,8 @@ original, set `data.norm_stats` to the values in that YAML.
 
 **Task.** GLORYS12 at native 1/12° is the truth over 32–44 °N, 66–54 °W. Inputs: SSH pseudo-obs along
 six simulated nadir tracks + the mask channel, cloud-masked SST pseudo-obs + its mask, virtual ARGO
-temperature on 21 levels + its mask, and two statics (latitude, bathymetry). Targets: `zos` plus
+temperature on 21 levels + its mask, and one static (latitude; the bathymetry is set aside —
+`ablation=bathy` adds it back once `bathy_gs` exists). Targets: `zos` plus
 `thetao`, `uo`, `vo` on 21 GLORYS levels — **64 output variables**.
 
 ```bash
@@ -636,7 +649,7 @@ python scripts/prepare/download_copernicus.py --config scripts/prepare/recipes/g
 python scripts/prepare/regrid.py              --config scripts/prepare/recipes/glorys_gs_multidepth.yaml
 python scripts/prepare/argo_profiles.py       --config scripts/prepare/recipes/argo_profiles_gs.yaml
 
-# 2. add the seven catalog keys of §5.1 to config/paths/<site>.yaml
+# 2. check the OSSE-3D keys of §5.1 are in config/paths/<site>.yaml (local, datarmor, jeanzay carry them)
 
 # 3. simulate the observing system (writes three NetCDF files)
 oceanml3d command=prepare-obs experiment=osse3d_gs21_multivar_unet paths=<site>
@@ -662,6 +675,7 @@ and `dropout: 0.1`. Every ablation is a delta from it:
 | `temporal_conv3d` | explicit 3D temporal mixing vs time-as-channels |
 | `vertical_modes` | predict 8 EOF coefficients per group instead of 21 levels |
 | `gradsolver` | **architecture swap**: iterative 4DVarNet instead of the direct U-Net |
+| `bathy` | **data, not architecture**: adds the bathymetry back as a static input (needs `bathy_gs` prepared) |
 
 `vertical_modes` needs its bases first:
 

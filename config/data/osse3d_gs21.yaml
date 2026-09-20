@@ -19,7 +19,11 @@ variables:
   mask_saral:      {source: pseudo_obs_ssh_gs, role: aux}
   mask_hy2b:       {source: pseudo_obs_ssh_gs, role: aux}
   lat:      {source: glorys_gs_surface, var_name: lat, role: static}
-  bathy:    {source: bathy_gs, var_name: deptho, role: static}
+  # Bathymetry is set aside for the first step: nothing in scripts/prepare/ produces `bathy_gs`
+  # (GEBCO would have to be regridded onto the prepared truth), and the first model to validate is
+  # the simple one. Put it back with `ablation=bathy` once the key exists -- one static input more,
+  # no other change. `lat` above stays: it is a coordinate of the truth, not a separate dataset.
+  bathy:    null
   zos:      {source: glorys_gs_surface, var_name: zos, role: target, group: ssh, standard_name: sea_surface_height_above_geoid, units: m}
   thetao:   {source: glorys_gs_multidepth, var_name: thetao, role: target, depth_indices: *gs21, group: temperature, units: degC}
   uo:       {source: glorys_gs_multidepth, var_name: uo, role: target, depth_indices: *gs21, group: currents_u, units: m s-1}

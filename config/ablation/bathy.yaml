@@ -1,0 +1,7 @@
+# @package _global_
+# Adds the bathymetry back as a static input: `oceanml3d experiment=osse3d_gs21_multivar_unet ablation=bathy`.
+# Needs the `bathy_gs` key of the site catalog to point at a real file -- GEBCO regridded onto the
+# prepared truth, `regrid.py` with `reference:` pointing at it (docs/data_preparation.md).
+data:
+  variables:
+    bathy: {source: bathy_gs, var_name: deptho, role: static}
