@@ -12,4 +12,7 @@ set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 mkdir -p logs
 export OCEANML3D_SITE="${OCEANML3D_SITE:-jeanzay}"
+# Exit code 75 means the recipe's `time_budget_s` ran out with the per-float cache written: resubmit
+# this script and it continues where it stopped (`--dependency=afterany:$SLURM_JOB_ID` to queue it
+# now). Nothing is re-read.
 exec jobs/prepare.sh argo

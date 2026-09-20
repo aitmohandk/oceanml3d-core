@@ -44,6 +44,12 @@ On Datarmor neither GLORYS nor ARGO is downloaded: both are mirrored under `/hom
 per-year step reads the mirror directly, cuts the Gulf Stream box in each file before any read, and
 refuses an output above `max_gb` — the guard that came out of a 1949 GB run.
 
+The ARGO step reads a few hundred float files off that mirror, which is slow enough to outlast a
+walltime, so it is built to be interrupted: `cache_dir:` keeps one small file per float and a re-run
+skips what is done; `time_budget_s:` stops before the scheduler does, with exit code 75, and the PBS
+wrapper resubmits itself to continue. Every stage is announced before it runs, so the log's last line
+locates a stall — see `docs/pipeline_3d.md` §3.2.
+
 Then the observing system itself, which is **simulated, not downloaded**:
 
 ```bash
