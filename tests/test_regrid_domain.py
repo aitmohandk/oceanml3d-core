@@ -252,3 +252,43 @@ def test_zarr_stores_are_format_2_and_the_inode_count_is_exact(tmp_path, capsys)
     announced = int(capsys.readouterr().out.split(" inodes")[0].rsplit("-> ", 1)[1])
     actual = 1 + sum(len(d) + len(f) for _, d, f in os.walk(out))
     assert announced == actual
+
+
+# --- one data directory per resolution, derived in jobs/env/_lib.sh --------------------------------
+
+def _load_site(tmp_path, **env):
+    import subprocess
+
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)
+    script = f'source "{REPO}/jobs/env/_lib.sh"; load_site local "{REPO}" >/dev/null; echo "$OCEANML3D_DATA"'
+    clean = {"PATH": os.environ["PATH"], "HOME": str(home), **env}
+    return subprocess.run(["bash", "-c", script], env=clean, capture_output=True, text=True,
+                          check=True).stdout.strip()
+
+
+def test_target_resolution_derives_the_data_directory(tmp_path):
+    home = tmp_path / "home"
+    assert _load_site(tmp_path) == f"{home}/data/oceanml3d"
+    assert _load_site(tmp_path, OCEANML3D_TARGET_RES="0.25") == f"{home}/data/oceanml3d/res0.25"
+    assert _load_site(tmp_path, OCEANML3D_TARGET_RES="native") == f"{home}/data/oceanml3d"
+    # already suffixed (the old advice was to pass it by hand): left alone
+    assert _load_site(tmp_path, OCEANML3D_TARGET_RES="0.25",
+                      OCEANML3D_DATA="/d/oceanml3d/res0.25") == "/d/oceanml3d/res0.25"
+
+
+def test_user_settings_file_applies_and_the_command_line_still_wins(tmp_path):
+    cfg = tmp_path / "home/.config/oceanml3d"
+    cfg.mkdir(parents=True)
+    (cfg / "env.sh").write_text('export OCEANML3D_TARGET_RES="${OCEANML3D_TARGET_RES:-0.25}"\n')
+    home = tmp_path / "home"
+    assert _load_site(tmp_path) == f"{home}/data/oceanml3d/res0.25"
+    assert _load_site(tmp_path, OCEANML3D_TARGET_RES="0.5") == f"{home}/data/oceanml3d/res0.5"
+
+
+def test_an_empty_merge_says_where_the_files_are(tmp_path):
+    pytest.importorskip("zarr")
+    (tmp_path / "res0.25" / "by_year" / "g_2010.zarr").mkdir(parents=True)
+    with pytest.raises(FileNotFoundError, match="res0.25.*OCEANML3D_TARGET_RES"):
+        run({"input": str(tmp_path / "by_year" / "g_*.zarr"), "output": str(tmp_path / "all.zarr"),
+             "variables": {"zos": "zos"}, "method": "none"})

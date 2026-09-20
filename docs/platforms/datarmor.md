@@ -302,13 +302,20 @@ core and saves nothing along the way, so one walltime overrun loses everything. 
 is relaunched alone — `qsub -J 2015-2015 …` — while the others stay done, and `regrid.py` skips
 completed outputs, so relaunching the whole array is safe too.
 
-**Resolution.** Native 1/12° by default. For another step — what `NOSC_TARGET_RES` did — pass it
-to the whole chain, in its own data directory ([pipeline_3d.md §3.1a](../pipeline_3d.md)):
+**Resolution.** Native 1/12° by default. For another step — what `NOSC_TARGET_RES` did — set
+`OCEANML3D_TARGET_RES`; the data root then becomes `$OCEANML3D_DATA/res<step>` for **every** step,
+training included ([pipeline_3d.md §3.1a](../pipeline_3d.md)). A PBS job does not inherit your
+shell's environment, so either give it to each `qsub`, or — simpler — write it once in
+`~/.config/oceanml3d/env.sh`, which every job reads:
 
-```csh
-qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_TARGET_RES=0.25,OCEANML3D_DATA=$DATAWORK/oceanml3d/res0.25 \
-     jobs/pbs/prepare_glorys.pbs
+```bash
+mkdir -p ~/.config/oceanml3d
+echo 'export OCEANML3D_TARGET_RES="${OCEANML3D_TARGET_RES:-0.25}"' > ~/.config/oceanml3d/env.sh
 ```
+
+(bash syntax on purpose: the jobs are bash scripts, whatever your login shell. Remove the file, or
+pass `OCEANML3D_TARGET_RES=native`, for the native grid.) Each log's first `[prepare]` line prints the
+data directory and resolution it uses.
 
 Then merge into the single file the configs expect:
 
@@ -450,6 +457,7 @@ rsync -av $SCRATCH/oceanml3d/runs/<run>/ $DATAWORK/oceanml3d/runs/<run>/
 | `Killed` after `[regrid] writing … lat': 2041, 'lon': 4320 …` | the whole globe is being written: the recipe has no `domain:`, or a `regrid.py` older than 2026-09-19 ignored it. Now refused up front by `max_gb`. |
 | `[regrid] N input file(s)` far from 365, with other years in the first/last names | the input glob matched the `_R<production date>` part of the names. Anchor the year on the validity date: `*_mean_${YEAR}????_R*.nc`. |
 | `by_year/*.nc` files but the merge finds nothing | written before 2026-09-19, when the per-year step still wrote NetCDF. Every intermediate is Zarr now (`by_year/*.zarr`, then `glorys/*.zarr`); delete the `.nc` and resubmit the array. |
+| `no file matches …/by_year/…zarr` at the merge, "They exist under …/res0.25" | the per-year step ran with a target resolution and the merge without: give both the same `OCEANML3D_TARGET_RES`, or set it once in `~/.config/oceanml3d/env.sh`. |
 | A `.tmp.<name>` directory in `by_year/` or `glorys/` | a write that was killed. Harmless: the next run removes it and starts that output again. |
 | An error about HDF5 file locking, or a hang on the first open | Lustre does not implement the locking HDF5 wants. `regrid.py` sets `HDF5_USE_FILE_LOCKING=FALSE`; other tools may need it exported too. |
 | `Could not find any nv files on this host!` | `--nv` on a CPU queue. Harmless, and no longer printed: `--nv` is passed only where a driver is present. Force it with `OCEANML3D_NV=1`. |

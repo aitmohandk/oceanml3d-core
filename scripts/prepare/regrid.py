@@ -250,10 +250,7 @@ def run(recipe: dict, *, force: bool = False) -> Path:
         # recipes need against a mirror laid out by year and month.
         inputs = sorted(glob.glob(pattern, recursive=True))
         if not inputs:
-            raise FileNotFoundError(
-                f"no file matches {pattern}. Check the pattern, and -- inside a container -- that the "
-                f"directory is bound: an unbound path is empty rather than missing."
-            )
+            raise FileNotFoundError(f"no file matches {pattern}. " + _where_else(pattern))
         print(f"[regrid] {len(inputs)} input file(s): {Path(inputs[0]).name} … {Path(inputs[-1]).name}")
         # `parallel=True` opens and preprocesses files from dask threads. That is faster where it
         # works -- and where it does not it does not raise, it segfaults, because netCDF4/HDF5 is not
@@ -350,6 +347,20 @@ def _stored_resolution(path: Path) -> str | None:
     except Exception:  # noqa: BLE001 -- an unreadable file is reported by whoever reads it next
         return None
     return None if value is None else str(value)
+
+
+def _where_else(pattern: str) -> str:
+    """Hint for an empty glob: the same files one directory level over, e.g. under res0.25/."""
+    pat = Path(pattern)
+    here, root = pat.parent, pat.parent.parent
+    found = sorted({Path(m).parent.parent.name
+                    for m in glob.glob(str(root / "*" / here.name / pat.name))})
+    if found:
+        return (f"They exist under {', '.join(str(root / f) for f in found)}: the data root differs "
+                f"between the steps. With a target resolution the root is <data>/res<step> -- pass the "
+                f"same OCEANML3D_TARGET_RES (or --res) to this step as to the one that wrote them.")
+    return ("Check the pattern, and -- inside a container -- that the directory is bound: an unbound "
+            "path is empty rather than missing.")
 
 
 def _first_input_resolution(recipe: dict) -> str | None:

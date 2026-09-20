@@ -83,7 +83,30 @@ container_exec() {
         "$OCEANML3D_SIF" "$@"
 }
 
-# Source a site file by name.
+# One data directory per resolution, derived rather than typed. File names do not carry the
+# resolution, so native and 0.25-degree products must not share a directory -- and asking for
+# `OCEANML3D_DATA=.../res0.25` on every qsub meant one forgotten step looked in the wrong place:
+#     FileNotFoundError: no file matches .../oceanml3d/by_year/glorys_gs_multidepth_*.zarr
+# (the per-year stores were in .../oceanml3d/res0.25/by_year). Now OCEANML3D_TARGET_RES alone
+# decides: every step -- preparation, merge, ARGO, obs, training -- appends /res<step> to the site's
+# data root. Idempotent: a root that already ends in /res<step> is left alone.
+resolve_data_dir() {
+    local res="${OCEANML3D_TARGET_RES:-}"
+    [[ -n "$res" && "$res" != "native" && -n "${OCEANML3D_DATA:-}" ]] || return 0
+    case "${OCEANML3D_DATA%/}" in
+        */res"$res") ;;
+        *) export OCEANML3D_DATA="${OCEANML3D_DATA%/}/res$res" ;;
+    esac
+}
+
+# Settings that should hold for every job without repeating them on each qsub/sbatch line --
+# typically OCEANML3D_TARGET_RES. A job started by the scheduler does not inherit your shell's
+# environment, so a `setenv` in ~/.cshrc is not enough. Write them with a default, so a value
+# given on the command line (`qsub -v ...`) still wins:
+#     export OCEANML3D_TARGET_RES="${OCEANML3D_TARGET_RES:-0.25}"
+OCEANML3D_USER_ENV="${OCEANML3D_USER_ENV:-$HOME/.config/oceanml3d/env.sh}"
+
+# Source a site file by name: the user's settings, the site's defaults, then the derived data dir.
 load_site() {
     local site="${1:?load_site <name> <repo_root>}" root="${2:?load_site <name> <repo_root>}"
     local env_file="$root/jobs/env/$site.sh"
@@ -93,6 +116,11 @@ load_site() {
         echo "copy jobs/env/local.sh to jobs/env/$site.sh and fill it in." >&2
         return 2
     fi
+    if [[ -f "$OCEANML3D_USER_ENV" ]]; then
+        # shellcheck source=/dev/null
+        source "$OCEANML3D_USER_ENV"
+    fi
     # shellcheck source=/dev/null
     source "$env_file"
+    resolve_data_dir
 }

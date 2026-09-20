@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-09-20: The data directory follows the target resolution, for every step
+
+**Summary:** With `OCEANML3D_TARGET_RES` set, `load_site` derives the data root as
+`$OCEANML3D_DATA/res<step>` for every job — preparation, merge, ARGO, obs and training. Settings that
+must hold for every job can live in `~/.config/oceanml3d/env.sh`. An empty merge glob now says where
+the files are.
+
+**Files modified:** `jobs/env/_lib.sh` — `resolve_data_dir`, user settings file in `load_site`;
+`jobs/run.sh` — goes through `load_site`, `--res`; `jobs/prepare.sh` — prints site, data dir and
+resolution; `scripts/prepare/regrid.py` — `_where_else`; `docs/pipeline_3d.md` §3.1a,
+`docs/platforms/datarmor.md`; `tests/test_regrid_domain.py`.
+
+**Rationale:** The documented way to keep resolutions apart was to pass
+`OCEANML3D_DATA=$DATAWORK/oceanml3d/res0.25` by hand on each `qsub`. The per-year array got it, the
+merge did not, and failed on Datarmor with `no file matches …/oceanml3d/by_year/…zarr` while the
+stores sat in `…/oceanml3d/res0.25/by_year`. One variable now decides, in one place, and training
+reads the directory the preparation wrote. A PBS or Slurm job does not inherit the submitting
+shell's environment, hence the user file (written with `${VAR:-default}` so `qsub -v` still wins).
+
+**Verification:** `pytest tests/test_regrid_domain.py tests/test_config_validation.py` — 43 passed.
+
+
 ## 2026-09-20: Validation that measures something, and splits that do not overlap
 
 **Summary:** Validation and test now log pooled RMSEs in physical units on `eval_domain`
