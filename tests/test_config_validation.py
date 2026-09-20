@@ -341,3 +341,34 @@ def test_a_gpu_pbs_job_asks_for_a_gpu_and_a_cpu_one_does_not():
     for name in ("prepare_glorys", "prepare_obs", "prepare_argo", "concat_glorys"):
         text = open(f"jobs/pbs/{name}.pbs").read()
         assert "ngpus=" not in text, f"{name}.pbs asks for a GPU in a CPU queue"
+
+
+def test_run_sh_goes_through_container_exec_and_not_its_own_apptainer_line():
+    """`jobs/run.sh` carried a second copy of the apptainer invocation, and the two drifted: every
+    fix made to `container_exec` -- creating the data directory before binding it, skipping a bind
+    whose source does not exist, and putting the clone ahead of the image's package on PYTHONPATH --
+    reached the preparation jobs and not training, which then failed on `Primary config directory
+    not found. Check that '/opt/oceanml3d/config' exists`."""
+    import re
+    import subprocess
+    import tempfile
+    import textwrap
+
+    text = open("jobs/run.sh").read()
+    assert "container_exec oceanml3d" in text
+    assert not re.search(r"^\s*(exec\s+)?\"?\$\{OCEANML3D_CONTAINER_CMD", text, re.M), \
+        "run.sh builds its own container command again"
+
+    with tempfile.TemporaryDirectory() as d:
+        script = textwrap.dedent(f"""
+            set -eu
+            printf '#!/bin/sh\\necho CONTAINER "$@"\\n' > {d}/fake; chmod +x {d}/fake
+            export OCEANML3D_SIF={d}/img.sif OCEANML3D_CONTAINER_CMD={d}/fake OCEANML3D_NV=0
+            export OCEANML3D_DATA={d}/data OCEANML3D_PATHS=local OCEANML3D_USER_ENV=/dev/null
+            jobs/run.sh --site local command=validate experiment=smoke
+        """)
+        out = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                             check=True, cwd=".").stdout
+    assert "CONTAINER exec" in out and "oceanml3d command=validate" in out
+    repo = __import__("pathlib").Path.cwd().resolve()
+    assert f"--bind {repo}:{repo}" in out

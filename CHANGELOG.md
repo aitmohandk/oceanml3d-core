@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-09-21: `jobs/run.sh` had its own copy of the container line, and missed every fix
+
+**Summary:** training failed on `Primary config directory not found. Check that the config directory
+'/opt/oceanml3d/config' exists` — the image's `oceanml3d` package was imported and Hydra resolves
+`config_path` from its `__file__`. Yesterday's `PYTHONPATH` fix was in `container_exec`, which
+`jobs/prepare.sh` calls and `jobs/run.sh` did not: `run.sh` built its own apptainer invocation. It
+now goes through `container_exec` like everything else.
+
+**Files modified:**
+- `jobs/run.sh` — the duplicated `apptainer exec --nv --bind … "$OCEANML3D_SIF" oceanml3d …` replaced
+  by `container_exec oceanml3d "${OVERRIDES[@]}"`. It inherits what the copy had drifted away from:
+  `PYTHONPATH` with the clone first, `mkdir -p` on the data root before binding it, a bind whose
+  source is missing skipped with a reason rather than killing the job, and `--nv` decided by
+  detection (`OCEANML3D_NV=1` forces it).
+- `jobs/env/_lib.sh` — `container_exec` echoes the command it is about to run. A training job that
+  silently lost `--nv` runs on CPU for its whole walltime, and only Lightning's `GPU available:
+  False` betrays it, buried in the log.
+- `tests/test_config_validation.py` — `test_run_sh_goes_through_container_exec_and_not_its_own_apptainer_line`
+  checks both that `run.sh` calls it and that it does not rebuild the command, then runs it with a
+  stub container binary.
+- `jobs/README.md` (the `_lib.sh` row claimed the binds were "decided once" while they were not),
+  `docs/platforms/datarmor.md` (a row for the message).
+
+**Rationale:** the duplication is the defect, not the missing variable. Two copies of one command
+drift, the one that is exercised least drifts furthest, and here the least-exercised copy was the one
+carrying the twenty-hour jobs. `_lib.sh` exists precisely so the container invocation has one
+definition; `run.sh` predated it and was never moved over.
+
+**Verification:** `pytest -m "not slow"` — 906 passed, 9 skipped. The new test fails against the
+previous `run.sh`.
+
 ## 2026-09-21: `jobs/pbs/train.pbs` could not be submitted at all
 
 **Summary:** `qsub … jobs/pbs/train.pbs` was refused with `qsub: Job rejected by all possible
