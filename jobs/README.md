@@ -71,7 +71,7 @@ still works where the syntax does, and is what the job wrappers set.
 | `prepare.sh` | one preparation step: `glorys <year>`, `concat`, `argo`, `obs` |
 | `pbs/*.pbs`, `slurm/*.sbatch` | directives only; each is ~10 lines around one of the two above |
 | `env/<site>.sh` | modules, data root, thread count, container path, precision default |
-| `env/_lib.sh` | `load_modules`, `container_exec`, `load_site` — shared, so `--nv` and the bind list are decided once |
+| `env/_lib.sh` | `load_modules`, `container_exec`, `load_site` — shared, so `--nv`, the binds and `PYTHONPATH` are decided once. **Both** `run.sh` and `prepare.sh` go through it; `run.sh` used to carry its own copy of the apptainer line and quietly missed every fix made here |
 
 A file in `env/` whose name starts with `_` is a shared library, not a site. The convention is
 load-bearing in two places: `load_site` filters it out of the "available sites" list, and

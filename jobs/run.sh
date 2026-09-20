@@ -63,14 +63,13 @@ echo "[run.sh] site=$SITE  repo=$REPO_ROOT"
 echo "[run.sh] data=${OCEANML3D_DATA:-<unset>}  resolution=${OCEANML3D_TARGET_RES:-native}  sif=${OCEANML3D_SIF:-<none>}"
 echo "[run.sh] oceanml3d ${OVERRIDES[*]}"
 
-if [[ -n "${OCEANML3D_SIF:-}" ]]; then
-    BINDS=("--bind" "$REPO_ROOT:$REPO_ROOT")
-    [[ -n "${OCEANML3D_DATA:-}" ]] && BINDS+=("--bind" "$OCEANML3D_DATA:$OCEANML3D_DATA")
-    [[ -n "${OCEANML3D_BIND:-}" ]] && BINDS+=("--bind" "$OCEANML3D_BIND")
-    # --nv is not optional: without it the container sees no driver, and torch reports
-    # cuda.is_available() == False without any other complaint.
-    exec "${OCEANML3D_CONTAINER_CMD:-apptainer}" exec --nv "${BINDS[@]}" --pwd "$REPO_ROOT" \
-        "$OCEANML3D_SIF" oceanml3d "${OVERRIDES[@]}"
-else
-    exec oceanml3d "${OVERRIDES[@]}"
-fi
+# Through container_exec, not a second copy of the apptainer line. This file used to carry its own,
+# and the two drifted: _lib.sh learnt to create OCEANML3D_DATA before binding it, to skip a bind whose
+# source does not exist rather than letting apptainer kill the job, and -- the one that showed --
+# to put the clone ahead of the image's copy of the package on PYTHONPATH. None of that reached
+# training, which failed on
+#     Primary config directory not found. Check that '/opt/oceanml3d/config' exists
+# because the image's `oceanml3d` package was imported and Hydra resolves config_path from its
+# __file__. A GPU is requested when there is one to request (OCEANML3D_NV=1 to force it).
+export REPO_ROOT
+container_exec oceanml3d "${OVERRIDES[@]}"

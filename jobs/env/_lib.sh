@@ -92,6 +92,11 @@ container_exec() {
     export SINGULARITYENV_PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}"
     export APPTAINERENV_PYTHONPATH="$SINGULARITYENV_PYTHONPATH"
 
+    # Say what is about to run, and in particular whether --nv is in it: a training job that silently
+    # lost the flag runs on CPU for its whole walltime and only Lightning's "GPU available: False"
+    # betrays it, buried in the log.
+    echo "[oceanml3d] ${OCEANML3D_CONTAINER_CMD:-apptainer} exec ${nv[*]+${nv[*]}} ${binds[*]} --pwd $root $OCEANML3D_SIF $1 ..."
+
     "${OCEANML3D_CONTAINER_CMD:-apptainer}" exec "${nv[@]+"${nv[@]}"}" "${binds[@]}" --pwd "$root" \
         "$OCEANML3D_SIF" "$@"
 }
