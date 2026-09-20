@@ -276,3 +276,40 @@ def test_regrid_is_idempotent(tmp_path):
     out.write_bytes(b"")                       # content irrelevant: existence is the contract
     recipe = {"input": str(tmp_path / "*.nc"), "output": str(out), "variables": {}}
     assert run(recipe) == out                  # no input files, yet it returns without reading
+
+
+def test_container_exec_puts_the_clone_ahead_of_the_image_package():
+    """`container/oceanml3d.def` copies `oceanml3d/` into the image at build time, so without this an
+    old image runs old code against the clone's new scripts and configs -- which is how a job died on
+    `module 'oceanml3d.obs.argo' has no attribute 'coverage_table_local'`, hours after the function
+    was committed. PYTHONPATH precedes site-packages in sys.path, so the bound clone wins."""
+    import subprocess
+    import textwrap
+
+    # A real directory: container_exec skips a bind whose source does not exist on the host, and a
+    # PYTHONPATH pointing at an unbound path would be worse than none.
+    script = textwrap.dedent("""
+        set -eu
+        source jobs/env/_lib.sh
+        repo=$(mktemp -d)
+        export OCEANML3D_SIF=/nonexistent.sif OCEANML3D_CONTAINER_CMD=echo OCEANML3D_NV=0
+        REPO_ROOT="$repo" container_exec python -c pass
+        echo "PYTHONPATH_S=$SINGULARITYENV_PYTHONPATH"
+        echo "PYTHONPATH_A=$APPTAINERENV_PYTHONPATH"
+        echo "REPO=$repo"
+    """)
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout
+    repo = next(x.split("=", 1)[1] for x in out.splitlines() if x.startswith("REPO="))
+    assert f"PYTHONPATH_S={repo}" in out, out
+    assert f"PYTHONPATH_A={repo}" in out, out
+    # and the repository is bound, otherwise the path would point at nothing inside the container
+    assert f"--bind {repo}:{repo}" in out, out
+
+
+def test_the_image_recipe_does_not_claim_the_package_is_not_baked_in():
+    """It is: `%files` copies `oceanml3d` to /opt/oceanml3d. The help text used to say the opposite,
+    which is exactly the belief that let a stale image go unsuspected for two failed jobs."""
+    text = open("container/oceanml3d.def").read()
+    assert "oceanml3d      /opt/oceanml3d/oceanml3d" in text, "the copy moved: update this test"
+    assert "not baked in" not in text
+    assert "PYTHONPATH" in text

@@ -75,7 +75,7 @@ still works where the syntax does, and is what the job wrappers set.
 
 A file in `env/` whose name starts with `_` is a shared library, not a site. The convention is
 load-bearing in two places: `load_site` filters it out of the "available sites" list, and
-`test_every_site_env_file_has_a_matching_paths_file_or_is_a_template` skips it rather than
+`test_every_site_env_file_has_a_matching_paths_file` skips it rather than
 demanding it declare `OCEANML3D_PATHS`. Keep the prefix if you add another.
 
 Every job file has a twin in the other scheduler and they differ only in their directives, because
@@ -145,8 +145,20 @@ apptainer build oceanml3d.sif container/oceanml3d.def
 `--nv` is not optional when running it. Without that flag the container sees no driver, and torch
 reports `cuda.is_available() == False` with no other complaint. `run.sh` passes it.
 
-The repository is bound rather than baked in: Hydra resolves `config_path` relative to the file
-carrying `@hydra.main`, so the CLI runs from a clone even though the package is installed.
+The repository is bound, and **the clone's code is what runs**. Hydra resolves `config_path`
+relative to the file carrying `@hydra.main`, so `config/` and the driver scripts have to come from a
+clone. The `oceanml3d` package is a different matter: `%files` copies it into the image at build
+time, so an image built last month would otherwise run last month's package against this week's
+scripts — an `AttributeError` on a function that is plainly in the clone, and no hint as to why.
+`container_exec` therefore exports `SINGULARITYENV_PYTHONPATH` / `APPTAINERENV_PYTHONPATH` with the
+bound repository first, which precedes site-packages in `sys.path`; the image supplies the
+dependencies and nothing else. `test_container_exec_puts_the_clone_ahead_of_the_image_package` pins
+it, and `regrid.py` and `argo_profiles.py` both print the package they imported, so a log says which
+one ran.
+
+Two consequences worth knowing: a change under `oceanml3d/` needs no rebuild, and a rebuild is only
+for a dependency change. Running `apptainer exec` by hand is the one case that still needs
+`--env PYTHONPATH="$PWD"`.
 
 ## Precision by GPU
 

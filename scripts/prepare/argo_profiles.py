@@ -52,6 +52,18 @@ from oceanml3d.obs import argo  # noqa: E402
 
 print(f"[argo] imports done in {time.monotonic() - _STARTED:.0f} s", flush=True)
 
+# Which `oceanml3d` is running, not which one you edited. The container image carries its own copy of
+# the package (container/oceanml3d.def, /opt/oceanml3d), so a clone whose scripts are new and whose
+# image is old runs one against the other -- `AttributeError: module 'oceanml3d.obs.argo' has no
+# attribute 'coverage_table_local'` on a function committed hours earlier. `container_exec` puts the
+# clone first on PYTHONPATH; this line is how you see that it worked.
+_pkg = Path(argo.__file__).resolve().parents[2]
+print(f"[argo] oceanml3d from {_pkg}", flush=True)
+if _pkg != Path.cwd().resolve():
+    print(f"[argo] WARNING that is not this working directory ({Path.cwd()}): the scripts and the "
+          f"package come from different places. Rebuild the image, or let jobs/prepare.sh set "
+          f"PYTHONPATH (jobs/env/_lib.sh, container_exec).", flush=True)
+
 
 def run(recipe: dict) -> Path:
     out = Path(recipe["output"])

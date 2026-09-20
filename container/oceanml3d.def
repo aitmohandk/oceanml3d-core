@@ -78,9 +78,20 @@ PY
 %help
     oceanml3d-core: 4DVarNet and flow matching for 3D multivariate ocean data assimilation.
 
-    The repository is mounted, not baked in: /opt/oceanml3d holds an editable install of the
-    package, but `config/` and the driver scripts live in the clone, because Hydra resolves
-    config_path relative to the file carrying @hydra.main. So run from a clone:
+    Run from a clone. /opt/oceanml3d holds an editable install of the package, but `config/` and
+    the driver scripts are only in the clone, because Hydra resolves config_path relative to the
+    file carrying @hydra.main.
+
+    The copy of `oceanml3d/` under /opt is a BUILD-TIME SNAPSHOT: without PYTHONPATH, an image
+    built last week runs last week's package against today's scripts and configs, which surfaces as
+    an AttributeError on a function that is plainly there in the clone. jobs/env/_lib.sh
+    (container_exec) therefore puts the clone first on PYTHONPATH; do the same if you call
+    apptainer directly, and the image then only supplies the dependencies:
+
+        apptainer exec --nv --bind "$PWD":"$PWD" --pwd "$PWD" --env PYTHONPATH="$PWD" \
+            oceanml3d.sif oceanml3d experiment=nosc_15m_duacs paths=<site>
+
+    Or, unchanged, to run the package the image was built with:
 
         apptainer exec --nv --bind "$PWD":"$PWD" --pwd "$PWD" oceanml3d.sif \
             oceanml3d experiment=nosc_15m_duacs paths=<site>

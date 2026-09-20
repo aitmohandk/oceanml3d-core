@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-09-20: The container ran its own copy of the package, not the clone's
+
+**Summary:** the ARGO job failed on `AttributeError: module 'oceanml3d.obs.argo' has no attribute
+'coverage_table_local'` — a function committed hours earlier and plainly present in the clone.
+`container/oceanml3d.def` copies `oceanml3d/` into the image at build time and pip-installs it there,
+so the scripts and configs came from the clone while the package came from whenever the image was
+last built. `container_exec` now puts the bound repository first on `PYTHONPATH`, and the two
+preparation scripts print the package they imported.
+
+**Files modified:**
+- `jobs/env/_lib.sh` — `container_exec` exports `SINGULARITYENV_PYTHONPATH` and
+  `APPTAINERENV_PYTHONPATH` with the repository root ahead of anything already there. Through the
+  runtime's own variable rather than `--env`, which needs singularity >= 3.6 or apptainer: both
+  runtimes honour their `<RUNTIME>ENV_` prefix in every version, and setting the one that does not
+  apply costs nothing.
+- `scripts/prepare/argo_profiles.py`, `scripts/prepare/regrid.py` — each prints
+  `oceanml3d from <path>` after importing, and warns when that path is not the working directory.
+  One line, and this diagnosis takes a second instead of a failed job.
+- `container/oceanml3d.def` — the `%help` said "The repository is mounted, not baked in", which is
+  exactly the belief that let a stale image go unsuspected through two failed jobs. It now says the
+  copy under `/opt` is a build-time snapshot, and shows the `--env PYTHONPATH="$PWD"` form for
+  running `apptainer exec` by hand.
+- `jobs/README.md` (the container section, and a stale test name), `docs/platforms/datarmor.md` (a
+  troubleshooting row for the `AttributeError`).
+
+**Rationale:** an image is for the dependencies — torch, xarray, netCDF4, the CUDA stack — not for
+the code under development. Baking the package in means every change to `oceanml3d/` silently needs a
+rebuild, which nothing anywhere said, and the failure it produces points at the code rather than at
+the image. With the clone first on `PYTHONPATH` the rule is simple: rebuild for a dependency change,
+never for ours.
+
+**Verification:** `pytest -m "not slow"` — 899 passed, 9 skipped. Two new tests:
+`test_container_exec_puts_the_clone_ahead_of_the_image_package` runs `container_exec` with a stub
+container command and checks both variables and the bind; and
+`test_the_image_recipe_does_not_claim_the_package_is_not_baked_in` keeps the help text honest about
+`%files`.
+
 ## 2026-09-20: The ARGO step, made diagnosable and interruptible (second walltime kill)
 
 **Summary:** the ARGO preparation was killed on walltime again — 4 h this time — with a log that
