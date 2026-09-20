@@ -125,7 +125,7 @@ def test_enkf_converges_and_beats_the_raw_observations(tmp_path_factory):
     model = EnsembleKalmanFilter(variables, t, w, dynamics="lorenz96", dynamics_kw={"state_dim": 40},
                                  n_members=12, obs_noise=0.5, localization_radius=4,
                                  optimizer_kw={"lr": 1e-3, "t_max": 1}, norm_stats=dm.norm_stats())
-    batch = next(iter(dm.test_dataloader()))
+    batch = next(iter(dm.predict_dataloader()))   # test split, without the eval mask
     out = model(batch)
     tgt = model.targets(batch)
     assert out.shape == tgt.shape and torch.isfinite(out).all()
@@ -151,7 +151,7 @@ def test_enkf_can_return_an_ensemble(toy_dm):
     model = EnsembleKalmanFilter(variables, 10, w, dynamics="lorenz96", dynamics_kw={"state_dim": 40},
                                  n_members=8, return_ensemble=True, optimizer_kw={"lr": 1e-3, "t_max": 1},
                                  norm_stats=dm.norm_stats())
-    batch = next(iter(dm.test_dataloader()))
+    batch = next(iter(dm.predict_dataloader()))   # test split, without the eval mask
     ens = model.predict_step(batch, 0)
     assert ens.shape[0] == 8 and ens.shape[1:] == (2, 1, 10, 1, 40)
 
@@ -177,7 +177,7 @@ def test_optimal_interpolation_fills_gaps(variables, catalog):
     w = patch_weight("constant", {"time": 5, "lat": 16, "lon": 16}, {"time": 0, "lat": 2, "lon": 2})
     model = OptimalInterpolation(vs, 5, w, obs_map={"u_drifter": "ssh_obs"}, length_scale=3.0,
                                  optimizer_kw={"lr": 1e-3, "t_max": 1}, norm_stats=dm.norm_stats())
-    batch = next(iter(dm.test_dataloader()))
+    batch = next(iter(dm.predict_dataloader()))   # test split, without the eval mask
     out = model(batch)
     assert out.shape == (2, 1, 5, 16, 16) and torch.isfinite(out).all()
     with pytest.raises(ValueError, match="not input variables"):

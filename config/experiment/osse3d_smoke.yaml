@@ -26,6 +26,7 @@ data:
     uo: {depth_indices: *d3}
     vo: {depth_indices: *d3}
   domain: {lat: [-10, 10], lon: [-10, 10]}
+  eval_domain: {lat: [-9, 9], lon: [-9, 9]}
   splits:
     train: {time: ["2019-01-01", "2019-01-31"]}
     val:   {time: ["2019-02-01", "2019-02-14"]}

@@ -36,6 +36,38 @@ class PatchDataset(Dataset):
         return torch.from_numpy(self.patches[i])
 
 
+class EvalPatchDataset(PatchDataset):
+    """Validation / test patches, each paired with the ``(lat, lon)`` mask of ``eval_domain``.
+
+    Patches are positional -- a batch carries no coordinates -- so the metric mask has to travel
+    with the patch. Without ``eval_domain`` the mask is all ones. ``predict`` keeps the plain
+    :class:`PatchDataset`: the export stitches the whole domain.
+    """
+
+    def __init__(self, patches: PatchArray, eval_domain: Mapping[str, slice] | None = None):
+        super().__init__(patches)
+        self.eval_domain = eval_domain or {}
+
+    def mask(self, i: int) -> np.ndarray:
+        coords = self.patches.coords(i)
+        keep = np.ones((coords["lat"].size, coords["lon"].size), dtype=bool)
+        for dim, axis in (("lat", 0), ("lon", 1)):
+            sl = self.eval_domain.get(dim)
+            if sl is None:
+                continue
+            c = coords[dim]
+            inside = np.ones(c.size, bool)
+            if sl.start is not None:
+                inside &= c >= sl.start
+            if sl.stop is not None:
+                inside &= c <= sl.stop
+            keep &= inside[:, None] if axis == 0 else inside[None, :]
+        return keep.astype(np.float32)
+
+    def __getitem__(self, i: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return super().__getitem__(i), torch.from_numpy(self.mask(i))
+
+
 class OceanDataModule(LightningDataModule):
     """Windows of ``(n_vars, T, H, W)`` sampled from a multi-variable lazily loaded field.
 
@@ -50,9 +82,11 @@ class OceanDataModule(LightningDataModule):
                  norm_stats: tuple[list[float], list[float]] | None = None,
                  chunks: Mapping[str, int] | None = None,
                  drop_empty_target_patches: bool = True,
-                 cache: str | None = None, jitter: bool = False, augmentations: list | None = None):
+                 cache: str | None = None, jitter: bool = False, augmentations: list | None = None,
+                 eval_domain: Mapping[str, Any] | None = None):
         """``cache``: zarr store path; the stacked ``(channel, time, lat, lon)`` array is written once
-        and re-opened from there (fast random access, bounded RAM, no eager load)."""
+        and re-opened from there (fast random access, bounded RAM, no eager load).
+        ``eval_domain``: the sub-domain the val/test metrics are computed on (rim excluded)."""
         super().__init__()
         self.variables = variables
         self.catalog = catalog
@@ -68,6 +102,7 @@ class OceanDataModule(LightningDataModule):
         self.cache = cache
         self.jitter = jitter
         self.augmentations = augmentations or []
+        self.eval_domain = {k: to_slice(v) for k, v in (eval_domain or {}).items()}
         self.da = None
         self.datasets: dict[str, PatchDataset] = {}
 
@@ -89,22 +124,26 @@ class OceanDataModule(LightningDataModule):
                                                            drop_all_nan_targets=drop if train else None,
                                                            jitter=self.jitter and train,
                                                            augmentations=self.augmentations if train else None))
+        self.eval_datasets = {split: EvalPatchDataset(ds.patches, self.eval_domain)
+                              for split, ds in self.datasets.items() if split != "train"}
 
     def norm_stats(self) -> tuple[np.ndarray, np.ndarray]:
         return self._norm_stats
 
-    def _loader(self, split: str, shuffle: bool) -> DataLoader:
-        return DataLoader(self.datasets[split], batch_size=self.batch_size, shuffle=shuffle,
+    def _loader(self, split: str, shuffle: bool, evaluation: bool = False) -> DataLoader:
+        ds = self.eval_datasets[split] if evaluation else self.datasets[split]
+        return DataLoader(ds, batch_size=self.batch_size, shuffle=shuffle,
                           num_workers=self.num_workers, pin_memory=True)
 
     def train_dataloader(self):
         return self._loader("train", True)
 
     def val_dataloader(self):
-        return self._loader("val", False)
+        """``(patch, eval_mask)`` batches: see :class:`EvalPatchDataset`."""
+        return self._loader("val", False, evaluation=True)
 
     def test_dataloader(self):
-        return self._loader("test", False)
+        return self._loader("test", False, evaluation=True)
 
     def predict_dataloader(self):
         return self._loader("test", False)

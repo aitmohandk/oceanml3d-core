@@ -19,6 +19,8 @@ splits:
   train: {time: ["2010-01-01", "2017-12-31"]}
   val:   {time: ["2018-01-01", "2018-12-31"]}
   test:  {time: ["2018-12-20", "2020-01-10"]}
+# NOSC's published protocol, reproduced as is for comparability: val and test share 2018-12-20..31.
+splits_overlap_ok: true
 
 patch:  {time: 11, lat: 560, lon: 1440}
 stride: {time: 1,  lat: 552, lon: 1432}

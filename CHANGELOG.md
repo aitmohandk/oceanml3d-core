@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-09-20: Validation that measures something, and splits that do not overlap
+
+**Summary:** Validation and test now log pooled RMSEs in physical units on `eval_domain`
+(`val/rmse_<group>`, `val/rmse_<target>`) and a loss-independent `val/nrmse`, which selects the
+checkpoint instead of `val/loss`. The OSSE-3D splits are disjoint with gaps; overlapping val/test
+windows are refused unless declared.
+
+**Files modified:** `oceanml3d/models/ocean/base.py` — `_eval_step`, `_accumulate_errors`,
+`eval_metrics`, epoch hooks; `oceanml3d/data/datamodule.py` — `EvalPatchDataset`, val/test batches
+are `(patch, eval_mask)`, predict unchanged; `oceanml3d/cli.py` — `eval_domain` passed,
+`training.monitor` (default `val/nrmse`), optional `training.early_stopping`, `last.ckpt` kept;
+`oceanml3d/config_schema.py` — val/test overlap and `eval_domain` checks;
+`config/training/default.yaml`; `config/data/osse3d_gs21.yaml` — splits;
+`config/data/surface_currents_15m.yaml` — `splits_overlap_ok: true` (NOSC protocol);
+`config/experiment/osse3d_smoke.yaml` — its own `eval_domain`; `docs/gridded_models.md` §4.2–4.3a,
+`docs/pipeline_3d.md` §4; `tests/test_eval_metrics.py`; `tests/test_toy_and_assimilation.py` — reads
+the test split through `predict_dataloader`.
+
+**Rationale:** Validation existed but only as `val/loss`, the training objective in normalised units,
+weighted, with the gradient term: it cannot say how wrong the model is in °C or m/s, and its
+definition changes with every ablation (`uncertainty` can even lower it without lowering an error),
+so it could neither rank ablations nor select their checkpoints on a common criterion.
+`eval_domain` was declared but only read downstream. The OSSE splits had val and test sharing
+2018-12-20..31 — the checkpoint was selected on days then scored as test — and train and val were
+adjacent although the ocean is correlated over weeks. New splits: train to 2017-12-15, val
+2018-01-01..12-10, test from 2018-12-22 (2019 still fully covered by 11-day windows).
+
+**Behaviour change:** `dm.val_dataloader()` / `dm.test_dataloader()` yield `(patch, eval_mask)`.
+Code that needs plain test patches uses `dm.predict_dataloader()` (same split).
+
+**Verification:** `pytest -m "not slow"` — full suite green locally (6 new tests).
+
+
 ## 2026-09-19: ARGO from Datarmor's GDAC mirror, not downloaded
 
 **Summary:** On Datarmor the ARGO coverage table is built from the read-only Argo GDAC mirror

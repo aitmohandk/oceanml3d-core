@@ -49,6 +49,7 @@ def build_datamodule(cfg: DictConfig, variables: VariableSet, catalog: Catalog):
         if cfg.training.get("cache", False) else None,
         jitter=bool(cfg.training.get("moving_patches", False)),
         augmentations=build_augmentations(OmegaConf.to_container(d.augment, resolve=True) if d.get("augment") else None, variables),
+        eval_domain=OmegaConf.to_container(d.eval_domain, resolve=True) if d.get("eval_domain") else None,
     )
 
 
@@ -79,7 +80,7 @@ def build_model(cfg: DictConfig, variables: VariableSet, norm_stats):
 
 def build_trainer(cfg: DictConfig, stage: str | None = None):
     from pytorch_lightning import Trainer
-    from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+    from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
     from pytorch_lightning.loggers import CSVLogger, TensorBoardLogger
 
     from oceanml3d.training.callbacks import VersioningCallback
@@ -89,11 +90,17 @@ def build_trainer(cfg: DictConfig, stage: str | None = None):
         t = OmegaConf.merge(t, cfg.training.stage_trainer[stage])
     out = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     out = f"{out}/{stage}" if stage else out
+    # Selected on `val/nrmse` by default, not `val/loss`: the loss changes definition with every
+    # ablation, the RMSE does not (see BaseOceanModel._eval_step). `training.monitor` overrides.
+    monitor = cfg.training.get("monitor", "val/nrmse")
     callbacks = [
         VersioningCallback(cfg), LearningRateMonitor(),
-        ModelCheckpoint(monitor="val/loss", mode="min", save_top_k=cfg.training.save_top_k,
-                        filename="{epoch:03d}-{val/loss:.5f}", auto_insert_metric_name=False),
+        ModelCheckpoint(monitor=monitor, mode="min", save_top_k=cfg.training.save_top_k, save_last=True,
+                        filename="{epoch:03d}-{" + monitor + ":.5f}", auto_insert_metric_name=False),
     ]
+    es = cfg.training.get("early_stopping")
+    if es:
+        callbacks.append(EarlyStopping(monitor=monitor, mode="min", **OmegaConf.to_container(es, resolve=True)))
     loggers = [CSVLogger(out, name="", version=""), TensorBoardLogger(out, name="", version="")]
     return Trainer(callbacks=callbacks, logger=loggers, default_root_dir=out, **OmegaConf.to_container(t, resolve=True))
 

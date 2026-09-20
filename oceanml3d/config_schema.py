@@ -34,6 +34,8 @@ class TrainingConfig:
     loss_combine: str = "flat_sum"        # flat_sum | group_mean | uncertainty
     grad_loss_weight: float = 0.0
     save_top_k: int = 3
+    monitor: str = "val/nrmse"
+    early_stopping: Any = None
     moving_patches: bool = False
     cache: bool = False
     loss_group_weights: dict[str, float] = field(default_factory=dict)
@@ -109,6 +111,22 @@ def validate_config(cfg: DictConfig, catalog=None, variables=None) -> list[str]:
     if "train" in splits and "val" in splits and all(splits["train"]) and all(splits["val"]):
         if pd.Timestamp(splits["val"][0]) < pd.Timestamp(splits["train"][1]):
             p.append(f"data.splits.val starts inside the train window ({splits['val'][0]} < {splits['train'][1]}): leakage")
+    if "val" in splits and "test" in splits and all(splits["val"]) and all(splits["test"]) \
+            and not d.get("splits_overlap_ok", False):
+        if pd.Timestamp(splits["test"][0]) <= pd.Timestamp(splits["val"][1]):
+            p.append(f"data.splits.test starts inside the val window ({splits['test'][0]} <= "
+                     f"{splits['val'][1]}): the checkpoint is selected on days that are then scored "
+                     f"as test. Separate them, or set data.splits_overlap_ok: true to reproduce a "
+                     f"published protocol that overlaps.")
+    if d.get("eval_domain"):
+        ed = OmegaConf.to_container(d.eval_domain, resolve=True)
+        dom = OmegaConf.to_container(d.domain, resolve=True) if d.get("domain") else {}
+        for dim, (lo, hi) in ed.items():
+            if dim in dom and (lo < min(dom[dim]) or hi > max(dom[dim])):
+                p.append(f"data.eval_domain.{dim}={[lo, hi]} extends outside data.domain.{dim}={dom[dim]}")
+    mon = str(t.get("monitor", "val/nrmse"))
+    if not mon.startswith("val/"):
+        p.append(f"training.monitor='{mon}' must be a val/ metric (val/nrmse, val/loss, val/rmse_<group>...)")
 
     e = cfg.get("export", {})
     if e.get("enabled", False):

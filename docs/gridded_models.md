@@ -164,23 +164,52 @@ domain:      {lat: [32, 44], lon: [-66, -54]}   # what is loaded and trained on
 eval_domain: {lat: [33, 43], lon: [-65, -55]}   # 1-degree rim excluded from metrics
 ```
 
-`domain` is applied at load time (`data/open.py`). `eval_domain` is **consumed by
-`oceanml3d-eval`**, not here — it exists so that the boundary artefacts of a patched reconstruction
-never enter a score.
+`domain` is applied at load time (`data/open.py`). `eval_domain` restricts every **validation and
+test metric** computed during training (below), and is consumed again by `oceanml3d-eval` — it
+exists so that the boundary artefacts of a patched reconstruction never enter a score.
+`validate_config` refuses an `eval_domain` that extends outside `domain`.
 
 ### 4.3 `splits`
 
 ```yaml
 splits:
-  train: {time: ["2010-01-01", "2017-12-31"]}
-  val:   {time: ["2018-01-01", "2018-12-31"]}
-  test:  {time: ["2018-12-20", "2020-01-10"]}
+  train: {time: ["2010-01-01", "2017-12-15"]}
+  val:   {time: ["2018-01-01", "2018-12-10"]}
+  test:  {time: ["2018-12-22", "2020-01-10"]}
 ```
 
-All three are mandatory. `validate_config` refuses a `val` window that starts before the end of
-`train` — that check exists because it is the one leak nobody notices. The test split here
-deliberately starts **11 days before** 2019-01-01: the first patch of a `time: 11` window needs its
-history, and `export.time` then clips the product back to the calendar year.
+All three are mandatory, and **disjoint with gaps longer than the window** (`osse3d_gs21`). The ocean
+is correlated over weeks: validation days adjacent to the training period make the validation
+optimistic, and a test window that overlaps the validation scores days the checkpoint was selected
+on. The test still starts **10 days before** 2019-01-01, so the first day of the exported year is
+covered by complete `time: 11` windows; `export.time` clips the product back to the calendar year.
+
+`validate_config` refuses a `val` window that starts inside `train`, and a `test` window that starts
+inside `val`. The NOSC reproduction (`surface_currents_15m`) keeps NOSC's published splits, which
+overlap by 12 days, and says so with `splits_overlap_ok: true`.
+
+### 4.3a Following training: what is logged, and what selects the checkpoint
+
+Every epoch, on the validation split (and once on the test split at the end), in CSV and
+TensorBoard under the run directory:
+
+| Metric | What it is |
+|---|---|
+| `val/nrmse` | mean over targets of the RMSE in units of each target's train std. **Selects the checkpoint.** |
+| `val/rmse_<group>` | RMSE in physical units, pooled over the group's targets — `temperature` in °C, `currents_u`/`currents_v` in m/s, `ssh` in m |
+| `val/rmse_<target>` | the same per target, e.g. `val/rmse_thetao_d10`: the profile of the error with depth |
+| `val/loss`, `val/<target>_loss`, `val/group_<g>_loss` | the training objective recomputed on val |
+
+The RMSEs pool the squared errors over the whole epoch (not a mean of batch RMSEs), weight them with
+the reconstruction weight like the exported product, and count only `eval_domain` and finite targets.
+They do not depend on the loss, which `val/loss` does: `flat_sum` and `group_mean` aggregate
+differently, `no_grad_loss` drops a term, `uncertainty` adds learned log-variances that can lower it
+without lowering any error. So ablations are compared — and their checkpoints selected — on
+`val/nrmse`, never on `val/loss`.
+
+`training.monitor` changes the selection metric (any `val/` metric); `training.early_stopping`,
+off by default, takes Lightning's arguments, e.g. `{patience: 15}`. The last epoch is always kept as
+`last.ckpt` besides the `save_top_k` best.
 
 ### 4.4 `patch`, `stride`, `chunks`
 
