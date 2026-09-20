@@ -170,6 +170,26 @@ Read the log top-down when something goes wrong: the last line it reached *is* t
 Nothing after `python started` means the container or the imports; nothing after the index lines
 means the mirror is not delivering; a rate of seconds per file means the filesystem, not the code.
 
+**A count is not a check.** The run ends with what the table actually contains, because 8 640
+profiles spread over a decade and 8 640 concentrated in two years are the same number and only one
+of them is usable:
+
+```
+[argo] table: 8640 profiles, 217 floats, 2010-01-03 .. 2020-01-10
+[argo] per year: 2010 812  2011 905  ...  2019 1034  2020 26
+[argo] reaching each level: d00 99%  d02 99%  ...  d25 96%
+```
+
+A year inside the window with almost nothing in it, or a level most profiles never reach, is called
+out as a warning — the second matters as much as the first, since a level no float reaches means the
+model reconstructs that depth from no observation at all. The same summary runs on a table that
+already exists, without re-reading the GDAC:
+
+```bash
+python scripts/prepare/argo_profiles.py --summary $OCEANML3D_DATA/argo/argo_profiles_gs.csv \
+    --time 2010-01-01 2020-01-11
+```
+
 Bathymetry is **not** part of this step. `config/data/osse3d_gs21.yaml` ships with `bathy: null`:
 the first model to validate is the simple one, and nothing here produces `bathy_gs`. When it is
 wanted, it is GEBCO regridded onto the prepared truth, once, with `regrid.py` and `reference:`
