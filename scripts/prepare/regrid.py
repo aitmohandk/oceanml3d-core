@@ -54,6 +54,7 @@ import numpy as np
 import xarray as xr
 import yaml
 
+import oceanml3d
 from oceanml3d.data.open import normalise_dims
 
 # In a batch job stdout is a pipe, not a tty, so Python buffers it whole and nothing is flushed until
@@ -70,6 +71,14 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(line_buffering=True)
     except (AttributeError, ValueError):
         pass
+
+# Which `oceanml3d` is running, not which one you edited: the container image carries its own copy of
+# the package, so an old image runs old code against new scripts and configs.
+_pkg = Path(oceanml3d.__file__).resolve().parents[1]
+print(f"[regrid] oceanml3d from {_pkg}", flush=True)
+if _pkg != Path.cwd().resolve():
+    print(f"[regrid] WARNING that is not this working directory ({Path.cwd()}): rebuild the image, or "
+          f"let jobs/prepare.sh set PYTHONPATH (jobs/env/_lib.sh, container_exec).", flush=True)
 
 
 def target_grid(recipe: dict) -> tuple[np.ndarray, np.ndarray]:

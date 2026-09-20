@@ -79,6 +79,19 @@ container_exec() {
         nv=("--nv")
     fi
 
+    # The clone's `oceanml3d/` must win over the image's copy of it. container/oceanml3d.def copies
+    # the package into /opt/oceanml3d at build time and pip-installs it editable there, so a
+    # container built last week runs last week's package against today's scripts and configs -- which
+    # showed up as `module 'oceanml3d.obs.argo' has no attribute 'coverage_table_local'`, a function
+    # that had been in the clone for hours. PYTHONPATH comes before site-packages in sys.path, so the
+    # bound repository takes precedence and the image only has to supply the dependencies.
+    #
+    # Through the runtime's own variable rather than `--env`: `--env` needs singularity >= 3.6 or
+    # apptainer, and which of the two a centre exposes is not ours to decide. Both honour their
+    # <RUNTIME>ENV_ prefix in every version, and setting the one that does not apply is harmless.
+    export SINGULARITYENV_PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}"
+    export APPTAINERENV_PYTHONPATH="$SINGULARITYENV_PYTHONPATH"
+
     "${OCEANML3D_CONTAINER_CMD:-apptainer}" exec "${nv[@]+"${nv[@]}"}" "${binds[@]}" --pwd "$root" \
         "$OCEANML3D_SIF" "$@"
 }
