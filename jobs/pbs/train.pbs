@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
 #PBS -N oceanml3d
-#PBS -l select=1:ncpus=8:ngpus=1:mem=64gb
+#PBS -q gpuq
+#PBS -l select=1:ncpus=8:ngpus=1:mem=64g
 #PBS -l walltime=20:00:00
 #PBS -j oe
 #PBS -o logs/
-## Site-specific, uncomment and fill in:
-##PBS -q gpuq
-##PBS -P <project>
 #
 # The PBS twin of jobs/slurm/train.sbatch. The two differ only in their directives and in how they
 # name the submit directory and the core count; the work is jobs/run.sh in both cases.
+#
+# `-q gpuq` is not optional and was commented out here for months: Datarmor's default queue is a
+# *routing* queue, it has no destination that accepts `ngpus`, and the submission is refused before
+# any of this file runs --
+#     qsub: Job rejected by all possible destinations
+# which names neither the queue nor the resource. Every other file in this directory declares `-q omp`
+# for the same reason; `test_every_pbs_job_declares_a_queue` now keeps them all honest. A different
+# queue is one flag away: `qsub -q <other> ...` wins over the directive.
+#
+# If the submission is still refused, the request is outside what the queue allows rather than
+# unroutable. `qstat -Qf gpuq` prints its limits (`resources_max.walltime`, `ncpus`, `mem`, `ngpus`);
+# the 20 h here is a guess at a full training run and is the first thing to lower.
 #
 #     qsub -v OCEANML3D_SITE=datarmor -- jobs/pbs/train.pbs experiment=nosc_15m_duacs
 #
