@@ -6,6 +6,7 @@
 # Bind /home/ref-argo into the container (jobs/env/datarmor.sh does): unbound, the path is empty.
 source: gdac
 gdac_dir: ${ARGO_GDAC}
+# index: /path/to/ar_index_global_prof.txt    # only if not in gdac_dir or its parent
 bbox: [-66, -54, 32, 44]
 time: ["2010-01-01", "2020-01-11"]
 truth: ${OCEANML3D_DATA}/glorys/glorys_gs_multidepth_2010-2020.zarr

@@ -1,6 +1,7 @@
 """Ported from NOSC first_implementation tests/test_argo_and_pseudo_obs.py (numpy part)."""
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from oceanml3d.obs import argo
@@ -91,3 +92,112 @@ def test_local_gdac_without_index_falls_back_to_scanning(tmp_path):
     assert argo.prof_files_from_index(tmp_path, -66, -54, 32, 44, "2010-01-01", "2020-01-11") is None
     pc = argo.fetch_argo_profiles_local(tmp_path, -66, -54, 32, 44, "2010-01-01", "2020-01-11")
     assert pc.sizes["N_POINTS"] == 2
+
+
+# --- real GDAC layout: char QC arrays, DATA_MODE, many cycles per float ------------------------------
+
+def _real_prof(path, lats, lons, dates, wmo="1900001", n_lev=4, modes=None):
+    """Written with netCDF4 as the GDAC writes it: QC flags as char(N_PROF, N_LEVELS), which xarray
+    decodes into one string per profile -- the layout the synthetic fixtures above do not have."""
+    netCDF4 = pytest.importorskip("netCDF4")
+    n = len(lats)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    chars = lambda rows, width: np.array([list(r.ljust(width).encode()) for r in rows], "u1").view("S1")  # noqa: E731
+    with netCDF4.Dataset(path, "w") as d:
+        d.createDimension("N_PROF", n)
+        d.createDimension("N_LEVELS", n_lev)
+        d.createDimension("STRING8", 8)
+        for name, vals in (("LATITUDE", lats), ("LONGITUDE", lons)):
+            d.createVariable(name, "f8", ("N_PROF",))[:] = vals
+        juld = d.createVariable("JULD", "f8", ("N_PROF",))
+        juld.units = "days since 1950-01-01 00:00:00"
+        juld[:] = (pd.to_datetime(dates) - pd.Timestamp("1950-01-01")).days
+        d.createVariable("CYCLE_NUMBER", "i4", ("N_PROF",))[:] = np.arange(1, n + 1)
+        d.createVariable("PLATFORM_NUMBER", "S1", ("N_PROF", "STRING8"))[:] = chars([wmo] * n, 8)
+        d.createVariable("DATA_MODE", "S1", ("N_PROF",))[:] = np.array([m.encode() for m in (modes or "R" * n)], "S1")
+        d.createVariable("POSITION_QC", "S1", ("N_PROF",))[:] = np.array([b"1"] * n, "S1")
+        d.createVariable("JULD_QC", "S1", ("N_PROF",))[:] = np.array([b"1"] * n, "S1")
+        pres = np.tile(np.arange(n_lev, dtype=float) * 10 + 5, (n, 1))
+        for name, vals in (("PRES", pres), ("PRES_ADJUSTED", pres), ("TEMP", 20 - pres / 10),
+                           ("TEMP_ADJUSTED", 30 - pres / 10)):
+            d.createVariable(name, "f4", ("N_PROF", "N_LEVELS"))[:] = vals
+        qc = ["1" * (n_lev - 1) + "4"] * n                      # last level bad
+        for name in ("PRES_QC", "TEMP_QC", "PRES_ADJUSTED_QC", "TEMP_ADJUSTED_QC"):
+            d.createVariable(name, "S1", ("N_PROF", "N_LEVELS"))[:] = chars(qc, n_lev)
+
+
+def test_real_gdac_char_qc_flags_are_decoded_per_level(tmp_path):
+    f = tmp_path / "1900001_prof.nc"
+    _real_prof(f, [40.0, 41.0], [-60.0, -61.0], ["2015-06-01", "2015-06-11"])
+    with xr.open_dataset(f) as ds:
+        pc = argo.pointcloud_from_gdac_file(ds)
+    assert pc.sizes["N_POINTS"] == 8
+    assert list(pc.PRES_QC.values) == [1, 1, 1, 4] * 2
+    assert set(pc.PLATFORM_NUMBER.values) == {"1900001"}
+    assert argo.filter_by_qc(pc, ["PRES_QC", "TEMP_QC"]).sizes["N_POINTS"] == 6
+
+
+def test_qc_flags_joined_into_one_string_per_profile_are_split_back():
+    """Depending on how the dimension is used, xarray's char decoding joins char(N_PROF, N_LEVELS)
+    into (N_PROF,) strings -- b'1114' for one profile. Both layouts must give per-level flags."""
+    joined = xr.DataArray(np.array([b"1114", b"12  "], "S4"), dims="N_PROF")
+    split = argo._decode_qc(argo._qc_levels(joined, 2, 4))
+    assert split.tolist() == [[1, 1, 1, 4], [1, 2, 9, 9]]
+    short = xr.DataArray(np.array([b"11", b"1"], "S2"), dims="N_PROF")        # trailing blanks trimmed
+    assert argo._decode_qc(argo._qc_levels(short, 2, 3)).tolist() == [[1, 1, 9], [1, 9, 9]]
+    per_level = xr.DataArray(np.array([[b"1", b"4"]], "S1"), dims=("N_PROF", "N_LEVELS"))
+    assert argo._decode_qc(argo._qc_levels(per_level, 1, 2)).tolist() == [[1, 4]]
+
+
+def test_adjusted_values_replace_raw_ones_in_delayed_mode(tmp_path):
+    f = tmp_path / "1900001_prof.nc"
+    _real_prof(f, [40.0, 41.0], [-60.0, -61.0], ["2015-06-01", "2015-06-11"], modes="RD")
+    with xr.open_dataset(f) as ds:
+        pc = argo.pointcloud_from_gdac_file(ds)
+    temp = pc.TEMP.values.reshape(2, 4)
+    np.testing.assert_allclose(temp[0], 20 - (np.arange(4) * 10 + 5) / 10)      # R: raw
+    np.testing.assert_allclose(temp[1], 30 - (np.arange(4) * 10 + 5) / 10)      # D: adjusted
+
+
+def test_only_the_profiles_in_the_box_are_flattened(tmp_path):
+    """A <wmo>_prof.nc holds the float's whole life; 2 cycles of 300 cross the box."""
+    n = 300
+    lats = np.full(n, 10.0)
+    lats[[5, 200]] = 40.0
+    _real_prof(tmp_path / "dac/aoml/1900001/1900001_prof.nc", lats, np.full(n, -60.0),
+               pd.date_range("2012-01-01", periods=n, freq="10D"), n_lev=500)
+    pc = argo.fetch_argo_profiles_local(tmp_path, -66, -54, 32, 44, "2010-01-01", "2020-01-11")
+    assert pc.sizes["N_POINTS"] == 2 * 500
+
+
+def test_without_index_the_scan_does_not_descend_into_profiles(tmp_path):
+    _real_prof(tmp_path / "dac/aoml/1900001/1900001_prof.nc", [40.0], [-60.0], ["2015-06-01"])
+    _real_prof(tmp_path / "dac/aoml/1900001/profiles/R1900001_001_prof.nc", [40.0], [-60.0], ["2015-06-01"])
+    assert argo._scan_prof_files(tmp_path) == [tmp_path / "dac/aoml/1900001/1900001_prof.nc"]
+
+
+def test_decode_qc_is_vectorised_and_total():
+    got = argo._decode_qc(np.array([b"1", b"4", b" ", b"", b"9", b"x"], "S1"))
+    assert got.tolist() == [1, 4, 9, 9, 9, 9]
+    assert argo._decode_qc(np.array(["1", " 2 ", ""])).tolist() == [1, 2, 9]
+    assert argo._decode_qc(np.array([b"3", "5"], dtype=object)).tolist() == [3, 5]
+
+
+def test_argo_recipe_end_to_end_on_a_fake_gdac(tmp_path):
+    import importlib.util
+
+    _real_prof(tmp_path / "gdac/dac/aoml/1900001/1900001_prof.nc", [40.0, 41.0], [-60.0, -61.0],
+               ["2015-06-01", "2015-06-11"], n_lev=6)
+    (tmp_path / "gdac/ar_index_global_prof.txt").write_text(
+        "# header\nfile,date,latitude,longitude,ocean,profiler_type,institution,date_update\n"
+        "aoml/1900001/profiles/R1900001_001.nc,20150601000000,40.0,-60.0,A,846,AO,20160101000000\n")
+    xr.Dataset(coords={"depth": [5.0, 15.0, 25.0, 35.0, 45.0, 55.0]}).to_netcdf(tmp_path / "truth.nc")
+    spec = importlib.util.spec_from_file_location("argo_profiles", "scripts/prepare/argo_profiles.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    out = mod.run({"source": "gdac", "gdac_dir": str(tmp_path / "gdac"), "bbox": [-66, -54, 32, 44],
+                   "time": ["2010-01-01", "2020-01-11"], "truth": str(tmp_path / "truth.nc"),
+                   "depth_indices": [0, 2, 4], "value_var": "TEMP", "output": str(tmp_path / "argo.csv")})
+    table = pd.read_csv(out)
+    assert len(table) == 2 and {"d00", "d02", "d04"} <= set(table.columns)
+    assert table["d00"].eq(1).all()
