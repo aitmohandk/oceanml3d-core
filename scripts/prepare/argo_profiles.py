@@ -15,23 +15,40 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
+import time
 from pathlib import Path
 
 import yaml
 
 from oceanml3d.obs import argo
 
+# A batch job's stdout is a pipe, fully buffered: killed on walltime, the log showed nothing past the
+# first line and there was no way to tell whether the index was found or how far the reading got.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass
+
 
 def run(recipe: dict) -> Path:
+    out = Path(recipe["output"])
+    if out.exists() and not recipe.get("force", False):
+        print(f"[argo] {out} already exists, skipped (delete it to rebuild)")
+        return out
     lon0, lon1, lat0, lat1 = recipe["bbox"]
+    t0 = time.monotonic()
     if recipe.get("source", "argopy") == "gdac":
-        ds = argo.fetch_argo_profiles_local(recipe["gdac_dir"], lon0, lon1, lat0, lat1, *recipe["time"])
+        ds = argo.fetch_argo_profiles_local(recipe["gdac_dir"], lon0, lon1, lat0, lat1, *recipe["time"],
+                                            index=recipe.get("index"))
     else:
         ds = argo.fetch_argo_profiles_chunked(lon0, lon1, lat0, lat1, *recipe["time"])
+    print(f"[argo] read: {ds.sizes.get('N_POINTS', 0)} points in {time.monotonic() - t0:.0f} s")
     ds = argo.apply_standard_qc(ds, spike_thresholds=recipe.get("spike_thresholds"))
+    print(f"[argo] after QC: {ds.sizes.get('N_POINTS', 0)} points")
     idx = list(recipe["depth_indices"])
     table = argo.coverage_table(ds, argo.depth_values_from_truth(recipe["truth"], idx), idx, recipe.get("value_var", "TEMP"))
-    out = Path(recipe["output"])
     out.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(out, index=False) if out.suffix == ".csv" else table.to_parquet(out)
     print(f"{len(table)} profiles -> {out}")

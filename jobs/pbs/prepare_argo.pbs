@@ -2,7 +2,7 @@
 #PBS -N o3d_argo
 #PBS -q omp
 #PBS -l select=1:ncpus=4:mem=32g
-#PBS -l walltime=02:00:00
+#PBS -l walltime=04:00:00
 #PBS -j oe
 #PBS -o logs/
 #

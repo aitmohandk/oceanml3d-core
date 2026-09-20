@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-09-20: ARGO from the local GDAC: fast, visible, and right on the real file layout
+
+**Summary:** The Datarmor ARGO job was killed on walltime (2 h) with nothing in its log past the
+first line. The GDAC reader now decodes QC flags vectorised, flattens only the cycles inside the
+box and period, never recurses into `profiles/`, uses `*_ADJUSTED` values in delayed mode, and logs
+every stage and every 50 files.
+
+**Files modified:** `oceanml3d/obs/argo.py` — `_decode_qc` vectorised, `_qc_levels` (both char
+layouts), `pointcloud_from_gdac_file(keep_prof=, use_adjusted=)`, `find_index` (gdac_dir or its
+parent, or `index:`), `_scan_prof_files` (fixed depth), progress; `scripts/prepare/argo_profiles.py`
+— line-buffered output, stage timings, skips an existing table; `jobs/pbs/prepare_argo.pbs` — 4 h;
+recipe comment; `docs/platforms/datarmor.md` F.3 and pitfalls; `tests/test_argo.py` — files written
+as the GDAC writes them (netCDF char arrays, DATA_MODE, 300-cycle float), end-to-end recipe run.
+
+**Rationale:** Three causes, none visible because `argo_profiles.py` did not line-buffer its output:
+`_decode_qc` looped in Python over every level of every cycle of each float, before any box/time
+filter (a `<wmo>_prof.nc` holds the float's whole life): 0.7 s per 250-cycle float against 0.01 s
+now; without an index at `gdac_dir`, `Path.glob("**/*_prof.nc")` listed the millions of per-cycle
+files under `profiles/` before opening anything; and the unit tests used per-element byte flags,
+not the char arrays a real GDAC file has — which xarray can also join into one string per profile,
+a layout the old reshape could not handle.
+
+**Verification:** `pytest tests/test_argo.py` — 12 passed.
+
+
 ## 2026-09-20: Document the per-user settings file
 
 **Summary:** `~/.config/oceanml3d/env.sh` is documented where job configuration lives

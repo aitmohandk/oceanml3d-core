@@ -6,6 +6,7 @@ Port of NOSC ``contrib/argo/{download,qc,vertical_interp}.py``. Heavy dependenci
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import numpy as np
@@ -50,42 +51,117 @@ def fetch_argo_profiles_chunked(lon_min, lon_max, lat_min, lat_max, start_date, 
 
 
 def _decode_qc(arr) -> np.ndarray:
-    out = np.full(np.shape(arr), 9, dtype=np.int8).ravel()
-    for i, v in enumerate(np.asarray(arr).ravel()):
-        v = v.decode("ascii", "ignore") if isinstance(v, bytes) else str(v)
-        v = v.strip()
-        if v.isdigit():
-            out[i] = int(v)
-    return out.reshape(np.shape(arr))
+    """QC flags ('0'..'9', blank = missing) to int8, vectorised; anything but a digit becomes 9."""
+    a = np.asarray(arr)
+    if a.dtype.kind in "iuf":
+        return np.where(np.isfinite(a.astype(float)), a, 9).astype(np.int8)
+    if a.dtype.kind == "U":
+        a = np.char.encode(a, "ascii", "ignore")
+    elif a.dtype.kind == "O":
+        a = np.array([v if isinstance(v, bytes) else str(v).encode("ascii", "ignore") for v in a.ravel()],
+                     dtype="S").reshape(a.shape)
+    if a.dtype.itemsize != 1:
+        a = np.char.strip(a).astype("S1")          # '' stays '' -> byte 0 -> 9 below
+    code = a.view(np.uint8).astype(np.int16) - ord("0")
+    return np.where((code >= 0) & (code <= 9), code, 9).astype(np.int8)
 
 
-def pointcloud_from_gdac_file(ds: xr.Dataset, value_vars=VALUE_VARS) -> xr.Dataset:
-    """Flatten one GDAC profile file (N_PROF, N_LEVELS) into the argopy N_POINTS layout."""
+def _qc_levels(da: xr.DataArray, n_prof: int, n_lev: int) -> np.ndarray:
+    """A per-level QC variable as ``(n_prof, n_lev)`` single characters, whatever xarray made of it.
+
+    In a real GDAC file ``PRES_QC`` is ``char(N_PROF, N_LEVELS)``, and xarray's character decoding
+    joins the last dimension: it comes back as ``(N_PROF,)`` strings of length ``N_LEVELS``
+    (``b'1114 '``), not as ``(N_PROF, N_LEVELS)`` flags. Reshaping that like a numeric variable gave
+    ``n_prof`` values instead of ``n_prof x n_lev`` and every file failed to flatten.
+    """
+    a = np.asarray(da.values)
+    if a.shape == (n_prof, n_lev):
+        return a
+    if a.dtype.kind == "S" and a.shape == (n_prof,):
+        raw = np.frombuffer(a.astype(f"S{max(a.dtype.itemsize, 1)}").tobytes(), dtype=np.uint8)
+        raw = raw.reshape(n_prof, -1)
+        out = np.full((n_prof, n_lev), ord(" "), np.uint8)
+        w = min(n_lev, raw.shape[1])
+        out[:, :w] = raw[:, :w]
+        out[out == 0] = ord(" ")
+        return out.view("S1")
+    return a.reshape(n_prof, -1)[:, :n_lev]
+
+
+def _as_text(a: np.ndarray) -> np.ndarray:
+    return np.char.strip(np.char.decode(a, "ascii", "ignore")) if a.dtype.kind == "S" else a.astype(str)
+
+
+def pointcloud_from_gdac_file(ds: xr.Dataset, value_vars=VALUE_VARS, keep_prof: np.ndarray | None = None,
+                              use_adjusted: bool = True) -> xr.Dataset:
+    """Flatten one GDAC profile file (N_PROF, N_LEVELS) into the argopy N_POINTS layout.
+
+    ``keep_prof`` (boolean over N_PROF) drops profiles *before* flattening: a ``<wmo>_prof.nc`` holds
+    every cycle of the float's life, of which a handful cross the box. ``use_adjusted``: where
+    ``DATA_MODE`` is ``A`` or ``D``, the ``*_ADJUSTED`` values and flags replace the raw ones -- what
+    argopy's "standard" mode returns, and the only calibrated values for delayed-mode profiles.
+    """
+    if keep_prof is not None:
+        ds = ds.isel(N_PROF=np.flatnonzero(keep_prof))
     n_prof = ds.sizes.get("N_PROF", 1)
     n_lev = ds.sizes.get("N_LEVELS", ds.sizes.get("N_LEVEL", 1))
+    if n_prof == 0:
+        return xr.Dataset()
+    mode = _as_text(np.asarray(ds["DATA_MODE"].values)).reshape(n_prof) if "DATA_MODE" in ds else np.full(n_prof, "R")
+    adjusted = np.isin(mode, ["A", "D"]) if use_adjusted else np.zeros(n_prof, bool)
 
-    def per_level(name):
-        return np.asarray(ds[name].values).reshape(n_prof, -1)[:, :n_lev].reshape(-1) if name in ds else None
+    def level_values(name):
+        raw = np.asarray(ds[name].values, float).reshape(n_prof, -1)[:, :n_lev]
+        adj = f"{name}_ADJUSTED"
+        if adjusted.any() and adj in ds:
+            raw = np.where(adjusted[:, None], np.asarray(ds[adj].values, float).reshape(n_prof, -1)[:, :n_lev], raw)
+        return raw.reshape(-1)
 
-    def per_prof(name):
-        return np.repeat(np.asarray(ds[name].values).reshape(n_prof), n_lev) if name in ds else None
+    def level_qc(name):
+        raw = _decode_qc(_qc_levels(ds[f"{name}_QC"], n_prof, n_lev)) if f"{name}_QC" in ds \
+            else np.full((n_prof, n_lev), 9, np.int8)
+        adj = f"{name}_ADJUSTED_QC"
+        if adjusted.any() and adj in ds:
+            raw = np.where(adjusted[:, None], _decode_qc(_qc_levels(ds[adj], n_prof, n_lev)), raw)
+        return raw.reshape(-1)
 
-    data = {"PRES": per_level("PRES"), "LATITUDE": per_prof("LATITUDE"), "LONGITUDE": per_prof("LONGITUDE"),
-            "TIME": per_prof("JULD"), "PRES_QC": _decode_qc(per_level("PRES_QC")),
-            "POSITION_QC": _decode_qc(per_prof("POSITION_QC")), "JULD_QC": _decode_qc(per_prof("JULD_QC")),
-            "PLATFORM_NUMBER": per_prof("PLATFORM_NUMBER") if "PLATFORM_NUMBER" in ds else np.repeat("unknown", n_prof * n_lev),
-            "CYCLE_NUMBER": per_prof("CYCLE_NUMBER") if "CYCLE_NUMBER" in ds else np.repeat(np.arange(n_prof), n_lev)}
+    def per_prof(name, default=None):
+        if name not in ds:
+            return None if default is None else np.repeat(default, n_lev)
+        return np.repeat(np.asarray(ds[name].values).reshape(n_prof), n_lev)
+
+    platform = (_as_text(np.asarray(ds["PLATFORM_NUMBER"].values)).reshape(n_prof) if "PLATFORM_NUMBER" in ds
+                else np.full(n_prof, "unknown"))
+    data = {"PRES": level_values("PRES"), "PRES_QC": level_qc("PRES"),
+            "LATITUDE": per_prof("LATITUDE"), "LONGITUDE": per_prof("LONGITUDE"), "TIME": per_prof("JULD"),
+            "POSITION_QC": np.repeat(_decode_qc(np.asarray(ds["POSITION_QC"].values).reshape(n_prof)), n_lev)
+            if "POSITION_QC" in ds else None,
+            "JULD_QC": np.repeat(_decode_qc(np.asarray(ds["JULD_QC"].values).reshape(n_prof)), n_lev)
+            if "JULD_QC" in ds else None,
+            "PLATFORM_NUMBER": np.repeat(platform, n_lev),
+            "CYCLE_NUMBER": per_prof("CYCLE_NUMBER", np.arange(n_prof)) if "CYCLE_NUMBER" in ds
+            else np.repeat(np.arange(n_prof), n_lev)}
     for v in value_vars:
         if v in ds:
-            data[v] = per_level(v)
-            data[f"{v}_QC"] = _decode_qc(per_level(f"{v}_QC"))
+            data[v] = level_values(v)
+            data[f"{v}_QC"] = level_qc(v)
     return xr.Dataset({k: ("N_POINTS", v) for k, v in data.items() if v is not None})
 
 
 INDEX_NAMES = ("ar_index_global_prof.txt", "ar_index_global_prof.txt.gz")
 
 
-def prof_files_from_index(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date) -> list[Path] | None:
+def find_index(gdac_dir) -> Path | None:
+    root = Path(gdac_dir)
+    for base in (root, root.parent):
+        for n in INDEX_NAMES:
+            if (base / n).exists():
+                return base / n
+    return None
+
+
+def prof_files_from_index(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date,
+                          index: str | Path | None = None) -> list[Path] | None:
     """The ``<dac>/<wmo>/<wmo>_prof.nc`` files of the floats with a profile in the box and period.
 
     Every GDAC ships ``ar_index_global_prof.txt``: one line per profile with its date and position.
@@ -94,9 +170,10 @@ def prof_files_from_index(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_da
     the mirror has no index, so the caller can fall back to scanning.
     """
     root = Path(gdac_dir)
-    index = next((root / n for n in INDEX_NAMES if (root / n).exists()), None)
-    if index is None:
+    index = Path(index) if index else find_index(root)
+    if index is None or not index.exists():
         return None
+    t0 = time.monotonic()
     df = pd.read_csv(index, comment="#", usecols=["file", "date", "latitude", "longitude"],
                      dtype={"file": str, "date": str})
     t = pd.to_datetime(df["date"].str.slice(0, 14), format="%Y%m%d%H%M%S", errors="coerce")
@@ -104,37 +181,60 @@ def prof_files_from_index(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_da
             & (t >= pd.Timestamp(start_date)) & (t <= pd.Timestamp(end_date)))
     # aoml/1900722/profiles/D1900722_061.nc -> aoml/1900722/1900722_prof.nc. Index paths are relative
     # to the `dac/` directory, which sits next to the index in a standard GDAC tree.
-    base = root / "dac" if (root / "dac").is_dir() else root
+    base = index.parent / "dac" if (index.parent / "dac").is_dir() else root
     floats = sorted({"/".join(f.split("/")[:2]) for f in df.loc[keep, "file"]})
-    print(f"[argo] index {index.name}: {int(keep.sum())} profiles in box/period, {len(floats)} floats")
+    print(f"[argo] index {index} ({len(df)} profiles, read in {time.monotonic() - t0:.0f} s): "
+          f"{int(keep.sum())} in box/period, from {len(floats)} floats")
     return [base / f / f"{f.split('/')[1]}_prof.nc" for f in floats]
 
 
+def _scan_prof_files(gdac_dir) -> list[Path]:
+    """Fallback without an index: ``<dac>/<wmo>/<wmo>_prof.nc`` at a fixed depth.
+
+    Not ``**/*_prof.nc``: a recursive glob descends into every ``profiles/`` directory, which on a full
+    GDAC holds millions of per-cycle files -- hours of directory listing on Lustre before the first
+    open. The per-float files sit exactly two levels under ``dac/``.
+    """
+    root = Path(gdac_dir)
+    base = root / "dac" if (root / "dac").is_dir() else root
+    return sorted(base.glob("*/*/*_prof.nc"))
+
+
 def fetch_argo_profiles_local(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date,
-                              file_glob="**/*_prof.nc", **_) -> xr.Dataset:
+                              index: str | Path | None = None, value_vars=VALUE_VARS,
+                              progress_every: int = 50, **_) -> xr.Dataset:
     """Read a local GDAC mirror (``/home/ref-argo/gdac`` on Datarmor) instead of downloading."""
-    files = prof_files_from_index(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date)
+    files = prof_files_from_index(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date, index)
     if files is None:
-        print(f"[argo] WARNING: no ar_index_global_prof.txt under {gdac_dir}; scanning every "
-              f"{file_glob} file instead, which on a full GDAC takes hours")
-        files = sorted(Path(gdac_dir).glob(file_glob))
+        print(f"[argo] WARNING: no ar_index_global_prof.txt in {gdac_dir} or its parent (set `index:` in "
+              f"the recipe if it lives elsewhere); scanning <dac>/<wmo>/<wmo>_prof.nc instead -- every float "
+              f"of the archive is opened, expect a long run", flush=True)
+        files = _scan_prof_files(gdac_dir)
+        print(f"[argo] {len(files)} float files found", flush=True)
     if not files:
         raise RuntimeError(f"no GDAC profile file for the box/period under {gdac_dir}")
     t0, t1 = pd.Timestamp(start_date), pd.Timestamp(end_date)
-    clouds = []
-    for f in files:
+    clouds, failed, n_prof, start = [], 0, 0, time.monotonic()
+    for k, f in enumerate(files, 1):
         try:
             with xr.open_dataset(f) as ds:
-                pc = pointcloud_from_gdac_file(ds)
+                lat = np.asarray(ds["LATITUDE"].values, float).reshape(-1)
+                lon = np.asarray(ds["LONGITUDE"].values, float).reshape(-1)
+                t = pd.to_datetime(np.asarray(ds["JULD"].values).reshape(-1))
+                keep = ((lat >= lat_min) & (lat <= lat_max) & (lon >= lon_min) & (lon <= lon_max)
+                        & np.asarray(t >= t0) & np.asarray(t <= t1))
+                if keep.any():
+                    n_prof += int(keep.sum())
+                    clouds.append(pointcloud_from_gdac_file(ds, value_vars, keep_prof=keep))
         except Exception as exc:  # noqa: BLE001
-            print(f"[argo] WARNING {f}: {exc}")
-            continue
-        t = pd.to_datetime(pc["TIME"].values)
-        keep = ((pc.LATITUDE.values >= lat_min) & (pc.LATITUDE.values <= lat_max) & (pc.LONGITUDE.values >= lon_min)
-                & (pc.LONGITUDE.values <= lon_max) & (t >= t0) & (t <= t1))
-        if keep.any():
-            clouds.append(pc.isel(N_POINTS=keep))
-    print(f"[argo] {len(clouds)}/{len(files)} file(s) contributed")
+            failed += 1
+            if failed <= 10:
+                print(f"[argo] WARNING {f}: {type(exc).__name__}: {exc}", flush=True)
+        if k % progress_every == 0 or k == len(files):
+            print(f"[argo] {k}/{len(files)} files, {n_prof} profiles kept, {failed} failed, "
+                  f"{time.monotonic() - start:.0f} s", flush=True)
+    if failed and not clouds:
+        raise RuntimeError(f"all {failed} GDAC files failed to read (first errors above)")
     return xr.concat(clouds, dim="N_POINTS") if clouds else xr.Dataset()
 
 

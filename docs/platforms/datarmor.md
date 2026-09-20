@@ -353,10 +353,24 @@ qsub -v OCEANML3D_SITE=datarmor jobs/pbs/prepare_argo.pbs
 ```
 
 The global index is read first, so only the floats that crossed the box in the period are opened —
-a few hundred files instead of the ~20 000 of the archive. Without the index the reader falls back to
-scanning every `*_prof.nc`, says so, and takes hours. Then: QC on the standard flags, vertical
-interpolation, and the coverage table — where and when a float was, and how deep. The values are
-discarded; F.4 replaces them with the truth. Output: `$OCEANML3D_DATA/argo/argo_profiles_gs.csv`.
+a few hundred files instead of the ~20 000 of the archive — and within each float only the cycles
+inside the box and period are decoded. The log says which path it took and how far it got:
+
+```
+[argo] index /home/ref-argo/gdac/ar_index_global_prof.txt (… profiles, read in 40 s): 5123 in box/period, from 412 floats
+[argo] 50/412 files, 610 profiles kept, 0 failed, 38 s
+…
+[argo] read: … points in … s
+[argo] after QC: … points
+```
+
+The index is looked for in `gdac_dir` and its parent; if the mirror keeps it elsewhere, set `index:`
+in the recipe. Without it the reader says so and opens every `<dac>/<wmo>/<wmo>_prof.nc` — slow, but
+it no longer lists the millions of per-cycle files under `profiles/`. Then: QC on the standard flags,
+vertical interpolation, and the coverage table — where and when a float was, and how deep. Delayed-mode
+profiles use the `*_ADJUSTED` values, as argopy does. The values are discarded; F.4 replaces them with
+the truth. Output: `$OCEANML3D_DATA/argo/argo_profiles_gs.csv`; an existing table is kept (delete it to
+rebuild).
 
 **Downloads, when you really need one** — a product the centre does not mirror, or GLORYS outside
 the mirror's coverage — go on the only queue with outbound network, `ftp`
@@ -459,6 +473,7 @@ rsync -av $SCRATCH/oceanml3d/runs/<run>/ $DATAWORK/oceanml3d/runs/<run>/
 | `[regrid] N input file(s)` far from 365, with other years in the first/last names | the input glob matched the `_R<production date>` part of the names. Anchor the year on the validity date: `*_mean_${YEAR}????_R*.nc`. |
 | `by_year/*.nc` files but the merge finds nothing | written before 2026-09-19, when the per-year step still wrote NetCDF. Every intermediate is Zarr now (`by_year/*.zarr`, then `glorys/*.zarr`); delete the `.nc` and resubmit the array. |
 | `no file matches …/by_year/…zarr` at the merge, "They exist under …/res0.25" | the per-year step ran with a target resolution and the merge without: give both the same `OCEANML3D_TARGET_RES`, or set it once in `~/.config/oceanml3d/env.sh`. |
+| ARGO job killed on walltime with nothing after `ARGO profiles and coverage table from …` | before 2026-09-20: output was buffered and the reader decoded every cycle of every float in Python loops, or recursed into `profiles/` when the index was not found. Now each stage and every 50 files is logged; check the `[argo] index …` line. |
 | A `.tmp.<name>` directory in `by_year/` or `glorys/` | a write that was killed. Harmless: the next run removes it and starts that output again. |
 | An error about HDF5 file locking, or a hang on the first open | Lustre does not implement the locking HDF5 wants. `regrid.py` sets `HDF5_USE_FILE_LOCKING=FALSE`; other tools may need it exported too. |
 | `Could not find any nv files on this host!` | `--nv` on a CPU queue. Harmless, and no longer printed: `--nv` is passed only where a driver is present. Force it with `OCEANML3D_NV=1`. |
