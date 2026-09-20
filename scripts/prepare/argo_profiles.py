@@ -100,14 +100,31 @@ def run(recipe: dict) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(out, index=False) if out.suffix == ".csv" else table.to_parquet(out)
     print(f"{len(table)} profiles -> {out}  ({time.monotonic() - t0:.0f} s)", flush=True)
+    for line in argo.summarise_coverage(table, *recipe["time"]):
+        print(line, flush=True)
     return out
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--config", required=True)
+    p.add_argument("--config")
+    # The same summary the run prints, on a table that already exists -- to check a file written
+    # before this existed, or to look again without re-reading the GDAC.
+    p.add_argument("--summary", metavar="TABLE.csv",
+                   help="summarise an existing coverage table and exit")
+    p.add_argument("--time", nargs=2, metavar=("FIRST", "LAST"),
+                   help="with --summary: the window it should cover, to check for thin years")
+    args = p.parse_args()
+    if args.summary:
+        import pandas as pd
+
+        for line in argo.summarise_coverage(pd.read_csv(args.summary), *(args.time or (None, None))):
+            print(line)
+        raise SystemExit(0)
+    if not args.config:
+        p.error("--config is required (or --summary TABLE.csv)")
     try:
-        run(yaml.safe_load(os.path.expandvars(Path(p.parse_args().config).read_text())))
+        run(yaml.safe_load(os.path.expandvars(Path(args.config).read_text())))
     except argo.WalltimeBudgetExceeded as exc:
         # 75 = EX_TEMPFAIL: the step is unfinished but nothing is wrong. Resubmitting continues.
         print(f"[argo] {exc}", flush=True)

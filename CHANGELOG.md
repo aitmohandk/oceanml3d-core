@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-09-21: The ARGO table says what it contains, not just how many rows
+
+**Summary:** the first successful ARGO run produced 8 640 profiles in 73 s, and nothing in the log
+said whether they covered 2010-2020 or two good years — which is the only question that matters for
+a decade-long OSSE. The run now ends with the span, the float count, the profiles per year and the
+fraction of profiles reaching each depth level, and warns on a thin year or a level most profiles
+never reach. `--summary` prints the same for a table that already exists.
+
+**Files modified:**
+- `oceanml3d/obs/argo.py` — `summarise_coverage(table, first, last)`.
+- `scripts/prepare/argo_profiles.py` — printed at the end of every run; `--summary TABLE.csv
+  [--time FIRST LAST]` to check an existing table without re-reading the GDAC.
+- `docs/pipeline_3d.md` §3.2.
+
+**Rationale:** the step is fast now (14 s for the index, 0.26 s per float file), which is itself
+suspicious-looking after two four-hour kills, and a total of 8 640 is exactly as consistent with a
+correct run as with a truncated one. The per-year line settles it in one glance. The per-level line
+answers the other half, which nobody had asked yet: virtual ARGO gives the model temperature at 21
+levels down to 186 m, and a level the real floats do not reach is a target reconstructed from no
+observation — invisible in the metrics, which never compare against what is not there.
+
+**Verification:** `pytest -m "not slow"` — 903 passed, 9 skipped. Four new tests: the summary
+reports span, floats, years and depth reach; a year missing from the requested window is called out
+(and a window ending 11 days into a year does not flag that year); levels most profiles do not reach
+are called out; and the summary runs on a written table.
+
 ## 2026-09-20: The container ran its own copy of the package, not the clone's
 
 **Summary:** the ARGO job failed on `AttributeError: module 'oceanml3d.obs.argo' has no attribute

@@ -514,3 +514,50 @@ def depth_values_from_truth(truth: str | Path, depth_indices: list[int]) -> list
     print(f"[argo] depth levels from {path.name}: {depth[0]:.1f} .. {depth[-1]:.1f} m "
           f"({len(depth)} levels)", flush=True)
     return depth
+
+
+# ----------------------------------------------------------------------------- acceptance summary
+def summarise_coverage(table: pd.DataFrame, first: str | None = None, last: str | None = None,
+                       min_per_year: int = 100) -> list[str]:
+    """What the table actually contains: span, floats, profiles per year, coverage per level.
+
+    A count alone says nothing. 8 640 profiles over a decade and 8 640 concentrated in 2018 are the
+    same number, and the second would train a model on a year of in-situ data and validate it on
+    none. The per-level line is the other half: a float that stops at 100 m contributes nothing at
+    186 m, and `d25` near zero means the deep targets have no observation behind them.
+    """
+    out = []
+    if table.empty:
+        return ["[argo] the table is empty"]
+    t = pd.to_datetime(table["time"])
+    floats = table["profile_id"].astype(str).str.split("_").str[0].nunique()
+    out.append(f"[argo] table: {len(table)} profiles, {floats} floats, "
+               f"{t.min().date()} .. {t.max().date()}")
+    per_year = t.dt.year.value_counts().sort_index()
+    out.append("[argo] per year: " + "  ".join(f"{y} {n}" for y, n in per_year.items()))
+
+    levels = sorted(c for c in table.columns if len(c) == 3 and c[0] == "d" and c[1:].isdigit())
+    if levels:
+        cov = {c: float(table[c].mean()) for c in levels}
+        out.append("[argo] reaching each level: "
+                   + "  ".join(f"{c} {100 * v:.0f}%" for c, v in cov.items()))
+        shallow = [c for c, v in cov.items() if v < 0.5]
+        if shallow:
+            out.append(f"[argo] WARNING fewer than half the profiles reach {', '.join(shallow)}: the "
+                       f"virtual ARGO input will be nearly empty at those depths")
+
+    # Holes are what a total hides. A year inside the requested window with almost nothing in it is
+    # either a real gap in the array or a filter that is cutting too much -- both worth knowing
+    # before the model is trained on it.
+    if first and last:
+        want = range(pd.Timestamp(first).year, pd.Timestamp(last).year + 1)
+        thin = [y for y in want if per_year.get(y, 0) < min_per_year]
+        # The last year of a window ending in January is legitimately short; judge it pro rata.
+        edge = pd.Timestamp(last)
+        if edge.year in thin and per_year.get(edge.year, 0) >= min_per_year * edge.dayofyear / 365:
+            thin.remove(edge.year)
+        if thin:
+            out.append(f"[argo] WARNING fewer than {min_per_year} profiles in "
+                       + ", ".join(str(y) for y in thin)
+                       + " -- the requested window is not evenly covered")
+    return out

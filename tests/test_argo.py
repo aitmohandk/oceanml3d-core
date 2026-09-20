@@ -322,3 +322,55 @@ def test_the_driver_disables_hdf5_file_locking():
         mp.delenv("HDF5_USE_FILE_LOCKING", raising=False)
         spec.loader.exec_module(mod)
         assert os.environ["HDF5_USE_FILE_LOCKING"] == "FALSE"
+
+
+# --- is the table actually what was asked for? ----------------------------------------------------
+
+def _table_with(years, n_per_year=200, levels=("d00", "d12", "d25"), reach=1.0):
+    rows = []
+    for y in years:
+        for i in range(n_per_year):
+            row = {"profile_id": f"19000{i % 7}_{y}{i}",
+                   "time": pd.Timestamp(f"{y}-01-01") + pd.Timedelta(days=i % 360),
+                   "lat": 40.0, "lon": -60.0}
+            for k, lev in enumerate(levels):
+                row[lev] = 1.0 if k == 0 or i < reach * n_per_year else 0.0
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def test_the_summary_reports_span_floats_years_and_depth_reach():
+    out = "\n".join(argo.summarise_coverage(_table_with(range(2010, 2020))))
+    assert "2000 profiles, 7 floats, 2010-01-01 .. 2019-07-19" in out
+    assert "2010 200" in out and "2019 200" in out
+    assert "d00 100%" in out and "d25 100%" in out
+
+
+def test_a_year_missing_from_the_requested_window_is_called_out():
+    """A count alone hides a hole: 8000 profiles concentrated in three years and 8000 spread over ten
+    are the same number, and only one of them trains a model that has seen in-situ data every year."""
+    years = [y for y in range(2010, 2020) if y not in (2013, 2014)]
+    out = "\n".join(argo.summarise_coverage(_table_with(years), "2010-01-01", "2020-01-11"))
+    assert "fewer than 100 profiles in 2013, 2014" in out
+    assert "not evenly covered" in out
+    full = "\n".join(argo.summarise_coverage(_table_with(range(2010, 2021)), "2010-01-01", "2020-01-11"))
+    assert "WARNING" not in full, "a window ending 11 days into 2020 must not flag 2020"
+
+
+def test_levels_most_profiles_do_not_reach_are_called_out():
+    """`d25` near zero means the deepest targets have no observation behind them -- the model would
+    be reconstructing 186 m from nothing, and the metrics would not say so."""
+    out = "\n".join(argo.summarise_coverage(_table_with(range(2010, 2020), reach=0.2)))
+    assert "fewer than half the profiles reach d12, d25" in out
+
+
+def test_the_summary_runs_on_a_written_table_through_the_script(tmp_path, capsys):
+    import importlib.util
+
+    csv = tmp_path / "argo.csv"
+    _table_with(range(2010, 2013)).to_csv(csv, index=False)
+    spec = importlib.util.spec_from_file_location("argo_profiles3", "scripts/prepare/argo_profiles.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    lines = argo.summarise_coverage(pd.read_csv(csv), "2010-01-01", "2013-01-01")
+    assert any("600 profiles" in line for line in lines)
