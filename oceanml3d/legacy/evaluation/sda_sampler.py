@@ -64,7 +64,7 @@ def sda_guided_sample(model, batch, R_var: float, N_outer: int = 10,
     ``f(tau: float) -> float`` -- this knob is deliberately exposed, not
     hardcoded, per the discussion's framing of the guidance weight as another
     instance of the soft/weighted-prior design axis (see
-    ``docs/research_notes_cfm_da_originality_and_benchmarking.md`` sec 4/5).
+    ``docs/legacy/research_notes_cfm_da_originality_and_benchmarking.md`` sec 4/5).
 
     ``obs_indices`` is forwarded to ``guided_obs_cost`` unchanged (see there)
     -- passing e.g. ``range(8)`` simulates slow-only observation density on

@@ -16,7 +16,7 @@ repositories, and neither permitted it.
 | Source | Licence as published | Evidence |
 |---|---|---|
 | `CIA-Oceanix/NOSC` (via `aitmohandk/NOSC`) | **CeCILL-C** | `license.md`, 522 lines of CeCILL-C text; header: *Copyright IMT Atlantique/OceaniX, contributor(s): T. Picard, R. Fablet, S. Ouala, P. Haslée (IMT Atlantique)* |
-| `CIA-Oceanix/4dvarnet-fm-opencode` | **none stated** | no `LICENSE`, `COPYING` or licence metadata anywhere in the tree at `2c709f6`. The only CeCILL-C mention is `docs/research_notes_cfm_da_originality_and_benchmarking.md:125`, and it refers to `4dvarnet-starter` / `4dvarnet-core` — the source of the ported `GradSolver` / `ConvLstmGradModel` — not to that repository itself |
+| `CIA-Oceanix/4dvarnet-fm-opencode` | **none stated** | no `LICENSE`, `COPYING` or licence metadata anywhere in the tree at `2c709f6`. The only CeCILL-C mention is `docs/legacy/research_notes_cfm_da_originality_and_benchmarking.md:125`, and it refers to `4dvarnet-starter` / `4dvarnet-core` — the source of the ported `GradSolver` / `ConvLstmGradModel` — not to that repository itself |
 
 Roughly 120 files in `oceanml3d/models/ocean/`, `oceanml3d/obs/`, `oceanml3d/inference/` and
 `oceanml3d/data/` come from the first; most of `oceanml3d/legacy/`, `legacy/` and `config/legacy/`

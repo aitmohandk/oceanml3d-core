@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-09-20: Documentation cleanup — 18 files moved or removed, the rest realigned
+
+**Summary:** the reserve's working notes are gathered under `docs/legacy/` with an index; three
+documents describing a state that no longer exists are gone; `docs/README.md` indexes what is left;
+`README.md`, `AGENTS.md`, `PLAN.md` and `docs/data_preparation.md` now match the repository.
+
+**Files modified:**
+- moved to `docs/legacy/` (15 documents + the case-study PDFs/TeX): `phase_B_l96_cfm_variants`,
+  `phase_C_l96_joint_{da,neural}`, `joint_estimation_progress`, `joint_additional_metrics_plan`,
+  `experiment_G_tau0_cfm`, `cond_extra_dim_plan`, `fdv_torch_compile_and_jax_notes`,
+  `research_notes_cfm_da_originality_and_benchmarking`, the two root `L96_*_PROGRESS.md`,
+  `PLAN_case_study_refactoring.md`, `tests/{TEST_SUITE_SUMMARY,VANILLA_EXPERIMENT_TEST_PLAN}.md`,
+  `demos/IMPLEMENTATION_SUMMARY.md`, `docs/case_studies*.{pdf,tex}`, `docs/case-studies-l63-l96-sw.pdf`
+- removed: `docs/ROADMAP.md` and `docs/AUDIT_ca5277c.md` (the September audit and its lots, all
+  closed — the history is in this file), `docs/worktrees.md` (a worktree layout belonging to the
+  upstream repository, never valid here)
+- new: `docs/README.md` (index), `docs/legacy/README.md` (what each reserve note holds, and that
+  they are not maintained)
+- updated: `README.md` (test count, documentation section, layout), `AGENTS.md` (the worktree table
+  described the upstream; a fifth workflow step: keep the documentation true), `PLAN.md` (§A, the
+  gridded path's open work, up front: acceptance run, `bathy_gs` recipe, the missing
+  `config/paths/datarmor.yaml`, the licence permission reference, the numpy warning, `reports/` out
+  of the repository), `docs/data_preparation.md` (the chain as it is: `jobs/prepare.sh`, Zarr
+  intermediates, `res<step>` data root, ARGO from a GDAC mirror, `bathy_gs` marked as missing),
+  `PROVENANCE.md` and `oceanml3d/legacy/models/sda.py` (references to two documents that do not
+  exist in this repository), `LICENSING.md`, `reports/l96/*` (links to the moved notes)
+
+**Rationale:** 21 of the 33 markdown documents were working notes of the toy / Lorenz-96 / QG family
+or point-in-time reports, most of them predating the move to the gridded ocean models. Mixed with
+the current documentation they made it impossible to tell what still holds: the roadmap's own verdict
+("four blockers, CI inoperative") had been false for days, and `docs/worktrees.md` told a newcomer to
+`cd` into worktrees of another repository. The reserve's notes are moved rather than deleted for the
+same reason its code is kept: they are referenced from `oceanml3d/legacy/` and `reports/l96/`, and
+they are what makes that code usable again.
+
+**Verification:** `pytest -m "not slow"` — 885 passed, 9 skipped. `ruff check .` clean. Every
+relative link in the 61 tracked markdown files resolves (checked mechanically).
+
+
 ## 2026-09-20: ARGO from the local GDAC: fast, visible, and right on the real file layout
 
 **Summary:** The Datarmor ARGO job was killed on walltime (2 h) with nothing in its log past the

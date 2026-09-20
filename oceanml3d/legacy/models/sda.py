@@ -21,7 +21,7 @@ class UnconditionalPriorCFM(nn.Module):
 
     Meant to be combined with the observation-guided sampler in
     ``evaluation/sda_sampler.py`` at inference time. See
-    ``docs/phase_D_l96_sda.md`` for the design rationale (this is the score-
+    ``docs/legacy/`` for the surrounding notes (this is the score-
     based DA axis from the 2026-09-02 publication-positioning discussion).
     """
 

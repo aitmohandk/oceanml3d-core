@@ -1,8 +1,26 @@
 # Data preparation
 
-All recipes are YAML files under `scripts/prepare/recipes/` and run with
-`python scripts/prepare/<tool>.py --config <recipe>` (or through `jobs/`, see `jobs/README.md`).
-Paths use `${OCEANML3D_RAW}` (downloads) and `${OCEANML3D_DATA}` (catalog root).
+Which recipe produces which catalog key. The steps themselves are run through `jobs/prepare.sh`
+(`glorys <year>`, `concat`, `argo`, `obs`), which is what the PBS and Slurm wrappers call; the
+runbooks [`platforms/datarmor.md`](platforms/datarmor.md) and
+[`platforms/jeanzay.md`](platforms/jeanzay.md) walk through it step by step, and
+[`pipeline_3d.md`](pipeline_3d.md) explains the task end to end.
+
+All recipes are YAML files under `scripts/prepare/recipes/` and can also be run directly with
+`python scripts/prepare/<tool>.py --config <recipe>`. Paths use `${OCEANML3D_RAW}` (downloads) and
+`${OCEANML3D_DATA}` (catalog root). A recipe named `<name>.<site>.yaml` is preferred over
+`<name>.yaml` when that site is selected — that is how Datarmor reads its local mirrors instead of
+downloading.
+
+Three things decide where the files land and what they are:
+
+* **`OCEANML3D_TARGET_RES`** — the grid step in degrees. Set, the data root becomes
+  `$OCEANML3D_DATA/res<step>` for every step, training included, so two resolutions never share a
+  directory ([`pipeline_3d.md` §3.1a](pipeline_3d.md)). Unset: the native grid.
+* **Zarr for everything intermediate** — the per-year GLORYS stores and the merged one. NetCDF is
+  only what is read from outside (the GLORYS files, the ARGO GDAC) and what is exported (the
+  product, the contract with `oceanml3d-eval`).
+* **The catalog** — `config/paths/<site>.yaml` maps each key below to a path under its root.
 
 | Step | Tool | Output (catalog key) |
 |---|---|---|
@@ -14,12 +32,17 @@ Paths use `${OCEANML3D_RAW}` (downloads) and `${OCEANML3D_DATA}` (catalog root).
 
 ## OSSE-3D (Gulf Stream)
 
-| Step | Tool | Output (catalog key) |
+| Step | How | Output (catalog key) |
 |---|---|---|
-| GLORYS12 truth, 21 levels | `download_copernicus.py` → `regrid.py recipes/glorys_gs_multidepth.yaml` | `glorys_gs_multidepth` |
-| GLORYS12 truth, surface | the same Zarr store (`zos` has no depth axis) | `glorys_gs_surface` |
-| Bathymetry on the GLORYS grid | `regrid.py` (GEBCO → 1/12°) | `bathy_gs` |
-| ARGO coverage table | `argo_profiles.py recipes/argo_profiles_gs.yaml` | `argo_profiles_gs` |
+| GLORYS12 truth, one year | `jobs/prepare.sh glorys <year>` → `by_year/glorys_gs_multidepth_<year>.zarr` | — |
+| GLORYS12 truth, merged | `jobs/prepare.sh concat` | `glorys_gs_multidepth` |
+| GLORYS12 truth, surface | the same Zarr store (`zos` has no depth axis, `lat` is a coordinate) | `glorys_gs_surface` |
+| Bathymetry on the GLORYS grid | **no recipe yet** — GEBCO with `regrid.py` and `reference:` pointing at the prepared truth (`PLAN.md` §A) | `bathy_gs` |
+| ARGO coverage table | `jobs/prepare.sh argo` — from the site's GDAC mirror when it has one (`source: gdac`, Datarmor's `/home/ref-argo/gdac`, read through its global index), else downloaded with `argopy` | `argo_profiles_gs` |
+
+On Datarmor neither GLORYS nor ARGO is downloaded: both are mirrored under `/home/ref-*`. The
+per-year step reads the mirror directly, cuts the Gulf Stream box in each file before any read, and
+refuses an output above `max_gb` — the guard that came out of a 1949 GB run.
 
 Then the observing system itself, which is **simulated, not downloaded**:
 
