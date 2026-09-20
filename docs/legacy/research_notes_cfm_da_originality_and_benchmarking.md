@@ -18,7 +18,7 @@ of `phase_B_l96_cfm_variants.md` / `phase_C_l96_joint_da.md`).
   correction) — applied here with a flow-matching residual model instead of diffusion,
   in a DA context instead of forecasting/downscaling. Incremental, not a new
   mechanism.
-- **Naming caveat (from `docs/phase_B_l96_cfm_variants.md:55`):** the residual stage
+- **Naming caveat (from `docs/legacy/phase_B_l96_cfm_variants.md:55`):** the residual stage
   uses the standard CFM loss (`v = residual − x0`), explicitly **not** Tweedie's
   formula. The "Tweedie" name is inherited from the legacy `TweedieSolver`
   (`models/solver.py`) and is a misnomer for the current V2 architecture — worth

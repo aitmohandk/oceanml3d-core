@@ -42,6 +42,7 @@ oceanml3d/
 config/        YAML presets for the CLI, rooted at main.yaml; config/legacy/ is the toy root
 legacy/        the toy driver scripts: train.py, eval_*.py, run_experiment*.py, ...
 tests/         the suite (gridded *and* reserve)   reports/, scripts/, demos/, notebooks/
+docs/          the documentation, indexed by docs/README.md; docs/legacy/ is the reserve's notes
 jobs/          run it on a cluster: one runner, Slurm and PBS wrappers, one file per site
 container/     Apptainer definition, one image for V100 / RTX 8000 / A100 / H100
 ```
@@ -63,7 +64,7 @@ models that share a name. The reserve is set aside, not removed: its tests still
 oceanml3d --help                           # the registry-based gridded path
 oceanml3d experiment=smoke training=debug  # see config/experiment/ (11 presets)
 python legacy/train.py experiment=<name>   # the reserve, see config/legacy/experiment/ (67)
-pytest -q -m "not slow"                    # 811 passed, 9 skipped, ~7 min
+pytest -q -m "not slow"                    # 885 passed, 9 skipped, ~5 min
 ruff check .
 ```
 
@@ -73,5 +74,14 @@ ruff check .
 produces. The two share `product_contract.py` byte-for-byte, sealed by a SHA-256 pin on both
 sides — change it in one repository only and the cross-repo contract test fails in the other.
 
-`AGENTS.md` holds the working conventions, `PLAN.md` the state of the work,
-`docs/feature_inventory.md` what came from where, `docs/worktrees.md` the topic-worktree workflow.
+## Documentation
+
+[`docs/README.md`](docs/README.md) is the index. The three that matter most:
+[`docs/gridded_models.md`](docs/gridded_models.md) (every key of a task config, and what the run
+refuses), [`docs/pipeline_3d.md`](docs/pipeline_3d.md) (the OSSE-3D task end to end) and the
+runbooks [`docs/platforms/datarmor.md`](docs/platforms/datarmor.md) and
+[`docs/platforms/jeanzay.md`](docs/platforms/jeanzay.md).
+
+`AGENTS.md` holds the working conventions, `PLAN.md` the open work, `CHANGELOG.md` what changed and
+why, `docs/feature_inventory.md` what came from where. Licence: EUPL-1.2 — `LICENSE`, `NOTICE`,
+`LICENSING.md`.

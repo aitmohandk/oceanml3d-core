@@ -1,9 +1,44 @@
 # oceanml3d-core — Plan
 
-Derived from `4dvarnet-fm-opencode` and now independent of it (see `PROVENANCE.md`). The upstream
-plan is kept as `PLAN_upstream.md`.
+Derived from `4dvarnet-fm-opencode` and now independent of it (see `PROVENANCE.md`).
 
-## 0. The blocking question — RESOLVED, no GPU needed
+**How to read this file.** §A is the open work on the gridded ocean path — what this repository is
+about. Everything after it is the backlog of the reserve (toy / Lorenz-96 / QG), kept because the
+reserve is still tested and runnable. What has been *done* is in `CHANGELOG.md`, entry by entry,
+with the reasoning; this file only carries what is not.
+
+## A. Gridded path — open
+
+Ordered by what blocks the next result.
+
+- [ ] **The acceptance run.** One full run of `osse3d_gs21_multivar_unet` and one of
+      `nosc_15m_duacs` on real data, with time and memory recorded in `CHANGELOG.md`. Everything
+      else in this section is small; this is the one that tells us the pipeline holds at scale.
+      Blocked only on the data preparation finishing on Datarmor.
+- [ ] **`bathy_gs` has no recipe.** The catalog key exists and `osse3d_gs21` reads it as a static
+      input; nothing produces it. GEBCO regridded onto the prepared truth with `regrid.py`
+      (`reference:` pointing at the truth) — see `docs/data_preparation.md`.
+- [ ] **`config/paths/datarmor.yaml` does not exist.** `jobs/env/datarmor.sh` sets
+      `OCEANML3D_PATHS=datarmor`; the file has to be written from `config/paths/local.yaml`, with
+      the same sixteen keys and this centre's paths. Same for `jeanzay`.
+- [ ] **Record the licence permission** in `LICENSING.md` (who granted it, when, reference), and
+      put SPDX headers on the Python files — here and in `oceanml3d-eval`.
+- [ ] **`cache: true` for the OSSE-3D configs**: decide on the evidence of the full run.
+- [ ] **Order and border tests on `reconstruct`** (patch permutation, insufficient overlap).
+- [ ] **The numpy binary-compatibility warning** (`numpy.ndarray size changed`) comes from a
+      C extension built against another numpy; it is harmless but noisy. Identify which
+      (netCDF4 or cftime, by elimination) and pin it in `environment.yml`.
+- [ ] **`reports/` out of the repository** (a GitHub release or an artefact store): 39 MB of PNG
+      and PDF for a 86 MB clone.
+- [ ] Depth as a patch dimension — `PatchArray` is already generic over `DIMS`.
+
+The evaluation side has its own open list in `oceanml3d-eval/PLAN.md`: an in-situ ARGO reference
+(the OSSE → OSE step), along-track altimetry, significance testing between two models, and the
+conversion of the last `legacy_from_fm/` drivers.
+
+## B. Reserve backlog
+
+### 0. The blocking question — RESOLVED, no GPU needed
 - [x] **The published S0/S1 numbers reproduce.** The constants in `test_equiv_report.py` were stale
       (pre-bugfix 0.78/0.77 instead of the report's current 0.88/0.88) and the protocol used 1 window
       against a 200-window mean. Device RNG was ruled out by measurement first: six CPU seeds give
@@ -24,7 +59,7 @@ plan is kept as `PLAN_upstream.md`.
       to converge and returns the blown-up trajectory without raising. Needs a divergence guard.
       Until then the report comparison uses the median rather than the mean.
 
-## 1. Safety net — mostly done
+### 1. Safety net — mostly done
 - [x] record the suite at `pre-refactor`: 585 passed, 27 failed, 2 collection errors
 - [x] quarantine with reasons (`tests/KNOWN_FAILURES.md`)
 - [x] golden files for QG and Lorenz-63, replayed at 1e-10
@@ -58,7 +93,7 @@ plan is kept as `PLAN_upstream.md`.
       module plus a guard against a wrong root making them all vacuously pass. Written and proven
       green *before* the namespace move, which is what it was for.
 
-## 2. Correctness audit of the scientific core
+### 2. Correctness audit of the scientific core
 - [x] `crps` returned the negation of the CRPS — fixed, `tests/test_crps.py`
 - [x] `Strong4DVar`'s energy-score path had never executed — fixed (`_as_numpy`)
 - [x] `JointCFM.compute_cfm_loss` crashed on any batch without `true_params`, the exact case its
@@ -70,7 +105,7 @@ plan is kept as `PLAN_upstream.md`.
 - [ ] two-scale Lorenz-96 — energy bounds, exponential divergence, the clamp
 - [ ] `estimate_metrics.py`, `explained_variance`, SW component metrics
 
-## 3. Structure (after 0-2)
+### 3. Structure (after 0-2)
 - [x] **the `oceanml3d/` namespace and `pyproject.toml`** — `models/`, `data/`, `training/`,
       `evaluation/` and `conf/` moved under one package (first step of the target tree in
       `docs/REORG_PLAN.md`), 455 import statements rewritten across 128 files. The move made the
@@ -100,7 +135,7 @@ plan is kept as `PLAN_upstream.md`.
       trustworthy. This is now the next structural task.
 - [ ] the QG methods at 88-91% similarity (needs a judgement call on the formulations)
 
-## 4. Transplants from the prototype — DONE 2026-09-14
+### 4. Transplants from the prototype — DONE 2026-09-14
 - [x] `variables.py`, `catalog.py`, lazy xarray data layer, `patches.py`, `datamodule.py`, `augment.py`
 - [x] `obs/`, `inference/export.py` + `product_contract.py`, `config_schema.py`, `scripts/prepare/`
 - [x] **the port is in the tree, not in a sibling directory.** 120 files copied from
@@ -135,7 +170,7 @@ plan is kept as `PLAN_upstream.md`.
 - [ ] ensemble metrics additions (spread-skill correction, rank histogram) — these live in
       `oceanml3d-eval`, not here
 
-## 5. Fold in the other repositories, then remove the scaffolding
+### 5. Fold in the other repositories, then remove the scaffolding
 - [x] NOSC — done via §4; it lives at `oceanml3d/models/ocean/nosc/` with its data pipeline,
       OSSE chain, weights and ablations. `docs/migration_nosc.md` is the module-by-module map.
 - [ ] reanalyses data layer + CS1-CS4 — the *capabilities* are present and reimplemented (see

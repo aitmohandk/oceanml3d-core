@@ -6,7 +6,7 @@ import are deliberately not merged.
 
 | Origin | What was taken | Status |
 |---|---|---|
-| [`CIA-Oceanix/4dvarnet-fm-opencode`](https://github.com/CIA-Oceanix/4dvarnet-fm-opencode) | the 4DVarNet and flow-matching core: models, solvers, Lorenz-63/96 and quasi-geostrophic dynamics, the Lightning training pipeline, the EnKF/ETKF/4D-Var baselines, the Hydra configuration tree, the test suite | imported once, in commit `036491d`; its plan is kept verbatim as `PLAN_upstream.md` |
+| [`CIA-Oceanix/4dvarnet-fm-opencode`](https://github.com/CIA-Oceanix/4dvarnet-fm-opencode) | the 4DVarNet and flow-matching core: models, solvers, Lorenz-63/96 and quasi-geostrophic dynamics, the Lightning training pipeline, the EnKF/ETKF/4D-Var baselines, the Hydra configuration tree, the test suite | imported once, in commit `036491d` |
 | [`aitmohandk/NOSC`](https://github.com/aitmohandk/NOSC) | the multivariate ocean reconstruction work: the multivariate model, OSSE observation operators, the Argo layer, the lazy data layer and its configurations | ported through a prototype, then transplanted into this tree (see `CHANGELOG.md` and `docs/feature_inventory.md`) |
 
 ## Why not a fork

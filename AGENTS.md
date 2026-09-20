@@ -8,31 +8,15 @@ Every opencode session in this repository MUST follow this workflow:
 2. **Implement changes** — Make the requested code modifications.
 3. **Verify** — Run the relevant test/lint commands (see below).
 4. **Log changes** — Append a dated entry to `CHANGELOG.md` describing what was implemented, why, and any notable design decisions.
+5. **Keep the documentation true** — a change that alters a command, a config key, a default or a
+   file layout updates the document that states it. `docs/README.md` is the index; the reserve's
+   notes under `docs/legacy/` are provenance and are not maintained.
 
-### Working tree selection (IMPORTANT)
+### One working tree, one branch at a time
 
-This project uses one physical worktree per topic branch:
-
-| Worktree dir | Branch | Topic |
-|---|---|---|
-| `/Odyssey/private/rfablet/Python/4dvarnet-fm-opencode` | `master` | Integration / PR landing |
-| `.../4dvarnet-fm-opencode/4dvarnet-fm-joint-da` | `feature/l96-joint-da-benchmark` | Joint DA (ETKF) topic |
-| `.../4dvarnet-fm-opencode/4dvarnet-fm-cfm-v2v3` | `feature/l96-v2v3-pure` | V2/V3 (TweedieCFM + PredictStateCFM) topic |
-
-**Every opencode session MUST start in the appropriate working tree.** Branch-pinning guarantees you cannot work on the wrong branch, but this only works if you `cd` into the topic directory first:
-
-- **Joint-DA session**: `cd .../4dvarnet-fm-opencode/4dvarnet-fm-joint-da && opencode`
-- **V2/V3 session**: `cd .../4dvarnet-fm-opencode/4dvarnet-fm-cfm-v2v3 && opencode`
-- **Main repo changes**: `cd .../4dvarnet-fm-opencode && opencode`
-
-**Worktree bootstrap rule:** When starting a topic session, if `AGENTS.md`, `PLAN.md`, or `CHANGELOG.md` were last updated on the master branch **before the topic was forked** (check their timestamps), manually sync them from master first:
-
-```bash
-git pull origin master --dry-run  # fast check: origin/master newer?
-# If newer: git pull origin master    # sync merged docs first
-```
-
-Commit-before-switch rule: **Never leave uncommitted edits when switching worktrees.** Always commit or stash your unfinished work before checking out a different branch.
+This repository has a single working tree; the three-worktree table this file used to carry
+described `4dvarnet-fm-opencode`, the upstream, and never applied here. Work on a branch off
+`main`, and commit before switching branches.
 
 ## Git / PR Workflow
 
@@ -98,7 +82,7 @@ Each entry in `CHANGELOG.md` should follow this format:
 
 - **Lint:** `ruff check .` — check code quality
 - **Type check:** `mypy .` — static type analysis
-- **Tests:** `pytest tests/ -v` — run full test suite
+- **Tests:** `pytest tests/ -v` — run full test suite (885 pass, 9 skip, ~5 min without `slow`)
 - **Quick test:** `pytest tests/ -v -m "not slow"` — skip slow tests
 - **Coverage:** `pytest tests/ --cov=oceanml3d --cov-report=term`
 
@@ -112,7 +96,8 @@ All importable code lives under the `oceanml3d/` package. Import it by its full 
 
 The repository is about the **gridded ocean models**. The toy / Lorenz / QG family it grew out of
 is in reserve under `oceanml3d/legacy/` + `legacy/` + `config/legacy/` — still tested, still
-runnable, just out of the way. `oceanml3d/legacy/README.md` is the only document about it.
+runnable, just out of the way. `oceanml3d/legacy/README.md` says how to use it, and
+`docs/legacy/` holds its working notes (provenance, not maintained).
 
 - `oceanml3d/data/` — the lazy xarray layer: `open`, `patches`, `datamodule`, `transforms`, `augment`
 - `oceanml3d/models/ocean/` — the gridded models, built through the `@register_model` registry
