@@ -10,8 +10,33 @@
 # scripts/prepare/recipes/argo_profiles_gs.datarmor.yaml reads it, so nothing is downloaded. Only a
 # site without a mirror falls back to argopy and needs outbound network (`-q ftp` on the qsub line).
 #     qsub -v OCEANML3D_SITE=datarmor jobs/pbs/prepare_argo.pbs
+#
+# Reading a few hundred float files off a shared mirror can outlast the walltime. The recipe's
+# `time_budget_s` makes the step stop cleanly before the scheduler kills it, with its per-float cache
+# written and exit code 75; this wrapper then resubmits itself, up to OCEANML3D_MAX_ATTEMPTS, and each
+# attempt continues where the last one stopped. Nothing is re-read.
 set -euo pipefail
 cd "${PBS_O_WORKDIR:-$PWD}"
 mkdir -p logs
 export OCEANML3D_SITE="${OCEANML3D_SITE:-datarmor}"
-exec jobs/prepare.sh argo
+ATTEMPT="${OCEANML3D_ATTEMPT:-1}"
+MAX="${OCEANML3D_MAX_ATTEMPTS:-4}"
+
+set +e
+jobs/prepare.sh argo
+rc=$?
+set -e
+
+if [[ "$rc" -eq 75 && "$ATTEMPT" -lt "$MAX" ]]; then
+    pass="OCEANML3D_SITE=$OCEANML3D_SITE,OCEANML3D_ATTEMPT=$((ATTEMPT + 1)),OCEANML3D_MAX_ATTEMPTS=$MAX"
+    # A plain `[[ ... ]] && pass=...` would abort the script under `set -e` when the variable is unset.
+    if [[ -n "${OCEANML3D_TARGET_RES:-}" ]]; then
+        pass="$pass,OCEANML3D_TARGET_RES=$OCEANML3D_TARGET_RES"
+    fi
+    echo "[argo] time budget reached on attempt $ATTEMPT/$MAX: resubmitting, the cache resumes"
+    qsub -v "$pass" jobs/pbs/prepare_argo.pbs
+elif [[ "$rc" -eq 75 ]]; then
+    echo "[argo] still unfinished after $MAX attempts. Raise OCEANML3D_MAX_ATTEMPTS, or look at the" \
+         "s/file rate in this log: above a few seconds per file the mirror, not the code, is the limit."
+fi
+exit "$rc"

@@ -1,4 +1,6 @@
 """Ported from NOSC first_implementation tests/test_argo_and_pseudo_obs.py (numpy part)."""
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -201,3 +203,122 @@ def test_argo_recipe_end_to_end_on_a_fake_gdac(tmp_path):
     table = pd.read_csv(out)
     assert len(table) == 2 and {"d00", "d02", "d04"} <= set(table.columns)
     assert table["d00"].eq(1).all()
+
+
+# --- the walltime failures: visibility, resumability, fail-fast ----------------------------------
+# Two ARGO jobs on Datarmor were killed on walltime with one header line in the log: no way to tell
+# whether the index read, the first netCDF open or the two-thousandth file was the slow part. These
+# pin what was added in response.
+
+def _fake_gdac(tmp_path, n_floats=4, n_prof=2):
+    """A GDAC tree with an index, `n_floats` floats, all of them inside the Gulf Stream box."""
+    lines = ["# header",
+             "file,date,latitude,longitude,ocean,profiler_type,institution,date_update"]
+    for i in range(n_floats):
+        wmo = f"190000{i}"
+        _real_prof(tmp_path / f"gdac/dac/aoml/{wmo}/{wmo}_prof.nc", [40.0 + i * 0.1] * n_prof,
+                   [-60.0] * n_prof, pd.date_range("2015-06-01", periods=n_prof, freq="10D"),
+                   wmo=wmo, n_lev=6)
+        lines.append(f"aoml/{wmo}/profiles/R{wmo}_001.nc,20150601000000,{40.0 + i * 0.1},-60.0,A,846,AO,20160101000000")
+    (tmp_path / "gdac/ar_index_global_prof.txt").write_text("\n".join(lines) + "\n")
+    return tmp_path / "gdac"
+
+
+def _table(gdac, **kw):
+    return argo.coverage_table_local(gdac, [-66, -54, 32, 44], "2010-01-01", "2020-01-11",
+                                     [5.0, 25.0, 45.0], [0, 2, 4], value_var="TEMP", **kw)
+
+
+def test_streaming_per_float_gives_the_same_table_as_reading_everything_first(tmp_path):
+    """The claim that makes `coverage_table_local` legitimate: QC per float == QC over the whole box,
+    because every step of `apply_standard_qc` works inside one profile."""
+    gdac = _fake_gdac(tmp_path, n_floats=3, n_prof=3)
+    streamed = _table(gdac).sort_values("profile_id").reset_index(drop=True)
+    ds = argo.apply_standard_qc(argo.fetch_argo_profiles_local(gdac, -66, -54, 32, 44,
+                                                               "2010-01-01", "2020-01-11"))
+    at_once = argo.coverage_table(ds, [5.0, 25.0, 45.0], [0, 2, 4]).sort_values("profile_id").reset_index(drop=True)
+    assert len(streamed) == 9
+    pd.testing.assert_frame_equal(streamed, at_once, check_like=True)
+
+
+def test_the_cache_makes_a_second_run_reuse_instead_of_reopening(tmp_path, monkeypatch):
+    gdac = _fake_gdac(tmp_path)
+    cache = tmp_path / "cache"
+    first = _table(gdac, cache_dir=cache)
+    assert len(list(cache.glob("*.done"))) == 4
+
+    opened = []
+    monkeypatch.setattr(argo.xr, "open_dataset",
+                        lambda *a, **k: opened.append(a[0]) or (_ for _ in ()).throw(AssertionError("reopened")))
+    again = _table(gdac, cache_dir=cache)
+    assert opened == []
+    pd.testing.assert_frame_equal(first.sort_values("profile_id").reset_index(drop=True),
+                                  again.sort_values("profile_id").reset_index(drop=True))
+
+
+def test_the_time_budget_stops_cleanly_and_the_next_run_finishes(tmp_path):
+    gdac = _fake_gdac(tmp_path, n_floats=3)
+    cache = tmp_path / "cache"
+    with pytest.raises(argo.WalltimeBudgetExceeded, match="resubmit the same job"):
+        _table(gdac, cache_dir=cache, time_budget_s=-1.0)          # over budget from the first file
+    assert len(list(cache.glob("*.done"))) == 1, "the float that was read must be kept"
+    table = _table(gdac, cache_dir=cache)                          # no budget: finishes
+    assert len(table) == 6 and table.profile_id.nunique() == 6
+
+
+def test_the_budget_is_not_raised_when_the_last_float_is_the_one_over_it(tmp_path):
+    """A budget reached on the final file is not an interrupted run: the table is complete."""
+    gdac = _fake_gdac(tmp_path, n_floats=1)
+    assert len(_table(gdac, cache_dir=tmp_path / "c", time_budget_s=-1.0)) == 2
+
+
+def test_an_index_pointing_outside_the_tree_says_so_instead_of_failing_on_every_file(tmp_path):
+    (tmp_path / "gdac").mkdir()
+    (tmp_path / "gdac/ar_index_global_prof.txt").write_text(
+        "# header\nfile,date,latitude,longitude,ocean,profiler_type,institution,date_update\n"
+        "aoml/1900001/profiles/R1900001_001.nc,20150601000000,40.0,-60.0,A,846,AO,20160101000000\n")
+    with pytest.raises(RuntimeError, match="none of the first 1 files"):
+        argo.gdac_prof_files(tmp_path / "gdac", -66, -54, 32, 44, "2010-01-01", "2020-01-11")
+
+
+def test_the_index_is_read_in_chunks_and_the_chunking_changes_nothing(tmp_path):
+    gdac = _fake_gdac(tmp_path, n_floats=3)
+    whole = argo.prof_files_from_index(gdac, -66, -54, 32, 44, "2010-01-01", "2020-01-11")
+    assert whole == argo.prof_files_from_index(gdac, -66, -54, 32, 44, "2010-01-01", "2020-01-11",
+                                               chunksize=1)
+    assert len(whole) == 3
+
+
+def test_the_depth_levels_are_read_from_a_zarr_truth_and_a_wrong_path_fails_at_once(tmp_path):
+    """The truth has been a Zarr store since the preparation stopped writing NetCDF intermediates,
+    and it is read before the profiles so a typo costs a second, not four hours."""
+    xr.Dataset(coords={"depth": [5.0, 15.0, 25.0]}).to_zarr(tmp_path / "truth.zarr")
+    assert argo.depth_values_from_truth(tmp_path / "truth.zarr", [0, 2]) == [5.0, 25.0]
+    with pytest.raises(FileNotFoundError, match="jobs/prepare.sh concat"):
+        argo.depth_values_from_truth(tmp_path / "nope.zarr", [0])
+
+
+def test_progress_reports_the_first_files_by_name_and_calls_out_a_slow_one(capsys):
+    """The first progress line used to come after 50 files: a job stuck on the first open said
+    nothing at all before the scheduler killed it."""
+    prog = argo.FileProgress(1000, every=10, slow_s=0.0)
+    prog.before(1, "/home/ref-argo/gdac/dac/aoml/1900001/1900001_prof.nc")
+    prog.after(1, "/home/ref-argo/gdac/dac/aoml/1900001/1900001_prof.nc", kept=3)
+    out = capsys.readouterr().out
+    assert "opening 1/1000: /home/ref-argo" in out and "slow file" in out
+    assert "1/1000 files, 3 profiles kept" in out and "min left" in out
+
+
+def test_the_driver_disables_hdf5_file_locking():
+    """Documented in regrid.py as "a hang on the first open" on these filesystems, and missing here:
+    this script is the one that opens thousands of files on a read-only mirror."""
+    import importlib.util
+
+    import pytest as _pytest
+
+    spec = importlib.util.spec_from_file_location("argo_profiles2", "scripts/prepare/argo_profiles.py")
+    mod = importlib.util.module_from_spec(spec)
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.delenv("HDF5_USE_FILE_LOCKING", raising=False)
+        spec.loader.exec_module(mod)
+        assert os.environ["HDF5_USE_FILE_LOCKING"] == "FALSE"

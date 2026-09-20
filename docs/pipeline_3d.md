@@ -156,6 +156,20 @@ the **coverage table**: where and when a float was, and how deep it reached. The
 away — §3.3 replaces them with the truth. That is what makes the ARGO input *virtual*: real
 geometry, simulated values.
 
+**This is the step that gets killed on walltime**, because it opens a few hundred float files off a
+shared, read-only mirror and that is slow in a way no amount of code can fix. Three things make it
+survivable, all on by default in `argo_profiles_gs.datarmor.yaml`:
+
+| | What it does |
+|---|---|
+| `cache_dir:` | one small file per float. A re-run skips what is done, so nothing is ever read twice. Delete the directory to force a full rebuild. |
+| `time_budget_s:` | stop cleanly before the scheduler kills the job — cache written, exit code **75**. `jobs/pbs/prepare_argo.pbs` then resubmits itself, up to `OCEANML3D_MAX_ATTEMPTS` (4), each attempt continuing where the last stopped. |
+| the log | every stage is announced before it runs and timed after: Python started, imports done, the mirror and its top level, the index and its size, one line per chunk of index read, the first three files by name, then a rate and an estimate, plus any single file that took more than 20 s. |
+
+Read the log top-down when something goes wrong: the last line it reached *is* the diagnosis.
+Nothing after `python started` means the container or the imports; nothing after the index lines
+means the mirror is not delivering; a rate of seconds per file means the filesystem, not the code.
+
 Bathymetry is **not** part of this step. `config/data/osse3d_gs21.yaml` ships with `bathy: null`:
 the first model to validate is the simple one, and nothing here produces `bathy_gs`. When it is
 wanted, it is GEBCO regridded onto the prepared truth, once, with `regrid.py` and `reference:`

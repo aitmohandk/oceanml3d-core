@@ -149,43 +149,74 @@ def pointcloud_from_gdac_file(ds: xr.Dataset, value_vars=VALUE_VARS, keep_prof: 
 
 
 INDEX_NAMES = ("ar_index_global_prof.txt", "ar_index_global_prof.txt.gz")
+INDEX_CHUNK = 500_000
 
 
-def find_index(gdac_dir) -> Path | None:
+def find_index(gdac_dir, verbose: bool = True) -> Path | None:
+    """The global profile index, beside the GDAC root or one level above it.
+
+    Verbose on purpose: the fallback (scanning every float directory) costs hours, so the log has to
+    say which of the two happened, and when no index is found, where it looked.
+    """
     root = Path(gdac_dir)
+    tried = []
     for base in (root, root.parent):
         for n in INDEX_NAMES:
-            if (base / n).exists():
-                return base / n
+            tried.append(base / n)
+            if tried[-1].exists():
+                if verbose:
+                    print(f"[argo] index: {tried[-1]} ({tried[-1].stat().st_size / 1e6:.0f} MB)", flush=True)
+                return tried[-1]
+    if verbose:
+        print("[argo] no index found; looked for " + ", ".join(str(t) for t in tried), flush=True)
     return None
 
 
 def prof_files_from_index(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date,
-                          index: str | Path | None = None) -> list[Path] | None:
+                          index: str | Path | None = None, chunksize: int = INDEX_CHUNK) -> list[Path] | None:
     """The ``<dac>/<wmo>/<wmo>_prof.nc`` files of the floats with a profile in the box and period.
 
     Every GDAC ships ``ar_index_global_prof.txt``: one line per profile with its date and position.
     Filtering it first means opening the few hundred floats that crossed the box instead of all
     ~20 000 in the archive -- minutes instead of hours on a shared filesystem. Returns ``None`` when
     the mirror has no index, so the caller can fall back to scanning.
+
+    Read in chunks, and reporting each one. Whole-file, this is three million rows of Python strings
+    (a couple of gigabytes of objects) and one silent call: a job killed on walltime could not say
+    whether the index read was the slow part or had never even started.
     """
     root = Path(gdac_dir)
     index = Path(index) if index else find_index(root)
     if index is None or not index.exists():
         return None
-    t0 = time.monotonic()
-    df = pd.read_csv(index, comment="#", usecols=["file", "date", "latitude", "longitude"],
-                     dtype={"file": str, "date": str})
-    t = pd.to_datetime(df["date"].str.slice(0, 14), format="%Y%m%d%H%M%S", errors="coerce")
-    keep = (df.latitude.between(lat_min, lat_max) & df.longitude.between(lon_min, lon_max)
-            & (t >= pd.Timestamp(start_date)) & (t <= pd.Timestamp(end_date)))
+    t0, t1 = pd.Timestamp(start_date), pd.Timestamp(end_date)
+    started = time.monotonic()
+    print(f"[argo] reading the index in chunks of {chunksize} rows (a global index holds 2-3 million "
+          f"profiles: seconds on a local disk, minutes on a network mount)", flush=True)
+    rows = kept = 0
+    floats: set[str] = set()
+    first = last = None
+    for chunk in pd.read_csv(index, comment="#", usecols=["file", "date", "latitude", "longitude"],
+                             dtype={"file": str, "date": str}, chunksize=chunksize):
+        t = pd.to_datetime(chunk["date"].str.slice(0, 14), format="%Y%m%d%H%M%S", errors="coerce")
+        keep = (chunk.latitude.between(lat_min, lat_max) & chunk.longitude.between(lon_min, lon_max)
+                & (t >= t0) & (t <= t1))
+        rows, kept = rows + len(chunk), kept + int(keep.sum())
+        floats.update("/".join(f.split("/")[:2]) for f in chunk.loc[keep, "file"])
+        lo, hi = t.min(), t.max()
+        first = lo if first is None or (pd.notna(lo) and lo < first) else first
+        last = hi if last is None or (pd.notna(hi) and hi > last) else last
+        print(f"[argo]   {rows:>9} index rows, {kept} in box/period, {len(floats)} floats, "
+              f"{time.monotonic() - started:.0f} s", flush=True)
     # aoml/1900722/profiles/D1900722_061.nc -> aoml/1900722/1900722_prof.nc. Index paths are relative
     # to the `dac/` directory, which sits next to the index in a standard GDAC tree.
     base = index.parent / "dac" if (index.parent / "dac").is_dir() else root
-    floats = sorted({"/".join(f.split("/")[:2]) for f in df.loc[keep, "file"]})
-    print(f"[argo] index {index} ({len(df)} profiles, read in {time.monotonic() - t0:.0f} s): "
-          f"{int(keep.sum())} in box/period, from {len(floats)} floats")
-    return [base / f / f"{f.split('/')[1]}_prof.nc" for f in floats]
+    print(f"[argo] index covers {first} .. {last}; {kept} profiles in the box and period from "
+          f"{len(floats)} floats, read in {time.monotonic() - started:.0f} s", flush=True)
+    if last is not None and last < t1:
+        print(f"[argo] NOTE the index stops at {last}, before the requested {t1.date()}: the mirror "
+              f"may be behind, or this is all there is", flush=True)
+    return [base / f / f"{f.split('/')[1]}_prof.nc" for f in sorted(floats)]
 
 
 def _scan_prof_files(gdac_dir) -> list[Path]:
@@ -200,42 +231,190 @@ def _scan_prof_files(gdac_dir) -> list[Path]:
     return sorted(base.glob("*/*/*_prof.nc"))
 
 
-def fetch_argo_profiles_local(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date,
-                              index: str | Path | None = None, value_vars=VALUE_VARS,
-                              progress_every: int = 50, **_) -> xr.Dataset:
-    """Read a local GDAC mirror (``/home/ref-argo/gdac`` on Datarmor) instead of downloading."""
-    files = prof_files_from_index(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date, index)
+def gdac_prof_files(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date,
+                    index: str | Path | None = None) -> list[Path]:
+    """The float files to open, from the index when there is one, by scanning when there is not.
+
+    Reports the mirror before touching it: an unbound bind mount looks exactly like an empty GDAC,
+    and the difference decides whether the run is broken or merely slow.
+    """
+    root = Path(gdac_dir)
+    print(f"[argo] GDAC {root}: {'present' if root.is_dir() else 'ABSENT -- bound into the container?'}",
+          flush=True)
+    if root.is_dir():
+        names = sorted(p.name for p in list(root.iterdir())[:12])
+        print(f"[argo] top level: {', '.join(names) or '(empty)'}", flush=True)
+    files = prof_files_from_index(root, lon_min, lon_max, lat_min, lat_max, start_date, end_date, index)
     if files is None:
-        print(f"[argo] WARNING: no ar_index_global_prof.txt in {gdac_dir} or its parent (set `index:` in "
+        print(f"[argo] WARNING: no ar_index_global_prof.txt in {root} or its parent (set `index:` in "
               f"the recipe if it lives elsewhere); scanning <dac>/<wmo>/<wmo>_prof.nc instead -- every float "
               f"of the archive is opened, expect a long run", flush=True)
-        files = _scan_prof_files(gdac_dir)
-        print(f"[argo] {len(files)} float files found", flush=True)
+        t = time.monotonic()
+        files = _scan_prof_files(root)
+        print(f"[argo] {len(files)} float files found by scanning in {time.monotonic() - t:.0f} s", flush=True)
     if not files:
-        raise RuntimeError(f"no GDAC profile file for the box/period under {gdac_dir}")
+        raise RuntimeError(f"no GDAC profile file for the box/period under {root}")
+    head = files[: min(20, len(files))]
+    if not any(f.exists() for f in head):
+        raise RuntimeError(
+            f"none of the first {len(head)} files the index points at exist, e.g. {files[0]}. Index "
+            f"paths are relative to the GDAC's `dac/` directory: set `gdac_dir` to the directory that "
+            f"contains `dac/` (or `index:` to the index beside it).")
+    return files
+
+
+class FileProgress:
+    """Per-file timing for a loop over thousands of files on a shared filesystem.
+
+    Written because the failure it exists for was silence: an ARGO job killed on walltime left one
+    header line in the log, with no way to tell whether the index read, the first open or the two
+    thousandth file was the slow part. So: the first few files by name, then a rate and an estimate,
+    and any single file that takes more than ``slow_s`` called out on its own.
+    """
+
+    def __init__(self, total: int, every: int = 10, slow_s: float = 20.0, announce_first: int = 3,
+                 time_budget_s: float | None = None):
+        self.total, self.every, self.slow_s = total, every, slow_s
+        self.announce_first, self.budget = announce_first, time_budget_s
+        self.start = self.t_file = time.monotonic()
+        self.kept = self.failed = self.done = 0
+
+    def before(self, k: int, f) -> None:
+        self.t_file = time.monotonic()
+        if k <= self.announce_first:
+            print(f"[argo] opening {k}/{self.total}: {f}", flush=True)
+
+    def after(self, k: int, f, kept: int = 0, failed: bool = False) -> None:
+        dt = time.monotonic() - self.t_file
+        self.done, self.kept, self.failed = k, self.kept + kept, self.failed + int(failed)
+        if dt > self.slow_s:
+            print(f"[argo] slow file, {dt:.0f} s: {f}", flush=True)
+        if k % self.every == 0 or k == self.total or k <= self.announce_first:
+            elapsed = time.monotonic() - self.start
+            rate = elapsed / max(k, 1)
+            print(f"[argo] {k}/{self.total} files, {self.kept} profiles kept, {self.failed} failed, "
+                  f"{elapsed:.0f} s, {rate:.2f} s/file, ~{rate * (self.total - k) / 60:.0f} min left",
+                  flush=True)
+
+    def over_budget(self) -> bool:
+        return self.budget is not None and time.monotonic() - self.start > self.budget
+
+
+class WalltimeBudgetExceeded(RuntimeError):
+    """``time_budget_s`` ran out. With a cache, what is done is on disk and a re-run continues."""
+
+
+def _profiles_in_box(ds: xr.Dataset, lon_min, lon_max, lat_min, lat_max, t0, t1) -> np.ndarray:
+    lat = np.asarray(ds["LATITUDE"].values, float).reshape(-1)
+    lon = np.asarray(ds["LONGITUDE"].values, float).reshape(-1)
+    t = pd.to_datetime(np.asarray(ds["JULD"].values).reshape(-1))
+    return ((lat >= lat_min) & (lat <= lat_max) & (lon >= lon_min) & (lon <= lon_max)
+            & np.asarray(t >= t0) & np.asarray(t <= t1))
+
+
+def fetch_argo_profiles_local(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date,
+                              index: str | Path | None = None, value_vars=VALUE_VARS,
+                              progress_every: int = 10, **_) -> xr.Dataset:
+    """Read a local GDAC mirror (``/home/ref-argo/gdac`` on Datarmor) instead of downloading.
+
+    Holds every profile of the box in memory at once. :func:`coverage_table_local` is what the
+    preparation uses: same reading, one row per profile kept instead, and resumable.
+    """
+    files = gdac_prof_files(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date, index)
     t0, t1 = pd.Timestamp(start_date), pd.Timestamp(end_date)
-    clouds, failed, n_prof, start = [], 0, 0, time.monotonic()
+    clouds, prog = [], FileProgress(len(files), progress_every)
     for k, f in enumerate(files, 1):
+        prog.before(k, f)
         try:
             with xr.open_dataset(f) as ds:
-                lat = np.asarray(ds["LATITUDE"].values, float).reshape(-1)
-                lon = np.asarray(ds["LONGITUDE"].values, float).reshape(-1)
-                t = pd.to_datetime(np.asarray(ds["JULD"].values).reshape(-1))
-                keep = ((lat >= lat_min) & (lat <= lat_max) & (lon >= lon_min) & (lon <= lon_max)
-                        & np.asarray(t >= t0) & np.asarray(t <= t1))
+                keep = _profiles_in_box(ds, lon_min, lon_max, lat_min, lat_max, t0, t1)
                 if keep.any():
-                    n_prof += int(keep.sum())
                     clouds.append(pointcloud_from_gdac_file(ds, value_vars, keep_prof=keep))
+            prog.after(k, f, int(keep.sum()))
         except Exception as exc:  # noqa: BLE001
-            failed += 1
-            if failed <= 10:
+            prog.after(k, f, failed=True)
+            if prog.failed <= 10:
                 print(f"[argo] WARNING {f}: {type(exc).__name__}: {exc}", flush=True)
-        if k % progress_every == 0 or k == len(files):
-            print(f"[argo] {k}/{len(files)} files, {n_prof} profiles kept, {failed} failed, "
-                  f"{time.monotonic() - start:.0f} s", flush=True)
-    if failed and not clouds:
-        raise RuntimeError(f"all {failed} GDAC files failed to read (first errors above)")
+    if prog.failed and not clouds:
+        raise RuntimeError(f"all {prog.failed} GDAC files failed to read (first errors above)")
     return xr.concat(clouds, dim="N_POINTS") if clouds else xr.Dataset()
+
+
+def coverage_table_local(gdac_dir, bbox, start_date, end_date, depth_values: list[float],
+                         depth_indices: list[int], value_var: str = "TEMP",
+                         spike_thresholds: dict | None = None, index: str | Path | None = None,
+                         value_vars=VALUE_VARS, cache_dir: str | Path | None = None,
+                         progress_every: int = 10, time_budget_s: float | None = None) -> pd.DataFrame:
+    """Float by float: read, QC, one row per profile — cached on disk, so a killed job resumes.
+
+    Streaming rather than "read the whole box, then QC it, then tabulate": every step of
+    :func:`apply_standard_qc` works inside one profile (the sort is by platform, cycle and pressure;
+    the filters are pointwise; inversions and spikes look at neighbours of the same profile), and
+    :func:`coverage_table` groups by profile, so per float gives the same table as all at once. What
+    it buys is that the work is finished float by float. ``cache_dir`` holds one small CSV per float
+    plus a marker, so resubmitting the same job continues instead of starting the four hours again.
+    """
+    lon_min, lon_max, lat_min, lat_max = bbox
+    files = gdac_prof_files(gdac_dir, lon_min, lon_max, lat_min, lat_max, start_date, end_date, index)
+    t0, t1 = pd.Timestamp(start_date), pd.Timestamp(end_date)
+    cache = Path(cache_dir) if cache_dir else None
+    if cache:
+        cache.mkdir(parents=True, exist_ok=True)
+        print(f"[argo] cache {cache}: {len(list(cache.glob('*.done')))} floats already done", flush=True)
+    else:
+        print("[argo] no `cache_dir:` in the recipe: a job killed on walltime starts over", flush=True)
+
+    prog = FileProgress(len(files), progress_every, time_budget_s=time_budget_s)
+    tables, reused, stopped = [], 0, 0
+    for k, f in enumerate(files, 1):
+        wmo = f.parent.name
+        done, csv = (cache / f"{wmo}.done", cache / f"{wmo}.csv") if cache else (None, None)
+        if done is not None and done.exists():
+            reused += 1
+            if csv.exists():
+                # datetime64[ns], as the in-memory path produces: pandas reads a CSV date back at
+                # second resolution, and a table half of whose rows came from the cache would carry
+                # two different time dtypes depending on where the previous run stopped.
+                rows = pd.read_csv(csv, parse_dates=["time"])
+                tables.append(rows.astype({"time": "datetime64[ns]"}))
+            continue
+        prog.before(k, f)
+        try:
+            rows = pd.DataFrame()
+            kept = 0
+            with xr.open_dataset(f) as ds:
+                keep = _profiles_in_box(ds, lon_min, lon_max, lat_min, lat_max, t0, t1)
+                kept = int(keep.sum())
+                pc = pointcloud_from_gdac_file(ds, value_vars, keep_prof=keep) if kept else None
+            if pc is not None and pc.sizes.get("N_POINTS", 0):
+                pc = apply_standard_qc(pc, value_vars, spike_thresholds)
+                if pc.sizes.get("N_POINTS", 0):
+                    rows = coverage_table(pc, depth_values, depth_indices, value_var)
+            if len(rows):
+                tables.append(rows)
+                if csv is not None:
+                    rows.to_csv(csv, index=False)
+            if done is not None:
+                done.touch()
+            prog.after(k, f, kept)
+        except Exception as exc:  # noqa: BLE001
+            prog.after(k, f, failed=True)
+            if prog.failed <= 10:
+                print(f"[argo] WARNING {f}: {type(exc).__name__}: {exc}", flush=True)
+        if prog.over_budget() and k < len(files):
+            stopped = k
+            break
+
+    if stopped:
+        raise WalltimeBudgetExceeded(
+            f"stopped after {stopped}/{len(files)} floats, {time_budget_s:.0f} s budget reached. "
+            + (f"{len(list(cache.glob('*.done')))} floats are cached in {cache}: resubmit the same job "
+               f"and it continues from there." if cache
+               else "Set `cache_dir:` in the recipe so a re-run resumes instead of restarting."))
+    if prog.failed and not tables:
+        raise RuntimeError(f"all {prog.failed} GDAC files failed to read (first errors above)")
+    print(f"[argo] {len(files)} floats ({reused} from the cache), {prog.failed} failed", flush=True)
+    return pd.concat(tables, ignore_index=True) if tables else pd.DataFrame()
 
 
 # ----------------------------------------------------------------------------- QC
@@ -320,5 +499,18 @@ def coverage_table(ds: xr.Dataset, depth_values: list[float], depth_indices: lis
 
 
 def depth_values_from_truth(truth: str | Path, depth_indices: list[int]) -> list[float]:
-    ds = xr.open_dataset(truth)
-    return [float(ds["depth"].values[i]) for i in depth_indices]
+    """The metres behind ``depth_indices``, read from the prepared truth.
+
+    Explicit about Zarr: the truth is a Zarr store since the preparation stopped writing NetCDF
+    intermediates, and this is read *before* the profiles are, so a wrong path fails in a second
+    instead of after four hours of reading.
+    """
+    path = Path(truth)
+    if not path.exists():
+        raise FileNotFoundError(f"the truth {path} does not exist: `truth:` in the recipe must point at "
+                                f"the merged GLORYS store, which `jobs/prepare.sh concat` writes")
+    ds = xr.open_zarr(path) if path.suffix == ".zarr" else xr.open_dataset(path)
+    depth = [float(ds["depth"].values[i]) for i in depth_indices]
+    print(f"[argo] depth levels from {path.name}: {depth[0]:.1f} .. {depth[-1]:.1f} m "
+          f"({len(depth)} levels)", flush=True)
+    return depth

@@ -1,5 +1,60 @@
 # Changelog
 
+## 2026-09-20: The ARGO step, made diagnosable and interruptible (second walltime kill)
+
+**Summary:** the ARGO preparation was killed on walltime again — 4 h this time — with a log that
+stopped at the shell's own header line, so nothing said where it was. The cause is almost certainly
+that `argo_profiles.py` never set `HDF5_USE_FILE_LOCKING=FALSE`, which `regrid.py` has carried since
+the GLORYS work with the comment "either an error about file locking **or a hang on the first
+open**"; this step is the one that opens thousands of files on a read-only `/home/ref-*` mirror. It
+is set now. Because "almost certainly" is not certainly, every stage is also announced *before* it
+runs, and the step was made resumable so a walltime kill costs nothing.
+
+**Files modified:**
+- `scripts/prepare/argo_profiles.py` — `HDF5_USE_FILE_LOCKING=FALSE`; `[argo] python started` printed
+  *before* importing xarray/pandas (a log stopping there now distinguishes "never started Python"
+  from "stuck in the imports", which it could not before); the recipe echoed; depth levels read first
+  so a wrong `truth:` fails in a second instead of after hours; `WalltimeBudgetExceeded` mapped to
+  exit code 75; an empty table is an error rather than a zero-row CSV.
+- `oceanml3d/obs/argo.py`:
+  - `find_index` reports the file it found and its size, or every path it tried.
+  - `prof_files_from_index` reads the index in 500 000-row chunks, printing each: whole-file this is
+    three million rows of Python strings in one silent call. It also reports the index's date span,
+    and notes when the mirror stops before the requested period.
+  - `gdac_prof_files` (new) reports the mirror and its top level before touching it — an unbound bind
+    mount looks exactly like an empty GDAC — and raises a named error when the index's paths resolve
+    nowhere, instead of failing once per file.
+  - `FileProgress` (new): the first three files by name, then a rate and an estimate of what is left,
+    and any single file over 20 s called out. The old code's first line came after 50 files.
+  - `coverage_table_local` (new): float by float — read, QC, one row per profile — with `cache_dir`
+    holding one small CSV per float plus a marker, so a re-run continues instead of restarting, and
+    `time_budget_s` stopping cleanly before the scheduler does.
+  - `depth_values_from_truth` opens a `.zarr` truth explicitly and names `jobs/prepare.sh concat`
+    when the path does not exist.
+- `scripts/prepare/recipes/argo_profiles_gs.datarmor.yaml` — `cache_dir`, `time_budget_s: 12600`
+  (3 h 30 of the 4 h walltime), `progress_every: 10`.
+- `jobs/pbs/prepare_argo.pbs` — resubmits itself on exit 75, up to `OCEANML3D_MAX_ATTEMPTS` (4), each
+  attempt continuing from the cache; says so when the cap is reached.
+  `jobs/slurm/prepare_argo.sbatch` documents the same exit code.
+- docs: `docs/pipeline_3d.md` §3.2 (the three measures, and how to read the log top-down),
+  `docs/platforms/datarmor.md` (both troubleshooting rows), `docs/data_preparation.md`.
+
+**Rationale:** two kills in a row with no information is a tooling failure, not bad luck. A step that
+reads a few hundred files off a shared mirror cannot promise to fit in a walltime, so it has to be
+able to stop and continue — which is what the GLORYS step already does, per year. Streaming per float
+is what makes that possible, and it is exact rather than approximate: every step of
+`apply_standard_qc` works inside a single profile, and `coverage_table` groups by profile.
+
+**Verification:** `pytest -m "not slow"` — 897 passed, 9 skipped. Nine new tests in
+`tests/test_argo.py`, the load-bearing one being
+`test_streaming_per_float_gives_the_same_table_as_reading_everything_first` (per-float QC equals QC
+over the whole box, frame for frame). Also: the cache reuses instead of reopening (a monkeypatched
+`open_dataset` that raises proves it), the budget stops and the next run finishes, a budget reached
+on the last float is not an interruption, an index pointing outside the tree is named, chunked and
+whole-file index reads agree, a Zarr truth is read and a missing one fails at once, the progress
+lines say what they must, and the driver sets the HDF5 flag. The PBS wrapper's resubmission was
+exercised with a stub `qsub` for exit codes 0 and 75 at attempts 1 and 4.
+
 ## 2026-09-20: The two gaps that blocked training — site catalogs written, bathymetry set aside
 
 **Summary:** `config/paths/datarmor.yaml` and `config/paths/jeanzay.yaml` now exist, so the two
