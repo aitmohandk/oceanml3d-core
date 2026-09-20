@@ -21,6 +21,8 @@
 # `--site` avoids having to know which shell you are in.
 #   OCEANML3D_SIF    path to an Apptainer image; if set, the command runs inside it
 #   OCEANML3D_DATA   data root, consumed by config/paths/<site>.yaml
+#   OCEANML3D_TARGET_RES  (or --res) resolution the data was prepared at: data root becomes
+#                    $OCEANML3D_DATA/res<step>, the directory jobs/prepare.sh wrote
 #   OCEANML3D_EXTRA  extra Hydra overrides appended after "$@"
 set -euo pipefail
 
@@ -32,6 +34,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --site) OCEANML3D_SITE="$2"; shift 2 ;;
         --site=*) OCEANML3D_SITE="${1#--site=}"; shift ;;
+        --res) export OCEANML3D_TARGET_RES="$2"; shift 2 ;;
+        --res=*) export OCEANML3D_TARGET_RES="${1#--res=}"; shift ;;
         --) shift; ARGS+=("$@"); break ;;
         *) ARGS+=("$1"); shift ;;
     esac
@@ -39,17 +43,11 @@ done
 set -- "${ARGS[@]+"${ARGS[@]}"}"
 
 SITE="${OCEANML3D_SITE:-local}"
-ENV_FILE="$REPO_ROOT/jobs/env/$SITE.sh"
-
-if [[ ! -f "$ENV_FILE" ]]; then
-    echo "no environment for site '$SITE'." >&2
-    echo "available: $(cd "$REPO_ROOT/jobs/env" && ls *.sh | sed 's/\.sh$//' | tr '\n' ' ')" >&2
-    echo "copy jobs/env/local.sh to jobs/env/$SITE.sh and fill it in." >&2
-    exit 2
-fi
-
-# shellcheck source=/dev/null
-source "$ENV_FILE"
+# shellcheck source=jobs/env/_lib.sh
+source "$REPO_ROOT/jobs/env/_lib.sh"
+# Same loader as jobs/prepare.sh: user settings, site file, then the per-resolution data dir -- so
+# training reads exactly the directory the preparation wrote.
+load_site "$SITE" "$REPO_ROOT" || exit 2
 
 cd "$REPO_ROOT"
 # Hydra resolves config_path relative to the file carrying @hydra.main, so the CLI must run from a
@@ -62,7 +60,7 @@ fi
 OVERRIDES+=("paths=${OCEANML3D_PATHS:-$SITE}")
 
 echo "[run.sh] site=$SITE  repo=$REPO_ROOT"
-echo "[run.sh] data=${OCEANML3D_DATA:-<unset>}  sif=${OCEANML3D_SIF:-<none>}"
+echo "[run.sh] data=${OCEANML3D_DATA:-<unset>}  resolution=${OCEANML3D_TARGET_RES:-native}  sif=${OCEANML3D_SIF:-<none>}"
 echo "[run.sh] oceanml3d ${OVERRIDES[*]}"
 
 if [[ -n "${OCEANML3D_SIF:-}" ]]; then

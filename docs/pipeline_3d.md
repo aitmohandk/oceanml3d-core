@@ -107,7 +107,15 @@ GLORYS is 1/12°, and that is what you get by default. To work coarser — NOSC'
 ```bash
 jobs/prepare.sh --site datarmor --res 0.25 glorys 2010        # or OCEANML3D_TARGET_RES=0.25
 qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_TARGET_RES=0.25 jobs/pbs/prepare_glorys.pbs
+
+# or once for every job, since a batch job does not inherit your shell's environment:
+echo 'export OCEANML3D_TARGET_RES="${OCEANML3D_TARGET_RES:-0.25}"' > ~/.config/oceanml3d/env.sh
 ```
+
+**The data root follows the resolution.** With `OCEANML3D_TARGET_RES` set, every step — per-year
+GLORYS, merge, ARGO, observation simulation, training (`jobs/run.sh --res` too) — uses
+`$OCEANML3D_DATA/res<step>` (`jobs/env/_lib.sh`, `resolve_data_dir`). Native and coarsened products
+never share a directory, and no step can look in the wrong one because a path was typed differently.
 
 The GLORYS recipes carry `resolution: ${OCEANML3D_TARGET_RES}`; unset, it means native. When set,
 each file is cut to the domain (plus one cell of margin) and interpolated bilinearly onto a regular
@@ -117,11 +125,13 @@ prepared with the same pair lands on exactly the same grid; `data/open.py` refus
 
 What to keep in mind:
 
-- **One resolution per data directory.** File names do not carry it. The value is written in each
-  output's attributes, and `regrid.py` refuses to skip — or to merge — files at another resolution
-  instead of silently mixing them. Simplest: `OCEANML3D_DATA=$DATAWORK/oceanml3d/res0.25`.
-- **The task's patch must fit.** `osse3d_gs21` uses 144 × 144 patches, i.e. the native box. At 0.25°
-  the box is 49 × 49: `data.patch.lat=48 data.patch.lon=48 data.stride.lat=40 data.stride.lon=40`.
+- **One resolution per data directory**, derived as above. File names do not carry it; the value is
+  also written in each output's attributes, and `regrid.py` refuses to skip — or to merge — files at
+  another resolution instead of silently mixing them. A merge that finds nothing but sees the files
+  under a sibling `res*/` says so.
+- **The patch follows by itself.** `osse3d_gs21` declares `patch`/`stride` `auto` in lat/lon: they
+  are fitted to the grid on disk at run time — 144 / 136 at 1/12° (145 cells), 48 / 40 at 0.25°
+  (49 cells). Nothing to pass on the command line ([gridded_models.md §4.4](gridded_models.md)).
 - **Everything downstream follows the truth grid**: the pseudo-obs and virtual ARGO are simulated on
   it. The bathymetry is the exception — regrid it onto the prepared truth with `reference:`.
 - Bilinear from 1/12° to 1/4° is what NOSC did; it subsamples rather than averages. For

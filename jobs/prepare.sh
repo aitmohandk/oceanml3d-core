@@ -37,8 +37,9 @@ environment:
                      reason to download what the centre already stores.
   ARGO_GDAC          local Argo GDAC mirror, read by argo_profiles_gs.<site>.yaml
   GLORYS_YEARS       first:last, used by `concat` for the output label (default 2010:2020)
-  OCEANML3D_TARGET_RES  target grid step in degrees (or --res). Unset: native grid. Use the same
-                     value for every step: files at different resolutions are refused, not mixed.
+  OCEANML3D_TARGET_RES  target grid step in degrees (or --res). Unset: native grid. Set, the data
+                     root becomes $OCEANML3D_DATA/res<step> for every step, training included.
+                     Give it to every job, or once in ~/.config/oceanml3d/env.sh.
 USAGE
     exit 2
 }
@@ -72,6 +73,7 @@ YEARS="${GLORYS_YEARS:-2010:2020}"
 export OCEANML3D_DATA
 
 say() { echo "[prepare] $*"; }
+say "site=$SITE  data=$OCEANML3D_DATA  resolution=${OCEANML3D_TARGET_RES:-native}"
 
 step_glorys() {
     local year="${1:?glorys <year>}"

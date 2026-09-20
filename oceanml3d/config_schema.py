@@ -62,14 +62,26 @@ def _slice_bounds(v: Any) -> tuple[Any, Any]:
     return (v[0], v[1]) if isinstance(v, (list, tuple)) else (None, None)
 
 
+def _auto(v: Any) -> bool:
+    return isinstance(v, str) and v.strip().lower() == "auto"
+
+
 def validate_config(cfg: DictConfig, catalog=None, variables=None) -> list[str]:
-    """Return every problem found in a composed config (empty list = valid)."""
+    """Return every problem found in a composed config (empty list = valid).
+
+    ``auto`` in ``data.patch`` / ``data.stride`` (lat, lon) is accepted and those checks skipped:
+    the CLI resolves it from the grid (``resolve_auto_patch``) and validates again with numbers.
+    """
     p: list[str] = []
     d, t = cfg.data, cfg.training
 
     for dim in DIMS:
         if dim not in d.patch or dim not in d.stride:
             p.append(f"data.patch/stride must define '{dim}'")
+            continue
+        if _auto(d.patch[dim]) or _auto(d.stride[dim]):
+            if dim == "time":
+                p.append("data.patch.time / data.stride.time cannot be 'auto'")
             continue
         if int(d.stride[dim]) > int(d.patch[dim]):
             p.append(f"data.stride.{dim} ({d.stride[dim]}) > data.patch.{dim} ({d.patch[dim]}): gaps in coverage")
@@ -78,6 +90,8 @@ def validate_config(cfg: DictConfig, catalog=None, variables=None) -> list[str]:
 
     crop = t.rec_weight.get("crop", {})
     for dim in DIMS:
+        if _auto(d.patch.get(dim)) or _auto(d.stride.get(dim)):
+            continue
         c, patch = int(crop.get(dim, 0)), int(d.patch.get(dim, 1))
         if 2 * c >= patch:
             p.append(f"training.rec_weight.crop.{dim} removes the whole patch")

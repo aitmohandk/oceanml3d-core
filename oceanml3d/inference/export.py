@@ -28,6 +28,10 @@ DEFAULT_STANDARD_NAMES = {
     "v_drifter": ("v", "northward_sea_water_velocity", "m s-1"),
     "u": ("u", "eastward_sea_water_velocity", "m s-1"),
     "v": ("v", "northward_sea_water_velocity", "m s-1"),
+    # CMEMS / GLORYS names. Without them the OSSE-3D product exported `uo_dNN` / `vo_dNN`, which the
+    # contract shared with oceanml3d-eval does not recognise as currents (canonical: u, v).
+    "uo": ("u", "eastward_sea_water_velocity", "m s-1"),
+    "vo": ("v", "northward_sea_water_velocity", "m s-1"),
     "ssh": ("ssh", "sea_surface_height_above_geoid", "m"),
     "zos": ("ssh", "sea_surface_height_above_geoid", "m"),
     "sst": ("sst", "sea_surface_temperature", "degC"),

@@ -225,6 +225,12 @@ chunks: {time: 32}
 * The overlap must be at least `2 × rec_weight.crop`, or the cropped borders are never covered by
   any patch. With `crop: {lat: 4, lon: 4}`, an overlap of 8 cells is the minimum — the examples use
   exactly that (`144 − 136 = 8`).
+* **`auto` (lat, lon)** fits both to the grid at run time — `osse3d_gs21` uses it, so the same task
+  runs at any `OCEANML3D_TARGET_RES`. `patch` = the domain's cell count trimmed to a multiple of
+  `data.patch_multiple` (16, what the U-Net's down-sampling divides); `stride` = `patch − 2 × crop`,
+  the largest stride that still leaves no seam. 145 cells (1/12°) → 144 / 136, the former hand-set
+  values; 49 cells (0.25°) → 48 / 40. The resolved numbers are printed, written back into the run's
+  saved config, and validated like hand-set ones. `time` cannot be `auto`: it is the model's window.
 * `chunks` is passed to dask at open time. It controls memory, not science.
 * `PatchSpec.pad_to_cover` (default `True`) adds a final window flush to the end of each dimension so
   the domain is fully covered.
