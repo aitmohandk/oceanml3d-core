@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-20: Document the per-user settings file
+
+**Summary:** `~/.config/oceanml3d/env.sh` is documented where job configuration lives
+(`jobs/README.md`), and in the Jean Zay runbook, which did not mention the target resolution at all.
+
+**Files modified:** `jobs/README.md` -- what the file is, that nothing creates it, bash syntax,
+`${VAR:-value}` so the command line still wins, `OCEANML3D_USER_ENV`, what to put there;
+`docs/pipeline_3d.md` section 3.1a -- the missing `mkdir -p`; `docs/platforms/jeanzay.md` G.2;
+`docs/platforms/datarmor.md` -- link.
+
+**Rationale:** The file was only shown in the Datarmor runbook and in `pipeline_3d.md`, the latter
+without the `mkdir`, so the `echo` failed on a fresh account; nothing said who creates it.
+
+**Verification:** documentation only.
+
+
 ## 2026-09-20: Patch and stride fitted to the grid (`auto`); OSSE currents exported as u/v
 
 **Summary:** `data.patch` / `data.stride` accept `auto` in lat/lon, resolved from the grid on disk:

@@ -87,6 +87,39 @@ qsub -I -l walltime=00:30:00 -l mem=32g       # or srun --pty bash
 jobs/prepare.sh --site datarmor glorys 2014
 ```
 
+## Your own settings, for every job: `~/.config/oceanml3d/env.sh`
+
+A job started by the scheduler does not run your login shell's rc files, so a `setenv` in `~/.cshrc`
+never reaches it -- and repeating the same `-v`/`--export` on every submission is how one step ends
+up looking in another's directory. `load_site` (`jobs/env/_lib.sh`) therefore sources a per-user file
+**before** the site file, in every job and every interactive `run.sh` / `prepare.sh`:
+
+```bash
+mkdir -p ~/.config/oceanml3d
+echo 'export OCEANML3D_TARGET_RES="${OCEANML3D_TARGET_RES:-0.25}"' > ~/.config/oceanml3d/env.sh
+```
+
+- **Nothing creates it.** It is optional and personal: absent, everything runs at the native
+  resolution with the site's defaults. It never goes in the repository -- it would impose your
+  choices on everyone else.
+- **Bash syntax**, whatever your login shell: the jobs are bash scripts. The single-quoted `echo`
+  above works from csh as well.
+- **Write each value as `${VAR:-value}`**, so a value given on the command line (`qsub -v ...`,
+  `sbatch --export=...`, `--res`) still wins over the file.
+- **Another location:** `OCEANML3D_USER_ENV=/path/to/file`.
+- **Check what a job used:** its first log line prints it --
+  `[prepare] site=datarmor  data=.../oceanml3d/res0.25  resolution=0.25` (`[run.sh] ...` for training).
+- **Back to native:** delete the file, or pass `OCEANML3D_TARGET_RES=native`.
+
+What typically goes there:
+
+| Variable | Effect |
+|---|---|
+| `OCEANML3D_TARGET_RES` | grid step in degrees for the GLORYS preparation; the data root becomes `$OCEANML3D_DATA/res<step>` for every step, training included. `native` or unset: 1/12 deg. |
+| `OCEANML3D_DATA` | data root, if not the site's default (the `res<step>` suffix is still added) |
+| `OCEANML3D_SIF` | container image, if not the site's default |
+| `OCEANML3D_EXTRA` | Hydra overrides appended to every `run.sh` command |
+
 ## Adding a site
 
 1. `cp jobs/env/local.sh jobs/env/<site>.sh` and fill in the environment and `OCEANML3D_DATA`.
