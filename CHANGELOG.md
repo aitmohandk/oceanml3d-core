@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-09-21: `jobs/pbs/train.pbs` could not be submitted at all
+
+**Summary:** `qsub … jobs/pbs/train.pbs` was refused with `qsub: Job rejected by all possible
+destinations`. The file carried `##PBS -q gpuq` — commented out, marked "Site-specific, uncomment and
+fill in" — and Datarmor's default queue is a routing queue with no destination that accepts `ngpus`.
+It declares `-q gpuq` now, and a test keeps every PBS job file honest.
+
+**Files modified:**
+- `jobs/pbs/train.pbs` — `#PBS -q gpuq`; `mem=64g` (the form the runbook and the four other job files
+  use); the `##PBS -P <project>` placeholder removed, since nothing on Datarmor asks for one. The
+  header says what the rejection looks like, that `qsub -q <other>` overrides the directive, and that
+  `qstat -Qf gpuq` is what to read if the request is refused for exceeding a limit instead.
+- `tests/test_config_validation.py` — `test_every_pbs_job_declares_a_queue` (and no commented-out
+  queue directives), `test_a_gpu_pbs_job_asks_for_a_gpu_and_a_cpu_one_does_not`.
+- `docs/platforms/datarmor.md` — a troubleshooting row for the message.
+
+**Rationale:** the same shape as the `TO FILL IN` site scripts closed yesterday. A job file that
+cannot be submitted as shipped is not "portable, pending local details": it is broken, and the
+scheduler's message names neither the queue nor the resource, so the cost lands entirely on whoever
+tries it first. The four preparation jobs all declare `-q omp` and all work; the one that did not is
+the one that failed.
+
+**Verification:** `pytest -m "not slow"` — 905 passed, 9 skipped. The two new tests fail against the
+previous `train.pbs`.
+
 ## 2026-09-21: The ARGO table says what it contains, not just how many rows
 
 **Summary:** the first successful ARGO run produced 8 640 profiles in 73 s, and nothing in the log

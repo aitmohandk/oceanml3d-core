@@ -313,3 +313,31 @@ def test_the_image_recipe_does_not_claim_the_package_is_not_baked_in():
     assert "oceanml3d      /opt/oceanml3d/oceanml3d" in text, "the copy moved: update this test"
     assert "not baked in" not in text
     assert "PYTHONPATH" in text
+
+
+def test_every_pbs_job_declares_a_queue():
+    """`jobs/pbs/train.pbs` shipped with `##PBS -q gpuq` commented out as "site-specific". Datarmor's
+    default queue is a *routing* queue with no destination that accepts `ngpus`, so the submission was
+    refused outright -- `qsub: Job rejected by all possible destinations`, which names neither the
+    queue nor the resource, before a single line of the file ran. The four preparation jobs all
+    declare `-q omp`; a job file that leaves it out is not portable, it is unsubmittable."""
+    import glob
+    import re
+
+    for path in sorted(glob.glob("jobs/pbs/*.pbs")):
+        text = open(path).read()
+        assert re.search(r"^#PBS -q \w+", text, re.M), f"{path} declares no queue"
+        assert not re.search(r"^##PBS -q ", text, re.M), \
+            f"{path} has a commented-out queue: either it is needed, or remove the line"
+
+
+def test_a_gpu_pbs_job_asks_for_a_gpu_and_a_cpu_one_does_not():
+    """The two are different queues on every centre; asking for `ngpus` in a CPU queue is the other
+    half of the same rejection."""
+    import re
+
+    train = open("jobs/pbs/train.pbs").read()
+    assert "ngpus=" in train and re.search(r"^#PBS -q gpuq", train, re.M)
+    for name in ("prepare_glorys", "prepare_obs", "prepare_argo", "concat_glorys"):
+        text = open(f"jobs/pbs/{name}.pbs").read()
+        assert "ngpus=" not in text, f"{name}.pbs asks for a GPU in a CPU queue"
