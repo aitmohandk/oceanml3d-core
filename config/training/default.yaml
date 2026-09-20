@@ -6,6 +6,11 @@ loss_combine: flat_sum      # flat_sum | group_mean | uncertainty
 loss_group_weights: {}
 grad_loss_weight: 0.0
 save_top_k: 3
+# Checkpoint selection (and early stopping) metric. val/nrmse: mean over targets of the RMSE in units
+# of each target's train std, on data.eval_domain -- the same whatever the loss, so ablations are
+# selected on the same criterion. val/loss is the training objective and changes with the ablation.
+monitor: val/nrmse
+early_stopping: null       # e.g. {patience: 15, min_delta: 0.0}; off: the cosine schedule runs to its end
 moving_patches: false      # random window offsets on the train split (NOSC moving_patches)
 cache: false               # zarr cache of the stacked array under <paths.root>/cache/
 stages: null               # null = the model's own `stages`; e.g. [prior, conditional] for a 2-stage pipeline

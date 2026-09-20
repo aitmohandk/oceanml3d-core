@@ -28,10 +28,14 @@ variables:
 domain: {lat: [32, 44], lon: [-66, -54]}
 eval_domain: {lat: [33, 43], lon: [-65, -55]}        # 1-degree rim excluded from metrics
 
+# Disjoint, with gaps longer than the 11-day window: the ocean is correlated over weeks, so days
+# adjacent to the training period would make the validation optimistic, and a test that overlaps
+# the validation scores days the checkpoint was selected on. The test starts 10 days before the
+# exported year so every day of 2019 is covered by complete windows.
 splits:
-  train: {time: ["2010-01-01", "2017-12-31"]}
-  val:   {time: ["2018-01-01", "2018-12-31"]}
-  test:  {time: ["2018-12-20", "2020-01-10"]}
+  train: {time: ["2010-01-01", "2017-12-15"]}
+  val:   {time: ["2018-01-01", "2018-12-10"]}
+  test:  {time: ["2018-12-22", "2020-01-10"]}
 
 patch:  {time: 11, lat: 144, lon: 144}
 stride: {time: 1,  lat: 136, lon: 136}

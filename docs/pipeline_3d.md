@@ -202,6 +202,13 @@ sbatch --export=ALL,OCEANML3D_SITE=jeanzay jobs/slurm/train.sbatch experiment=os
 Outputs land in `outputs/<experiment>/<timestamp>/`: checkpoints, the resolved config, the git hash,
 and `norm_stats.json`.
 
+**Following it.** Validation runs on 2018 every epoch. Watch `val/nrmse` (it selects the
+checkpoint) and the physical RMSEs `val/rmse_temperature` (°C), `val/rmse_currents_u|v` (m/s),
+`val/rmse_ssh` (m), all on `eval_domain`; `val/rmse_thetao_dNN` gives the error per level. They are in
+`metrics.csv` and in TensorBoard (`tensorboard --logdir outputs/<experiment>`). At the end the best
+checkpoint is scored on the test split with the same metrics (`test/…`). Details and why not
+`val/loss`: [gridded_models.md §4.3a](gridded_models.md).
+
 ### Precision, which the hardware decides
 
 | Site | GPU | `training.trainer.precision` |
