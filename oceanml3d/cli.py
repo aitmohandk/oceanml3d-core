@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 
 from oceanml3d.catalog import Catalog
 from oceanml3d.config_schema import check_config, validate_config
@@ -35,6 +35,7 @@ def build_datamodule(cfg: DictConfig, variables: VariableSet, catalog: Catalog):
     from oceanml3d.data.augment import build_augmentations
     from oceanml3d.data.datamodule import OceanDataModule
 
+    resolve_auto_patch(cfg, catalog, variables)      # no-op once resolved; any caller gets numbers
     d = cfg.data
     return OceanDataModule(
         variables, catalog,
@@ -53,6 +54,58 @@ def build_datamodule(cfg: DictConfig, variables: VariableSet, catalog: Catalog):
     )
 
 
+def _is_auto(v) -> bool:
+    return isinstance(v, str) and v.strip().lower() == "auto"
+
+
+def grid_sizes(cfg: DictConfig, catalog: Catalog, variables: VariableSet) -> dict[str, int]:
+    """Number of (lat, lon) cells of the task's domain, read -- lazily -- from the first target."""
+    from oceanml3d.data.open import open_variable
+
+    domain = {k: slice(*v) for k, v in OmegaConf.to_container(cfg.data.domain, resolve=True).items()}
+    da = open_variable(variables.targets[0], catalog, domain)
+    return {d: int(da.sizes[d]) for d in ("lat", "lon")}
+
+
+def resolve_auto_patch(cfg: DictConfig, catalog: Catalog, variables: VariableSet,
+                       sizes: dict[str, int] | None = None) -> None:
+    """Replace ``auto`` in ``data.patch`` / ``data.stride`` (lat, lon) by numbers fitted to the grid.
+
+    The patch size is a number of *cells*, so it is tied to the resolution: 144 x 144 is the whole
+    Gulf Stream box at 1/12 deg (145 cells) and does not fit at all at 0.25 deg (49). ``auto``
+    derives it from the data actually on disk, whatever ``OCEANML3D_TARGET_RES`` produced it:
+
+    * ``patch = largest multiple of data.patch_multiple (16) <= cells``: the whole domain, trimmed
+      to what the U-Net's down-sampling divides. 145 -> 144, 49 -> 48.
+    * ``stride = patch - 2 x rec_weight.crop``: the largest stride whose overlap still covers the
+      cropped borders, so the export has no seams (the rule ``validate_config`` enforces).
+      144 -> 136, 48 -> 40 with the default crop of 4.
+
+    That reproduces the hand-set native values exactly. The resolved numbers are written back into
+    the config, so the run directory records what was used.
+    """
+    d = cfg.data
+    wanted = [dim for dim in ("lat", "lon") if _is_auto(d.patch.get(dim)) or _is_auto(d.stride.get(dim))]
+    if not wanted:
+        return
+    sizes = sizes or grid_sizes(cfg, catalog, variables)
+    mult = int(d.get("patch_multiple", 16))
+    crop = OmegaConf.to_container(cfg.training.rec_weight.get("crop", {}), resolve=True)
+    with open_dict(cfg):
+        for dim in wanted:
+            if _is_auto(d.patch.get(dim)):
+                p = (sizes[dim] // mult) * mult
+                if p < mult:
+                    raise SystemExit(f"data.patch.{dim}=auto: the domain has {sizes[dim]} cells along "
+                                     f"{dim}, fewer than data.patch_multiple={mult}. Enlarge the domain, "
+                                     f"refine the resolution, or lower patch_multiple.")
+                d.patch[dim] = p
+            if _is_auto(d.stride.get(dim)):
+                d.stride[dim] = max(1, int(d.patch[dim]) - 2 * int(crop.get(dim, 0)))
+    print("[oceanml3d] patch/stride from the grid (" + ", ".join(
+        f"{dim}: {sizes[dim]} cells -> patch {d.patch[dim]}, stride {d.stride[dim]}" for dim in wanted) + ")")
+
+
 def build_model(cfg: DictConfig, variables: VariableSet, norm_stats):
     import inspect
 
@@ -66,6 +119,8 @@ def build_model(cfg: DictConfig, variables: VariableSet, norm_stats):
     for k in [k for k in m if k not in accepted]:
         print(f"[oceanml3d] model '{name}' ignores config key '{k}' (inherited from the experiment body)")
         m.pop(k)
+    if any(_is_auto(cfg.data.patch.get(k)) for k in ("lat", "lon")):
+        raise ValueError("data.patch is still 'auto': build the datamodule first (it resolves it)")
     window = int(cfg.data.patch.time)
     weight = patch_weight(cfg.training.rec_weight.kind, OmegaConf.to_container(cfg.data.patch, resolve=True),
                           OmegaConf.to_container(cfg.training.rec_weight.crop, resolve=True),
@@ -118,7 +173,9 @@ def main(cfg: DictConfig) -> None:
         print("\n# validation: " + ("OK" if not problems else "\n# - ".join([""] + problems)).strip())
         return
     if cmd == "validate":
-        check_config(cfg, build_catalog(cfg), build_variables(cfg))
+        catalog, variables = build_catalog(cfg), build_variables(cfg)
+        resolve_auto_patch(cfg, catalog, variables)
+        check_config(cfg, catalog, variables)
         print(f"configuration '{cfg.experiment_name}' is valid")
         return
     if cmd == "prepare-obs":
@@ -135,6 +192,7 @@ def main(cfg: DictConfig) -> None:
     check_config(cfg, variables=variables)          # data files may not exist yet: checked after prepare
     if cfg.data.get("prepare"):
         prepare_observations(cfg, catalog)
+    resolve_auto_patch(cfg, catalog, variables)
     check_config(cfg, catalog, variables)
     dm = build_datamodule(cfg, variables, catalog)
     dm.setup("fit")

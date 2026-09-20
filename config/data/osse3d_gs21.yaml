@@ -37,8 +37,12 @@ splits:
   val:   {time: ["2018-01-01", "2018-12-10"]}
   test:  {time: ["2018-12-22", "2020-01-10"]}
 
-patch:  {time: 11, lat: 144, lon: 144}
-stride: {time: 1,  lat: 136, lon: 136}
+# lat/lon `auto`: fitted to the grid at run time, so the same task runs at any OCEANML3D_TARGET_RES --
+# patch = whole domain trimmed to a multiple of patch_multiple, stride = patch - 2 x crop.
+# Native 1/12 deg (145 cells) -> 144 / 136, exactly the former hand-set values; 0.25 deg (49) -> 48 / 40.
+patch:  {time: 11, lat: auto, lon: auto}
+stride: {time: 1,  lat: auto, lon: auto}
+patch_multiple: 16      # what the U-Net's down-sampling divides
 chunks: {time: 32}
 norm_stats: null
 

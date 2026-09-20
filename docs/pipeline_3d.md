@@ -129,8 +129,9 @@ What to keep in mind:
   also written in each output's attributes, and `regrid.py` refuses to skip — or to merge — files at
   another resolution instead of silently mixing them. A merge that finds nothing but sees the files
   under a sibling `res*/` says so.
-- **The task's patch must fit.** `osse3d_gs21` uses 144 × 144 patches, i.e. the native box. At 0.25°
-  the box is 49 × 49: `data.patch.lat=48 data.patch.lon=48 data.stride.lat=40 data.stride.lon=40`.
+- **The patch follows by itself.** `osse3d_gs21` declares `patch`/`stride` `auto` in lat/lon: they
+  are fitted to the grid on disk at run time — 144 / 136 at 1/12° (145 cells), 48 / 40 at 0.25°
+  (49 cells). Nothing to pass on the command line ([gridded_models.md §4.4](gridded_models.md)).
 - **Everything downstream follows the truth grid**: the pseudo-obs and virtual ARGO are simulated on
   it. The bathymetry is the exception — regrid it onto the prepared truth with `reference:`.
 - Bilinear from 1/12° to 1/4° is what NOSC did; it subsamples rather than averages. For

@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-09-20: Patch and stride fitted to the grid (`auto`); OSSE currents exported as u/v
+
+**Summary:** `data.patch` / `data.stride` accept `auto` in lat/lon, resolved from the grid on disk:
+patch = cells trimmed to a multiple of `data.patch_multiple` (16), stride = patch − 2 × crop.
+`osse3d_gs21` uses it, so it runs at any target resolution without overrides. Separately, `uo`/`vo`
+targets are exported as the canonical `u_dNN`/`v_dNN`.
+
+**Files modified:** `oceanml3d/cli.py` — `grid_sizes`, `resolve_auto_patch` (called before
+validation and by `build_datamodule`); `oceanml3d/config_schema.py` — `auto` accepted, geometric
+checks run once resolved; `config/data/osse3d_gs21.yaml`; `oceanml3d/inference/export.py` — `uo`,
+`vo` in `DEFAULT_STANDARD_NAMES`; `docs/gridded_models.md` §4.4, `docs/pipeline_3d.md` §3.1a;
+`tests/test_eval_metrics.py`, `tests/test_osse_smoke.py`, `tests/test_config_validation.py` (native
+numbers pinned where the geometric checks are exercised).
+
+**Rationale:** Patch sizes are counts of cells, so 144 × 144 — the whole Gulf Stream box at 1/12° —
+does not fit at 0.25° (49 × 49), and switching resolution meant four overrides on every training
+command. The rule reproduces the hand-set native values exactly (145 → 144/136) and gives 48/40 at
+0.25°. Found on the way: the OSSE product named its currents `uo_dNN`/`vo_dNN`, not canonical for
+the contract shared with `oceanml3d-eval`; the (slow) end-to-end OSSE test that checks the contract
+in strict mode was failing on it.
+
+**Verification:** `pytest -m "not slow"` — 875 passed; `tests/test_osse_smoke.py` including the slow
+end-to-end test — passed.
+
 ## 2026-09-20: The data directory follows the target resolution, for every step
 
 **Summary:** With `OCEANML3D_TARGET_RES` set, `load_site` derives the data root as

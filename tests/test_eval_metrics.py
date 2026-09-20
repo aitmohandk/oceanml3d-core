@@ -135,3 +135,35 @@ def test_the_shipped_osse_splits_are_disjoint_with_gaps():
     assert (s["test"][0] - s["val"][1]).days > window
     assert (pd.Timestamp("2019-01-01") - s["test"][0]).days >= window - 1, "2019 must be fully covered"
     assert not d.get("splits_overlap_ok", False)
+
+
+# --- patch/stride `auto`: fitted to the grid, whatever the resolution ------------------------------
+
+@pytest.mark.parametrize("cells,patch,stride", [(145, 144, 136), (49, 48, 40), (16, 16, 8)])
+def test_auto_patch_matches_the_hand_set_native_values_and_fits_quarter_degree(cells, patch, stride):
+    from omegaconf import OmegaConf
+
+    from oceanml3d.cli import resolve_auto_patch
+
+    cfg = OmegaConf.create({"data": {"patch": {"time": 11, "lat": "auto", "lon": "auto"},
+                                     "stride": {"time": 1, "lat": "auto", "lon": "auto"},
+                                     "patch_multiple": 16},
+                            "training": {"rec_weight": {"crop": {"time": 0, "lat": 4, "lon": 4}}}})
+    OmegaConf.set_struct(cfg, True)                    # as Hydra hands it over
+    resolve_auto_patch(cfg, None, None, sizes={"lat": cells, "lon": cells})
+    assert (cfg.data.patch.lat, cfg.data.stride.lat) == (patch, stride)
+    assert (cfg.data.patch.lon, cfg.data.stride.lon) == (patch, stride)
+    assert cfg.data.patch.time == 11 and cfg.data.stride.time == 1
+
+
+def test_auto_patch_refuses_a_domain_smaller_than_the_multiple():
+    from omegaconf import OmegaConf
+
+    from oceanml3d.cli import resolve_auto_patch
+
+    cfg = OmegaConf.create({"data": {"patch": {"time": 5, "lat": "auto", "lon": 16},
+                                     "stride": {"time": 1, "lat": "auto", "lon": 8}},
+                            "training": {"rec_weight": {"crop": {"lat": 4}}}})
+    with pytest.raises(SystemExit, match="fewer than data.patch_multiple"):
+        resolve_auto_patch(cfg, None, None, sizes={"lat": 12, "lon": 40})
+

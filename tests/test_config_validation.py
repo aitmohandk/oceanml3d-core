@@ -6,6 +6,9 @@ from oceanml3d.cli import CONFIG_DIR, build_variables
 from oceanml3d.config_schema import validate_config
 
 
+NATIVE = ("data.patch.lat=144", "data.patch.lon=144", "data.stride.lat=136", "data.stride.lon=136")
+
+
 def _cfg(*overrides):
     with initialize_config_dir(version_base="1.3", config_dir=CONFIG_DIR):
         return compose(config_name="main", overrides=["experiment=osse3d_gs21_multivar_unet", *overrides])
@@ -31,7 +34,9 @@ def test_shipped_experiments_are_valid():
     ("data.splits.test.time=[2020-01-01,2019-01-01]", "is not before stop"),
 ])
 def test_catches_common_mistakes(override, expected):
-    cfg = _cfg(override)
+    # osse3d_gs21 derives lat/lon patch and stride from the grid ("auto"), checked once resolved;
+    # pin the native numbers so the geometric checks have something to check here.
+    cfg = _cfg(*NATIVE, override)
     assert any(expected in p for p in validate_config(cfg, variables=build_variables(cfg))), override
 
 
@@ -82,11 +87,11 @@ def test_overlap_smaller_than_twice_the_crop_is_rejected():
     """The cropped border of a patch contributes nothing, so the neighbour has to cover it. Both
     shipped tasks sit exactly on the equality (144 - 136 = 8 = 2 x 4), so any edit to patch, stride
     or crop broke the export -- with blank seams, and nothing downstream complaining."""
-    cfg = _cfg("data.stride.lat=142")           # overlap 2, crop 4 -> needs 8
+    cfg = _cfg(*NATIVE, "data.stride.lat=142")  # overlap 2, crop 4 -> needs 8
     problems = validate_config(cfg, variables=build_variables(cfg))
     assert any("uncovered seams" in x for x in problems), problems
 
-    cfg = _cfg("data.stride.lat=136")           # overlap 8 == 2 x 4: the shipped setting
+    cfg = _cfg(*NATIVE)                         # overlap 8 == 2 x 4: what auto gives at 1/12 deg
     assert validate_config(cfg, variables=build_variables(cfg)) == []
 
 

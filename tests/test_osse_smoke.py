@@ -118,3 +118,26 @@ def test_osse_train_predict_export_produces_a_valid_non_trivial_product(osse_cfg
     model.on_save_checkpoint(ckpt)
     assert ckpt["oceanml3d"]["variables"] == list(variables.names)
     assert torch.isfinite(torch.as_tensor(ckpt["oceanml3d"]["norm_stats"]["std"])).all()
+
+
+def test_auto_patch_is_read_from_the_data(osse_dir):
+    """`auto` resolves from the grid on disk (here 20 x 20 cells on the smoke domain) and trains."""
+    from oceanml3d.cli import build_datamodule
+    from oceanml3d.config_schema import validate_config
+
+    with initialize_config_dir(version_base="1.3", config_dir=CONFIG_DIR):
+        cfg = compose(config_name="main", overrides=[
+            "experiment=osse3d_smoke", f"paths.root={osse_dir}",
+            "data.splits.train.time=[2019-01-01,2019-01-20]",
+            "data.splits.val.time=[2019-01-21,2019-01-30]",
+            "data.splits.test.time=[2019-01-31,2019-02-09]",
+            "data.patch.lat=auto", "data.patch.lon=auto", "data.stride.lat=auto", "data.stride.lon=auto",
+            "data.patch_multiple=8"])
+    assert validate_config(cfg) == [] or not any("patch" in p for p in validate_config(cfg))
+    variables, catalog = build_variables(cfg), build_catalog(cfg)
+    prepare_observations(cfg, catalog)
+    dm = build_datamodule(cfg, variables, catalog)
+    n = open_variable_set(variables, catalog, {k: slice(*v) for k, v in cfg.data.domain.items()}).sizes["lat"]
+    assert cfg.data.patch.lat == (n // 8) * 8 and cfg.data.stride.lat == cfg.data.patch.lat - 2 * 4
+    dm.setup("fit")
+    assert tuple(dm.datasets["train"][0].shape[-2:]) == (cfg.data.patch.lat, cfg.data.patch.lon)
