@@ -1,5 +1,48 @@
 # Changelog
 
+## 2026-09-20: The two gaps that blocked training — site catalogs written, bathymetry set aside
+
+**Summary:** `config/paths/datarmor.yaml` and `config/paths/jeanzay.yaml` now exist, so the two
+target centres can resolve the OSSE-3D task; and `bathy` is turned off in
+`config/data/osse3d_gs21.yaml` (`bathy: null`) with `config/ablation/bathy.yaml` as the one-line way
+back. Those were the last two things standing between a prepared dataset and a training run.
+
+**Files modified:**
+- new `config/paths/datarmor.yaml` — local's sixteen keys, rooted at
+  `${oc.env:OCEANML3D_DATA,/home/datawork-lops-oh/oceanml3d}`. Nothing points at `/home/ref-*`: the
+  read-only CMEMS and Argo mirrors are read by the preparation recipes (`GLORYS_SRC`, `ARGO_GDAC`),
+  not by the catalog, which only describes what this project produced.
+- new `config/paths/jeanzay.yaml` — the same keys, rooted at `$WORK/oceanml3d`, with the note on
+  `$WORK` versus the purged `$SCRATCH` and on the 500 000-inode quota.
+- `config/data/osse3d_gs21.yaml` — `bathy: null`; the comment says why and how to put it back.
+- new `config/ablation/bathy.yaml` — `ablation=bathy` declares the static input again, unchanged.
+- `jobs/env/{datarmor,jeanzay}.sh` — the "TO FILL IN" banners replaced by what is now true (Jean Zay
+  keeps the account to fill in, in `jobs/slurm/*.sbatch`).
+- `tests/test_config_validation.py` — three tests, below.
+- documentation: `docs/gridded_models.md` §5.1 (the "known gap" section is now the catalog's two
+  rules), `docs/pipeline_3d.md` (§1 table, §3.1a, §3.2, the ablation table, prerequisites),
+  `docs/data_preparation.md`, `docs/platforms/{datarmor,jeanzay}.md` (both said to copy
+  `local.yaml`, and Jean Zay's snippet still rooted the data in `$SCRATCH`), `jobs/README.md`,
+  `PLAN.md` §A.
+
+**Rationale:** the bathymetry was a static input whose catalog key nothing produced — validation
+passed (the key was declared) and the training run stopped on a missing file. Rather than write a
+GEBCO recipe now, it is set aside: the first result to get is the simple model on data that exists.
+Turning it off is a data decision, so it belongs in the data config, and an ablation is exactly the
+shape of "one input more, nothing else changes". The catalogs were the mirror-image problem: the
+site scripts pointed at files that had never been written.
+
+**Verification:** `pytest -m "not slow"` — 888 passed, 9 skipped. Three new tests:
+- `test_every_source_of_the_osse_task_is_produced_by_something` — every catalog key the task reads
+  is written by a recipe in `scripts/prepare/recipes/` (matching `output` against the catalog path,
+  `${YEAR}`-style placeholders included) or by `prepare-obs`. This is the test that fails if a
+  source without a producer comes back.
+- `test_the_sites_that_carry_the_osse_task_define_every_key_it_needs` — the mirror of
+  `test_a_site_file_does_not_invent_keys_of_its_own`: that one catches a key too many, this one a
+  key missing, per task rather than globally (odyssey is legitimately partial).
+- `test_the_bathymetry_is_off_by_default_and_the_ablation_puts_it_back`.
+- `test_every_site_env_file_has_a_matching_paths_file` no longer tolerates a missing catalog.
+
 ## 2026-09-20: Documentation cleanup — 18 files moved or removed, the rest realigned
 
 **Summary:** the reserve's working notes are gathered under `docs/legacy/` with an index; three

@@ -1,8 +1,8 @@
 # Site: Datarmor (Ifremer). PBS Pro, Tesla V100-PCIE-32GB, driver 530.30.02 / CUDA 12.1.
 #
-# TO FILL IN: OCEANML3D_DATA, and config/paths/datarmor.yaml with this centre's paths. The catalog
-# keys are the sixteen in config/paths/local.yaml; copy that file and change the paths, not the keys
-# (test_a_site_file_does_not_invent_keys_of_its_own enforces exactly that).
+# The catalog is config/paths/datarmor.yaml, rooted at OCEANML3D_DATA below. Check that root is
+# where you want the data before the first preparation job: it is $DATAWORK by default, and
+# $SCRATCH is purged after ten days.
 
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 load_modules singularity || return 1   # or `apptainer`, depending on what the centre exposes

@@ -163,9 +163,10 @@ def test_a_prepare_output_need_not_exist_but_must_be_declared():
     assert any("pseudo_obs.output 'not_a_key' is not in the catalog" in x for x in problems), problems
 
 
-def test_every_site_env_file_has_a_matching_paths_file_or_is_a_template():
+def test_every_site_env_file_has_a_matching_paths_file():
     """A site is two files: jobs/env/<site>.sh (environment) and config/paths/<site>.yaml (data).
-    A site script pointing at a catalog that does not exist fails only once a job is queued."""
+    A site script pointing at a catalog that does not exist fails only once a job is queued -- which
+    is what happened on Datarmor and Jean Zay, whose scripts said `TO FILL IN` for months."""
     import glob
     import os
     import re
@@ -182,8 +183,75 @@ def test_every_site_env_file_has_a_matching_paths_file_or_is_a_template():
         assert m, f"{path} must set OCEANML3D_PATHS"
         declared = m.group(1)
         assert declared == site, f"{path} points at paths={declared}, expected {site}"
-        # The paths file may legitimately not exist yet for a site nobody has configured; what must
-        # not happen is a site script silently pointing at another site's catalog.
+        assert os.path.exists(f"{CONFIG_DIR}/paths/{site}.yaml"), \
+            f"{path} points at config/paths/{site}.yaml, which does not exist"
+
+
+def test_the_sites_that_carry_the_osse_task_define_every_key_it_needs():
+    """`test_a_site_file_does_not_invent_keys_of_its_own` catches a key too many; this one catches a
+    key missing. A partial catalog is legitimate (odyssey only carries the surface datasets), so the
+    check is per task: a site that claims a task must define every key that task resolves."""
+    import re
+
+    catalog = _catalog_from("local")
+    with initialize_config_dir(version_base="1.3", config_dir=CONFIG_DIR):
+        cfg = compose(config_name="main", overrides=["experiment=osse3d_gs21_multivar_unet"])
+    missed = (re.search(r"'([^']+)' is not in the catalog", p)
+              for p in validate_config(cfg, _catalog_from("odyssey"), build_variables(cfg)))
+    needed = {m.group(1) for m in missed if m}
+    assert needed, "the odyssey catalog is expected to lack the OSSE keys; this test has gone stale"
+    assert needed <= set(catalog.entries)
+    for site in ("datarmor", "jeanzay"):
+        missing = sorted(needed - set(_catalog_from(site).entries))
+        assert missing == [], f"{site}.yaml cannot run the OSSE task: {missing} missing"
+
+
+def test_every_source_of_the_osse_task_is_produced_by_something():
+    """The experiment shipped with `bathy: {source: bathy_gs}` and no recipe anywhere writing a
+    bathy_gs file: validation passed (the key was in the catalog), training stopped on a missing
+    file. A catalog key is a promise that something fills it -- a recipe in scripts/prepare/recipes/
+    or the OSSE simulator -- and this test is that promise."""
+    import glob
+    import re
+
+    import yaml
+
+    data = yaml.safe_load(open(f"{CONFIG_DIR}/data/osse3d_gs21.yaml"))
+    prepare = data["prepare"]
+    simulated = {prepare["pseudo_obs"]["ssh"]["output"], prepare["pseudo_obs"]["sst"]["output"],
+                 prepare["virtual_argo"]["output"]}
+    used = {spec["source"] for spec in data["variables"].values() if spec}
+    used |= {prepare["pseudo_obs"][k]["truth"] for k in ("ssh", "sst")}
+    used |= {prepare["virtual_argo"]["truth"], prepare["virtual_argo"]["profiles"]}
+
+    catalog = yaml.safe_load(open(f"{CONFIG_DIR}/paths/local.yaml"))["datasets"]
+    # A recipe's `output` is ${OCEANML3D_DATA}/<the catalog path>; ${YEAR} and friends are filled in
+    # by jobs/prepare.sh, so they match anything.
+    written = [re.escape(yaml.safe_load(open(r)).get("output", "")).replace(r"\$\{", "${")
+               for r in glob.glob("scripts/prepare/recipes/*.yaml")]
+    written = [re.sub(r"\$\{[^}]+\}", ".*", w) for w in written]
+
+    for key in sorted(used):
+        if key in simulated:
+            continue                       # written by `oceanml3d command=prepare-obs`
+        path = catalog[key]["path"]
+        assert any(re.fullmatch(w, ".*/" + path) or re.fullmatch(w, path) for w in written), \
+            (f"catalog key '{key}' ({path}) is used by config/data/osse3d_gs21.yaml but no recipe in "
+             f"scripts/prepare/recipes/ writes it: either add the recipe, or drop the variable")
+
+
+def test_the_bathymetry_is_off_by_default_and_the_ablation_puts_it_back():
+    """It is set aside for the first step, not removed: `ablation=bathy` is the one-line way back,
+    and it must keep resolving as long as the catalog key is there."""
+    with initialize_config_dir(version_base="1.3", config_dir=CONFIG_DIR):
+        cfg = compose(config_name="main", overrides=["experiment=osse3d_gs21_multivar_unet"])
+    assert "bathy" not in {v.name for v in build_variables(cfg)}
+    with initialize_config_dir(version_base="1.3", config_dir=CONFIG_DIR):
+        cfg = compose(config_name="main",
+                      overrides=["experiment=osse3d_gs21_multivar_unet", "ablation=bathy"])
+    variables = build_variables(cfg)
+    assert [v.source for v in variables if v.name == "bathy"] == ["bathy_gs"]
+    assert validate_config(cfg, variables=variables) == []
 
 
 def test_regrid_recipe_rejects_depth_indices_without_keep_depth(tmp_path):

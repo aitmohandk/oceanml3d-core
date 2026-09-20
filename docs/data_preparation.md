@@ -37,7 +37,7 @@ Three things decide where the files land and what they are:
 | GLORYS12 truth, one year | `jobs/prepare.sh glorys <year>` → `by_year/glorys_gs_multidepth_<year>.zarr` | — |
 | GLORYS12 truth, merged | `jobs/prepare.sh concat` | `glorys_gs_multidepth` |
 | GLORYS12 truth, surface | the same Zarr store (`zos` has no depth axis, `lat` is a coordinate) | `glorys_gs_surface` |
-| Bathymetry on the GLORYS grid | **no recipe yet** — GEBCO with `regrid.py` and `reference:` pointing at the prepared truth (`PLAN.md` §A) | `bathy_gs` |
+| Bathymetry on the GLORYS grid | **not prepared, and not needed**: the task ships with `bathy: null`. When you want it, GEBCO with `regrid.py` and `reference:` pointing at the prepared truth, then `ablation=bathy` | `bathy_gs` |
 | ARGO coverage table | `jobs/prepare.sh argo` — from the site's GDAC mirror when it has one (`source: gdac`, Datarmor's `/home/ref-argo/gdac`, read through its global index), else downloaded with `argopy` | `argo_profiles_gs` |
 
 On Datarmor neither GLORYS nor ARGO is downloaded: both are mirrored under `/home/ref-*`. The

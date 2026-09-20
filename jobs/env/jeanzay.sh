@@ -1,6 +1,7 @@
 # Site: Jean Zay (IDRIS). Slurm, V100 / A100 / H100 depending on the partition.
 #
-# TO FILL IN: the account (`--account=xxx@v100`), and config/paths/jeanzay.yaml.
+# TO FILL IN: the account (`--account=xxx@v100`) in jobs/slurm/*.sbatch. The catalog is
+# config/paths/jeanzay.yaml, rooted at OCEANML3D_DATA below ($WORK, not the purged $SCRATCH).
 #
 # Two IDRIS specifics to confirm against the current documentation before the first run, because
 # both will stop a job dead and neither is a code problem:

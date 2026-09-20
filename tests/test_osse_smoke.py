@@ -31,7 +31,8 @@ def test_prepare_and_open(osse_dir, osse_cfg):
     prepare_observations(osse_cfg, catalog)
     assert (osse_dir / "synthetic_pseudo_obs.nc").exists()
     variables = build_variables(osse_cfg)
-    assert len(variables.targets) == 10 and len(variables.inputs) == 12 and len(variables.names) == 24
+    # 11 inputs, not 12: `bathy` is set aside (`bathy: null`), and `ablation=bathy` puts it back.
+    assert len(variables.targets) == 10 and len(variables.inputs) == 11 and len(variables.names) == 23
     da = open_variable_set(variables, catalog, {"lat": slice(-5, 5), "lon": slice(-5, 5), "time": slice("2019-01-01", "2019-01-10")})
     assert list(da.channel.values)[-1] == "vo_d02"
     argo = da.sel(channel="argo_thetao_d01").values

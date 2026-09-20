@@ -30,7 +30,7 @@ patching, losses), `jobs/README.md` (how the scheduler layer works), `docs/data_
 | **Inputs** | `ssh_obs` + `obs_mask` | simulated nadir tracks over GLORYS SSH |
 | | `sst_in` + `sst_mask` | cloud-masked SST |
 | | `argo_thetao` × 21 + `argo_mask` × 21 | virtual ARGO on the real floats' geometry |
-| | `lat`, `bathy` | statics |
+| | `lat` | static (`bathy` is set aside for now — `ablation=bathy` adds it back) |
 | **Targets** | `zos` | GLORYS SSH |
 | | `thetao`, `uo`, `vo` × 21 levels | GLORYS truth |
 
@@ -51,7 +51,9 @@ it possible to score a reconstruction at 150 m, where no real observation exists
 * An environment: the container is the recommended route on both centres
   (`apptainer build oceanml3d.sif container/oceanml3d.def`), `environment.yml` otherwise.
 * CMEMS credentials for the downloads: `copernicusmarine login`, once, on a node **with network**.
-* `config/paths/<site>.yaml` and `jobs/env/<site>.sh` filled in for your centre.
+* `config/paths/<site>.yaml` and `jobs/env/<site>.sh` for your centre. `local`, `datarmor` and
+  `jeanzay` ship complete; check `OCEANML3D_DATA` in the site script points where you want the
+  data before the first preparation job.
 
 ### The one thing to check before anything else
 
@@ -135,11 +137,12 @@ What to keep in mind:
   are fitted to the grid on disk at run time — 144 / 136 at 1/12° (145 cells), 48 / 40 at 0.25°
   (49 cells). Nothing to pass on the command line ([gridded_models.md §4.4](gridded_models.md)).
 - **Everything downstream follows the truth grid**: the pseudo-obs and virtual ARGO are simulated on
-  it. The bathymetry is the exception — regrid it onto the prepared truth with `reference:`.
+  it. A dataset that does not come from the truth — the bathymetry, if you add it back — is the
+  exception: regrid it onto the prepared truth with `reference:`.
 - Bilinear from 1/12° to 1/4° is what NOSC did; it subsamples rather than averages. For
   an area mean, `method: conservative` needs `xesmf` in the image.
 
-### 3.2 ARGO coverage table and statics
+### 3.2 ARGO coverage table
 
 ```bash
 jobs/prepare.sh --site <site> argo
@@ -153,7 +156,11 @@ the **coverage table**: where and when a float was, and how deep it reached. The
 away — §3.3 replaces them with the truth. That is what makes the ARGO input *virtual*: real
 geometry, simulated values.
 
-Bathymetry (`bathy_gs`) is GEBCO regridded onto the GLORYS grid, once, with `regrid.py`.
+Bathymetry is **not** part of this step. `config/data/osse3d_gs21.yaml` ships with `bathy: null`:
+the first model to validate is the simple one, and nothing here produces `bathy_gs`. When it is
+wanted, it is GEBCO regridded onto the prepared truth, once, with `regrid.py` and `reference:`
+pointing at the truth; `oceanml3d … ablation=bathy` then declares it again as a static input, and
+nothing else changes.
 
 ### 3.3 The observing system, simulated
 
@@ -258,6 +265,7 @@ OCEANML3D_ARGS="experiment=osse3d_gs21_multivar_unet ablation=vertical_modes"
 | `temporal_conv3d` | explicit 3D temporal mixing versus time-as-channels |
 | `gradsolver` | iterative 4DVarNet instead of the direct U-Net |
 | `trunk_nosc` | NOSC's own residual U-Net instead of the MONAI trunk |
+| `bathy` | adds the bathymetry back as a static input (needs `bathy_gs` prepared: §3.2) |
 
 `vertical_modes` needs its bases first:
 

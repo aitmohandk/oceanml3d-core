@@ -9,7 +9,7 @@ paths:
   datasets:
     glorys_gs_surface:   {path: synthetic_osse_surface.nc}
     glorys_gs_multidepth: {path: synthetic_osse_multidepth.nc}
-    bathy_gs:            {path: synthetic_static.nc}
+    bathy_gs:            {path: synthetic_static.nc}    # unused by default; `ablation=bathy` reads it
     pseudo_obs_ssh_gs:   {path: synthetic_pseudo_obs.nc}
     pseudo_obs_sst_gs:   {path: synthetic_pseudo_obs_sst.nc}
     argo_virtual_thetao_gs21: {path: synthetic_argo_virtual.nc}
