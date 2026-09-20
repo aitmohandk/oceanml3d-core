@@ -5,7 +5,6 @@ from omegaconf import OmegaConf, open_dict
 from oceanml3d.cli import CONFIG_DIR, build_variables
 from oceanml3d.config_schema import validate_config
 
-
 NATIVE = ("data.patch.lat=144", "data.patch.lon=144", "data.stride.lat=136", "data.stride.lon=136")
 
 
