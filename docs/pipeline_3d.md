@@ -108,7 +108,9 @@ GLORYS is 1/12°, and that is what you get by default. To work coarser — NOSC'
 jobs/prepare.sh --site datarmor --res 0.25 glorys 2010        # or OCEANML3D_TARGET_RES=0.25
 qsub -v OCEANML3D_SITE=datarmor,OCEANML3D_TARGET_RES=0.25 jobs/pbs/prepare_glorys.pbs
 
-# or once for every job, since a batch job does not inherit your shell's environment:
+# or once for every job, since a batch job does not inherit your shell's environment
+# (the file is yours to create; nothing creates it -- see jobs/README.md):
+mkdir -p ~/.config/oceanml3d
 echo 'export OCEANML3D_TARGET_RES="${OCEANML3D_TARGET_RES:-0.25}"' > ~/.config/oceanml3d/env.sh
 ```
 

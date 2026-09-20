@@ -214,6 +214,17 @@ One year per task, for the same reason as everywhere: a monolithic job saves not
 so a walltime overrun loses the lot. `regrid.py` skips completed outputs, so resubmitting the array
 resumes rather than restarts.
 
+**Resolution.** Native 1/12 deg by default. For another step, set `OCEANML3D_TARGET_RES`; the data
+root then becomes `$OCEANML3D_DATA/res<step>` for every step, training included
+([pipeline_3d.md section 3.1a](../pipeline_3d.md)). Rather than adding it to every `--export`, write
+it once in `~/.config/oceanml3d/env.sh`, which every job reads ([jobs/README.md](../../jobs/README.md));
+nothing creates that file for you:
+
+```bash
+mkdir -p ~/.config/oceanml3d
+echo 'export OCEANML3D_TARGET_RES="${OCEANML3D_TARGET_RES:-0.25}"' > ~/.config/oceanml3d/env.sh
+```
+
 ### G.3 ARGO coverage table — pre/post again, it downloads
 
 ```bash

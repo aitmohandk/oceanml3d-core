@@ -314,7 +314,8 @@ echo 'export OCEANML3D_TARGET_RES="${OCEANML3D_TARGET_RES:-0.25}"' > ~/.config/o
 ```
 
 (bash syntax on purpose: the jobs are bash scripts, whatever your login shell. Remove the file, or
-pass `OCEANML3D_TARGET_RES=native`, for the native grid.) Each log's first `[prepare]` line prints the
+pass `OCEANML3D_TARGET_RES=native`, for the native grid. Nothing creates this file for you; details
+in [jobs/README.md](../../jobs/README.md).) Each log's first `[prepare]` line prints the
 data directory and resolution it uses.
 
 Then merge into the single file the configs expect:
