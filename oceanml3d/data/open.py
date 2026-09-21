@@ -59,18 +59,53 @@ def _align_space(da: xr.DataArray, reference: xr.DataArray, name: str) -> xr.Dat
     return da.reindex(lat=reference.lat, lon=reference.lon, method="nearest")
 
 
-def _align_time(da: xr.DataArray, reference: xr.DataArray, name: str) -> xr.DataArray:
-    """Reindex onto the reference time axis, saying how many steps had to be invented.
+def _missing_steps(da: xr.DataArray, reference: xr.DataArray) -> int:
+    return int(np.count_nonzero(~np.isin(reference.time.values, da.time.values)))
 
-    Missing dates become NaN, and for an input NaN becomes 0 in ``BaseOceanModel.inputs`` -- so a
-    month-long hole in a forcing file trains the model on a month of zeros without a word.
+
+def _describe_time(da: xr.DataArray) -> str:
+    t = da.time.values
+    if t.size == 0:
+        return "no time step at all"
+    return f"{t.size} steps, {str(t[0])[:19]} .. {str(t[-1])[:19]} ({t.dtype})"
+
+
+def _align_time(da: xr.DataArray, reference: xr.DataArray, name: str) -> xr.DataArray:
+    """Reindex onto the reference time axis. Missing dates become NaN.
+
+    For an input, NaN becomes 0 in ``BaseOceanModel.inputs`` -- so a hole in a forcing file trains
+    the model on zeros. How many steps were invented is reported by :func:`open_variable_set`, once
+    per file, and a variable with *none* of the reference's steps is refused there outright.
     """
-    missing = int(np.count_nonzero(~np.isin(reference.time.values, da.time.values)))
-    if missing:
-        total = reference.sizes["time"]
-        print(f"[oceanml3d] {name}: {missing}/{total} time steps ({100 * missing / total:.1f}%) are "
-              f"absent from the file and will be NaN (0 for inputs) after reindexing")
     return da.reindex(time=reference.time)
+
+
+def _report_time_gaps(gaps: dict, reference: xr.DataArray, first: str) -> None:
+    """One line per file rather than one per channel, and a hard stop when a file shares no date.
+
+    ``osse3d_gs21`` draws 42 channels from the virtual ARGO file. A file built against another truth
+    printed 42 identical lines saying 100% of the steps were absent -- and then training went ahead
+    on an ARGO input that was zero everywhere, which no metric would ever have flagged: the model
+    simply learns to ignore a channel that never carries information. A file whose time axis has no
+    date in common with the reference is not a gap, it is the wrong file.
+    """
+    total = reference.sizes["time"]
+    empty = []
+    for path, (names, missing, axis) in gaps.items():
+        worst = max(missing)
+        head = ", ".join(names[:3]) + (f" and {len(names) - 3} more" if len(names) > 3 else "")
+        print(f"[oceanml3d] {path}: {worst}/{total} time steps ({100 * worst / total:.1f}%) absent "
+              f"for {len(names)} channel(s) ({head}); they will be NaN (0 for inputs)")
+        if worst == total:
+            empty.append(f"  {path}\n    file:      {axis}\n    reference: {_describe_time(reference)} "
+                         f"(from '{first}')")
+    if empty:
+        raise ValueError(
+            "these files share no date with the rest of the task, so every channel read from them "
+            "would be empty for the whole run:\n" + "\n".join(empty) + "\n"
+            "A derived file (a `prepare-obs` output: pseudo-obs, virtual ARGO) built against another "
+            "truth, period or resolution is the usual cause -- delete it and it is rebuilt on the "
+            "next run.")
 
 
 def _select_domain(da: xr.DataArray, domain: Mapping[str, slice]) -> xr.DataArray:
@@ -145,7 +180,9 @@ def open_variable_set(variables: VariableSet, catalog: Catalog, domain: Mapping[
     """Return a lazy DataArray with dims ``(channel, time, lat, lon)``."""
     arrays: dict[str, xr.DataArray] = {}
     reference: xr.DataArray | None = None
+    first = ""
     cache: dict[str, xr.Dataset] = {}          # one handle per file for the whole set
+    gaps: dict[str, tuple[list[str], list[int], str]] = {}
     for spec in variables:
         da = open_variable(spec, catalog, domain, chunks, cache)
         if spec.is_static:
@@ -155,11 +192,18 @@ def open_variable_set(variables: VariableSet, catalog: Catalog, domain: Mapping[
             da = da.expand_dims(time=reference.time).broadcast_like(reference)
         else:
             if reference is None:
-                reference = da
+                reference, first = da, spec.name
             else:
                 da = _align_space(da, reference, spec.name)
+                missing = _missing_steps(da, reference)
+                if missing:
+                    entry = gaps.setdefault(str(catalog.resolve(spec.source)), ([], [], _describe_time(da)))
+                    entry[0].append(spec.name)
+                    entry[1].append(missing)
                 da = _align_time(da, reference, spec.name)
         arrays[spec.name] = da.transpose("time", "lat", "lon")
+    if gaps:
+        _report_time_gaps(gaps, reference, first)
     stacked = xr.concat(list(arrays.values()), dim="channel", coords="minimal", compat="override")
     stacked = stacked.assign_coords(channel=list(arrays))
     return stacked.astype(np.float32)
@@ -177,5 +221,15 @@ def compute_norm_stats(da: xr.DataArray, time_slice: slice) -> tuple[np.ndarray,
     stats = xr.Dataset({"mean": sub.mean(dim=dims, skipna=True),
                         "std": sub.std(dim=dims, skipna=True)}).compute()
     mean, std = stats["mean"].values, stats["std"].values
-    std = np.where(std > 0, std, 1.0)
+    # A channel with no finite value in the train window has no mean either: NaN, which would then
+    # normalise every value of that channel to NaN. It is reported rather than papered over -- it is
+    # the same failure as a file with no date in common, caught one step later.
+    blank = ~np.isfinite(mean)
+    if blank.any():
+        names = [str(c) for c in np.asarray(da.channel.values)[blank]] if "channel" in da.coords else []
+        print(f"[oceanml3d] WARNING {int(blank.sum())} channel(s) have no finite value in the train "
+              f"window {time_slice.start}..{time_slice.stop}: {', '.join(names[:5])}"
+              f"{' ...' if len(names) > 5 else ''} -- normalised with mean 0, std 1")
+    mean = np.where(blank, 0.0, mean)
+    std = np.where(np.isfinite(std) & (std > 0), std, 1.0)
     return mean.astype(np.float32), std.astype(np.float32)

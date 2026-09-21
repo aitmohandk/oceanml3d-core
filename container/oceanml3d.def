@@ -49,13 +49,13 @@ From: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
         torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 
     # The package itself, so its metadata, console script and entry points are what gets exercised.
-    python3 -m pip install --no-cache-dir -e '/opt/oceanml3d[dev,zarr]'
+    python3 -m pip install --no-cache-dir -e '/opt/oceanml3d[dev,zarr,logging]'
 
     python3 - <<'PY'
 import torch
 assert torch.__version__.startswith("2.6"), torch.__version__
 assert "+cu124" in torch.__version__, torch.__version__
-import monai, xarray, netCDF4, dask, einops, scipy  # noqa: F401
+import monai, xarray, netCDF4, dask, einops, scipy, tensorboard  # noqa: F401
 print("built:", torch.__version__, "| monai", monai.__version__)
 PY
 

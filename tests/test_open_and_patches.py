@@ -244,3 +244,20 @@ def test_a_variable_on_another_grid_is_rejected(tmp_path, variables, catalog):
     })
     with pytest.raises(ValueError, match="not on the reference grid"):
         open_variable_set(vs, cat, {})
+
+
+def test_a_channel_with_no_finite_value_is_normalised_with_zero_mean_and_reported(capsys):
+    import numpy as np
+    import pandas as pd
+    import xarray as xr
+
+    from oceanml3d.data.open import compute_norm_stats
+
+    t = pd.date_range("2019-01-01", periods=4)
+    data = np.random.rand(2, 4, 3, 3).astype("f4")
+    data[1] = np.nan
+    da = xr.DataArray(data, dims=("channel", "time", "lat", "lon"),
+                      coords={"channel": ["ok", "empty"], "time": t})
+    mean, std = compute_norm_stats(da, slice(t[0], t[-1]))
+    assert np.isfinite(mean).all() and mean[1] == 0.0 and std[1] == 1.0
+    assert "no finite value in the train window" in capsys.readouterr().out

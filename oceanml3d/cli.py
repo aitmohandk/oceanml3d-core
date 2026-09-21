@@ -156,8 +156,25 @@ def build_trainer(cfg: DictConfig, stage: str | None = None):
     es = cfg.training.get("early_stopping")
     if es:
         callbacks.append(EarlyStopping(monitor=monitor, mode="min", **OmegaConf.to_container(es, resolve=True)))
-    loggers = [CSVLogger(out, name="", version=""), TensorBoardLogger(out, name="", version="")]
-    return Trainer(callbacks=callbacks, logger=loggers, default_root_dir=out, **OmegaConf.to_container(t, resolve=True))
+    return Trainer(callbacks=callbacks, logger=_loggers(out, TensorBoardLogger, CSVLogger),
+                   default_root_dir=out, **OmegaConf.to_container(t, resolve=True))
+
+
+def _loggers(out: str, tensorboard_cls, csv_cls) -> list:
+    """CSV always; TensorBoard when it is installed.
+
+    TensorBoard is a viewer, not a dependency of training, and an image built without it used to
+    fail a queued job at `build_trainer` -- after the data had been opened and the model built --
+    with `Neither tensorboard nor tensorboardX is available`. The CSV log holds every scalar
+    TensorBoard would have shown (`metrics.csv` next to the checkpoints).
+    """
+    loggers = [csv_cls(out, name="", version="")]
+    try:
+        loggers.append(tensorboard_cls(out, name="", version=""))
+    except ModuleNotFoundError as exc:
+        print(f"[oceanml3d] TensorBoard logging off ({exc.__class__.__name__}: neither tensorboard nor "
+              f"tensorboardX is installed); metrics go to {out}/metrics.csv only")
+    return loggers
 
 
 @hydra.main(config_path=CONFIG_DIR, config_name="main", version_base="1.3")
@@ -264,23 +281,83 @@ def prepare_observations(cfg: DictConfig, catalog: Catalog) -> None:
         return
 
     for e in entries:
-        out = prepare_pseudo_obs(catalog.resolve(e["truth"]), e["truth_var"], catalog.resolve(e["output"]),
+        output, truth = catalog.resolve(e["output"]), catalog.resolve(e["truth"])
+        stale = stale_derived_file(output, truth)
+        if stale:
+            print(f"[oceanml3d] rebuilding {output}: {stale}")
+        out = prepare_pseudo_obs(truth, e["truth_var"], output,
                                  missions=e.get("missions"),
                                  real_mask=catalog.resolve(e["real_mask"]) if e.get("real_mask") else None,
                                  noise_std=e.get("noise_std", 0.0), seed=e.get("seed", 1234),
                                  historical=e.get("historical", False), per_mission=e.get("per_mission", False),
-                                 depth_index=e.get("depth_index"), clouds=e.get("clouds"))
+                                 depth_index=e.get("depth_index"), clouds=e.get("clouds"),
+                                 skip_if_exists=not stale)
         print(f"pseudo-obs: {out}")
-    if va and not catalog.resolve(va["output"]).exists():
+    if va:
         import pandas as pd
+        output, truth = catalog.resolve(va["output"]), catalog.resolve(va["truth"])
         profiles_path = catalog.resolve(va["profiles"])
         if not profiles_path.exists():
-            print(f"virtual ARGO skipped: profile table {profiles_path} not found (see scripts/prepare/argo_profiles.py)")
+            if not output.exists():
+                print(f"virtual ARGO skipped: profile table {profiles_path} not found (see scripts/prepare/argo_profiles.py)")
+                return
+            # Nothing to rebuild from, so the file is used as it is -- but not unseen.
+            stale = stale_derived_file(output, truth)
+            print(f"virtual ARGO: no profile table ({profiles_path}); using {output} as it is"
+                  + (f" -- WARNING {stale}" if stale else ""))
             return
+        # Said either way. The run that trained on an empty ARGO input reused a file built against
+        # something else and printed nothing about it: neither "virtual ARGO:" nor "skipped".
+        stale = stale_derived_file(output, truth, newer_than=profiles_path) if output.exists() else "absent"
+        if not stale:
+            print(f"virtual ARGO: reusing {output} (same time axis and grid as {truth.name}, newer than "
+                  f"{profiles_path.name})")
+            return
+        if stale != "absent":
+            print(f"[oceanml3d] rebuilding {output}: {stale}")
         profiles = pd.read_csv(profiles_path) if profiles_path.suffix == ".csv" else pd.read_parquet(profiles_path)
-        out = build_virtual_argo(profiles, catalog.resolve(va["truth"]), va["truth_var"], list(va["depth_indices"]),
-                                 catalog.resolve(va["output"]), noise_std=va.get("noise_std", 0.0), seed=va.get("seed", 0))
+        out = build_virtual_argo(profiles, truth, va["truth_var"], list(va["depth_indices"]),
+                                 output, noise_std=va.get("noise_std", 0.0), seed=va.get("seed", 0))
         print(f"virtual ARGO: {out}")
+
+
+def stale_derived_file(output: Path, truth: Path, newer_than: Path | None = None) -> str | None:
+    """Why an existing ``prepare-obs`` output must be rebuilt, or ``None`` if it can be reused.
+
+    These files are skipped when they exist, which is what makes the step idempotent -- and what let
+    a virtual ARGO file with no date in common with the truth be reused silently, so a whole training
+    run saw an ARGO input that was zero everywhere. Existence is not validity: the file has to be on
+    the truth's time axis and grid (a truth re-prepared at another resolution or over another period
+    leaves every derived file behind), and newer than the table it was simulated from.
+    """
+    import pandas as pd
+    import xarray as xr
+
+    from oceanml3d.data.open import normalise_dims
+
+    output, truth = Path(output), Path(truth)
+    if not output.exists():
+        return None
+    if newer_than is not None and Path(newer_than).exists() and \
+            Path(newer_than).stat().st_mtime > output.stat().st_mtime:
+        return f"{Path(newer_than).name} is newer than it"
+    try:
+        with xr.open_dataset(output) as d:
+            got = normalise_dims(d)
+            got_t = pd.DatetimeIndex(got.time.values).normalize()
+            got_grid = (got.sizes.get("lat"), got.sizes.get("lon"))
+        ref = normalise_dims(xr.open_zarr(truth) if truth.suffix == ".zarr" else xr.open_dataset(truth))
+        ref_t = pd.DatetimeIndex(ref.time.values).normalize()
+        ref_grid = (ref.sizes.get("lat"), ref.sizes.get("lon"))
+    except Exception as exc:  # noqa: BLE001 -- unreadable is a reason to rebuild, not to crash
+        return f"it cannot be checked ({type(exc).__name__}: {exc})"
+    if got_grid != ref_grid:
+        return f"its grid is {got_grid[0]}x{got_grid[1]}, the truth's is {ref_grid[0]}x{ref_grid[1]}"
+    if not got_t.equals(ref_t):
+        def span(t):
+            return f"{t[0].date()}..{t[-1].date()} ({len(t)} days)" if len(t) else "empty"
+        return f"its time axis is {span(got_t)}, the truth's is {span(ref_t)}"
+    return None
 
 
 def compute_eofs(cfg: DictConfig, catalog: Catalog) -> None:

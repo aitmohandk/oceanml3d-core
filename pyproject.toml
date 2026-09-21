@@ -57,6 +57,9 @@ zarr = ["zarr>=2.16"]
 # only `scripts/prepare/` needs these, and only to *download* — nothing in the package imports them.
 prepare = ["copernicusmarine>=1.0", "cdsapi>=0.7", "xesmf>=0.8"]
 dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4"]
+# The TensorBoard logger. Optional -- training falls back to CSV without it -- but the image
+# installs it, and environment.yml always has: the two used to disagree, and the image lost.
+logging = ["tensorboard>=2.14"]
 
 [project.scripts]
 oceanml3d = "oceanml3d.cli:main"
