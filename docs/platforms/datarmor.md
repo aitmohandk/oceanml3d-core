@@ -4,7 +4,8 @@ From building the image to a first training run, in order. Validate each step be
 
 Datarmor is Ifremer's cluster (Pôle de Calcul et de Données Marines, Brest). This runbook covers the
 3D multivariate gridded model; `docs/pipeline_3d.md` describes what the model *is* and what the data
-means, and is worth reading first.
+means, and is worth reading first. [`docs/tutorial.md`](../tutorial.md) walks through the same steps
+generically — rehearse its Part 1 on your own machine before the first job here.
 
 **Three properties of Datarmor govern everything below:**
 
@@ -346,7 +347,7 @@ ls /home/ref-argo/gdac/                                  # dac/ and ar_index_glo
 head -12 /home/ref-argo/gdac/ar_index_global_prof.txt
 ```
 
-`scripts/prepare/recipes/argo_profiles_gs.datarmor.yaml` reads it (`source: gdac`,
+`scripts/prepare/recipes/argo_profiles_gs.gdac.yaml` reads it, since `jobs/env/datarmor.sh` sets `ARGO_GDAC` (`source: gdac`,
 `gdac_dir: ${ARGO_GDAC}`, set to `/home/ref-argo/gdac` in `jobs/env/datarmor.sh`, which also binds
 `/home/ref-argo`). So this runs on a **CPU queue, not `ftp`**, with no `argopy`:
 
@@ -478,6 +479,8 @@ rsync -av $SCRATCH/oceanml3d/runs/<run>/ $DATAWORK/oceanml3d/runs/<run>/
 | ARGO job killed on walltime with nothing after `ARGO profiles and coverage table from …` | twice. First: buffered output plus per-cycle Python decoding, or a recursive scan when the index was not found. Then, with those fixed, still silent — the step did not set `HDF5_USE_FILE_LOCKING=FALSE`, and on this mirror HDF5 hangs on the first open rather than erroring. It is set now, and the log announces each stage *before* running it: `python started`, `imports done`, the mirror's top level, the index and its size, one line per chunk of index, then the first three files by name and a s/file rate. Whatever the log's last line is, that is where it stopped. |
 | ARGO unfinished but not broken (exit code **75**) | the recipe's `time_budget_s` stopped it before the walltime, with its per-float cache written. `jobs/pbs/prepare_argo.pbs` resubmits itself up to `OCEANML3D_MAX_ATTEMPTS` (4) and each attempt continues from the cache; nothing is read twice. If four attempts are not enough, the s/file rate in the log says whether to raise the cap or look at the filesystem. |
 | A `.tmp.<name>` directory in `by_year/` or `glorys/` | a write that was killed. Harmless: the next run removes it and starts that output again. |
+| `the crop leaves a 2 deg rim of the product empty …` | `training.rec_weight.crop` is in cells and nothing covers the domain's outer edge: at 0.5° the default 4 cells is 2°, wider than the 1° `eval_domain` excludes, so a band the metrics score would be empty. The message gives the crop that fits (`training.rec_weight.crop.lat=2 training.rec_weight.crop.lon=2` at 0.5°). |
+| Training frozen at `Sanity Checking: 0/?`, no error, until the walltime | DataLoader workers deadlocked on dask's threaded scheduler, inherited by `fork` without its threads. Fixed on 2026-09-21 (workers read with the synchronous scheduler); an older clone has it with any `num_workers > 0`, which `osse3d_gs21_multivar_unet` sets to 2. |
 | `these files share no date with the rest of the task` | a `prepare-obs` output built against another truth, period or resolution. Delete it (`$OCEANML3D_DATA/osse/…`); the next run rebuilds it. Before this check, the same situation printed one `100.0% absent` line per channel — 42 for the virtual ARGO — and trained anyway, on an input that was zero everywhere. |
 | `Neither tensorboard nor tensorboardX is available` | an image built before `tensorboard` was in its install. Training now carries on with the CSV logger alone (`metrics.csv`); rebuild the image to get TensorBoard back. |
 | `Primary config directory not found. Check that '/opt/oceanml3d/config' exists` | the image's `oceanml3d` package was imported, and Hydra resolves `config_path` from its `__file__`. Same cause as the row below, different symptom: it reached training because `jobs/run.sh` had its own copy of the apptainer line and never went through `container_exec`. It does now; the `[oceanml3d] … exec …` line in the log shows the command actually run. |

@@ -1,9 +1,13 @@
-# ARGO coverage table on Datarmor, from the centre's read-only Argo GDAC mirror: no download, no
-# `ftp` queue. Ifremer hosts Coriolis, one of the two Argo global data centres, and
-# /home/ref-argo/gdac is the native GDAC tree (<dac>/<wmo>/<wmo>_prof.nc + ar_index_global_prof.txt).
-# The index is read first, so only the floats that crossed the box are opened.
+# ARGO coverage table from a local copy of the Argo GDAC: no download, no network, no `ftp` queue.
+# `jobs/prepare.sh argo` picks this recipe whenever ARGO_GDAC is set -- Datarmor sets it to the
+# centre's read-only mirror /home/ref-argo/gdac (Ifremer hosts Coriolis, one of the two Argo global
+# data centres); any other site with an rsync of the GDAC sets it to that. Without ARGO_GDAC, the
+# step falls back to argo_profiles_gs.yaml, which downloads with argopy and needs the network.
 #
-# Bind /home/ref-argo into the container (jobs/env/datarmor.sh does): unbound, the path is empty.
+# The layout is the native GDAC tree: <dac>/<wmo>/<wmo>_prof.nc plus ar_index_global_prof.txt. The
+# index is read first, so only the floats that crossed the box are opened.
+#
+# In a container, the GDAC must be bound (jobs/env/datarmor.sh does it): unbound, the path is empty.
 source: gdac
 gdac_dir: ${ARGO_GDAC}
 # index: /path/to/ar_index_global_prof.txt    # only if not in gdac_dir or its parent

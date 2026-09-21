@@ -167,3 +167,69 @@ def test_auto_patch_refuses_a_domain_smaller_than_the_multiple():
     with pytest.raises(SystemExit, match="fewer than data.patch_multiple"):
         resolve_auto_patch(cfg, None, None, sizes={"lat": 12, "lon": 40})
 
+
+
+def test_dataloader_workers_do_not_deadlock_after_dask_has_used_threads(synthetic_dir, tmp_path):
+    """DataLoader workers are forked after setup has run dask's threaded scheduler (the
+    normalisation statistics). A fork copies the pool object and not its threads, so the first read in
+    a worker queued its tasks on a pool nobody served: the OSSE-3D run froze at "Sanity Checking",
+    workers asleep on a futex, until the walltime. `osse3d_gs21_multivar_unet` sets num_workers: 2.
+
+    In a subprocess with a timeout, so a regression fails this test instead of hanging the suite."""
+    import subprocess
+    import sys
+    import textwrap
+
+    script = textwrap.dedent(f"""
+        import sys; sys.path.insert(0, {str(__import__("pathlib").Path(__file__).parent)!r})
+        from oceanml3d.catalog import Catalog
+        from oceanml3d.data.datamodule import OceanDataModule
+        from oceanml3d.variables import VariableSet
+        d = {str(synthetic_dir)!r}
+        cat = Catalog({{"ssh": d + "/synthetic_surface.nc", "drifters": d + "/synthetic_surface.nc"}})
+        vs = VariableSet.from_config({{"ssh": {{"source": "ssh", "var_name": "zos", "role": "input"}},
+                                       "u_drifter": {{"source": "drifters", "role": "target"}}}})
+        dm = OceanDataModule(vs, cat, domain={{"lat": [-5, 5], "lon": [-5, 5]}},
+                             splits={{"train": ["2019-01-01", "2019-01-20"], "val": ["2019-01-21", "2019-01-30"],
+                                     "test": ["2019-01-31", "2019-02-09"]}},
+                             patch={{"time": 5, "lat": 16, "lon": 16}}, stride={{"time": 1, "lat": 12, "lon": 12}},
+                             batch_size=2, num_workers=2)
+        dm.setup("fit")
+        next(iter(dm.val_dataloader())); next(iter(dm.train_dataloader()))
+        print("OK")
+    """)
+    out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120)
+    assert "OK" in out.stdout, out.stderr[-2000:]
+
+
+def test_the_crop_may_not_leave_an_empty_rim_inside_eval_domain(tmp_path):
+    """`rec_weight.crop` is in cells and nothing covers the domain's outer edge, so the product is NaN
+    over `crop x step`. At 0.5 deg the default 4 cells is 2 deg, twice the 1 deg eval_domain excludes."""
+    import pandas as pd
+    import xarray as xr
+    from omegaconf import OmegaConf
+
+    from oceanml3d.catalog import Catalog
+    from oceanml3d.cli import check_export_rim
+    from oceanml3d.variables import VariableSet
+
+    def grid(step):
+        lat = np.arange(32, 44 + 1e-9, step)
+        lon = np.arange(-66, -54 + 1e-9, step)
+        path = tmp_path / f"t{step}.nc"
+        xr.Dataset({"zos": (("time", "lat", "lon"), np.zeros((2, lat.size, lon.size)))},
+                   coords={"time": pd.date_range("2019-01-01", periods=2), "lat": lat, "lon": lon}).to_netcdf(path)
+        return Catalog({"t": str(path)})
+
+    vs = VariableSet.from_config({"zos": {"source": "t", "role": "target"}})
+
+    def cfg(crop, ev=True):
+        return OmegaConf.create({"data": {"domain": {"lat": [32, 44], "lon": [-66, -54]},
+                                          "eval_domain": {"lat": [33, 43], "lon": [-65, -55]} if ev else None},
+                                 "training": {"rec_weight": {"crop": {"time": 0, "lat": crop, "lon": crop}}}})
+
+    with pytest.raises(SystemExit, match=r"training.rec_weight.crop.lat=2"):
+        check_export_rim(cfg(4), grid(0.5), vs)
+    check_export_rim(cfg(2), grid(0.5), vs)                    # 1 deg rim: exactly the excluded margin
+    check_export_rim(cfg(4), grid(1 / 12), vs)                 # native: 0.33 deg
+    check_export_rim(cfg(4, ev=False), grid(0.5), vs)          # no eval_domain: nothing scored to protect

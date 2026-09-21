@@ -33,6 +33,11 @@ Ordered by what blocks the next result.
       (netCDF4 or cftime, by elimination) and pin it in `environment.yml`.
 - [ ] **`reports/` out of the repository** (a GitHub release or an artefact store): 39 MB of PNG
       and PDF for a 86 MB clone.
+- [ ] **The crop and the domain's outer rim.** `rec_weight.crop` is in cells and nothing covers the
+      domain's outer edge, so the product is NaN over `crop x step` (2° at 0.5°). `check_export_rim`
+      refuses it when it reaches into `eval_domain`, but the design question is open: a crop in cells
+      (the network's border artefacts are in cells), a crop in degrees, or a truth prepared over a box
+      larger than the task domain so the rim falls outside it — the classical answer.
 - [ ] Depth as a patch dimension — `PatchArray` is already generic over `DIMS`.
 
 The evaluation side has its own open list in `oceanml3d-eval/PLAN.md`: an in-situ ARGO reference

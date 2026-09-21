@@ -4,7 +4,8 @@ From building the image to a first training run, in order. Validate each step be
 
 Jean Zay is IDRIS's national cluster. This runbook covers the 3D multivariate gridded model;
 `docs/pipeline_3d.md` describes what the model *is* and what the data means, and is worth reading
-first.
+first. [`docs/tutorial.md`](../tutorial.md) walks through the same steps generically — rehearse its
+Part 1 on your own machine before the first job here.
 
 **Two constraints of Jean Zay govern everything below:**
 
@@ -206,8 +207,14 @@ exit
 ```
 
 Point `GLORYS_SRC` at wherever GLORYS should come from in `jobs/env/jeanzay.sh` — `$DSDIR` if IDRIS
-already mirrors it, a download directory otherwise. **Look in `$DSDIR` first**: if the reanalysis is
-already there you save the download, the space and the inodes.
+already mirrors it, a download directory otherwise (the default, `$SCRATCH/oceanml3d/raw/glorys`).
+**Look in `$DSDIR` first**: if the reanalysis is already there you save the download, the space and
+the inodes. Files are expected one directory per year, `$GLORYS_SRC/<year>/*.nc` — which is what the
+download writes.
+
+`copernicusmarine` and `argopy` are in the image built from `container/oceanml3d.def` since
+2026-09-21 (the `prepare` extra). An image built before that has neither: rebuild it, or the download
+steps fail on an import.
 
 ### G.2 Eleven years: a Slurm array, one year per task
 
@@ -217,9 +224,15 @@ sbatch --export=ALL,OCEANML3D_SITE=jeanzay --array=2015 jobs/slurm/prepare_glory
 sbatch --export=ALL,OCEANML3D_SITE=jeanzay jobs/slurm/concat_glorys.sbatch
 ```
 
+Each task **downloads its year if it is not in `$GLORYS_SRC/<year>` yet, then subsets it** into
+`by_year/` — the array runs on the pre/post node, which has the network, so the same two commands as on
+Datarmor (the array, then `concat`) do the whole preparation. `jobs/prepare.sh --site jeanzay download
+<year>` runs the download alone.
+
 One year per task, for the same reason as everywhere: a monolithic job saves nothing along the way,
 so a walltime overrun loses the lot. `regrid.py` skips completed outputs, so resubmitting the array
-resumes rather than restarts.
+resumes rather than restarts. (Until 2026-09-21 the recipe used here had no `${YEAR}` at all: every
+task rewrote one 2010-2020 store, `concat` found nothing in `by_year/`, and `zos` was dropped.)
 
 **Resolution.** Native 1/12 deg by default. For another step, set `OCEANML3D_TARGET_RES`; the data
 root then becomes `$OCEANML3D_DATA/res<step>` for every step, training included

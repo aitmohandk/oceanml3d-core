@@ -22,10 +22,13 @@ usage() {
 usage: jobs/prepare.sh [--site <name>] [--res <deg>] <step> [args]
 
 steps:
-  glorys <year>   subset one year of GLORYS truth from the site's source into by_year/
+  download <year> download one year of GLORYS into $GLORYS_SRC/<year> (needs network; nothing
+                  to do on a site that mirrors GLORYS, e.g. Datarmor)
+  glorys <year>   subset one year of GLORYS truth from the site's source into by_year/, after
+                  downloading it first if the recipe can and the year is not there yet
   concat          merge the per-year files into the consolidated file the configs expect
-  argo            ARGO coverage table: from the site's GDAC mirror if it has one
-                  (argo_profiles_gs.<site>.yaml), else downloaded   (then needs network)
+  argo            ARGO coverage table: from a local GDAC copy when ARGO_GDAC is set
+                  (argo_profiles_gs.gdac.yaml), else downloaded with argopy (needs network)
   obs             simulate the observing system: pseudo-obs and virtual ARGO
   all             argo, then obs -- the steps that do not need a year loop
 
@@ -35,7 +38,7 @@ environment:
   GLORYS_SRC         where GLORYS comes from. On Datarmor the read-only mirror
                      /home/ref-ocean-reanalysis/global-reanalysis-phy-001-030-daily -- there is no
                      reason to download what the centre already stores.
-  ARGO_GDAC          local Argo GDAC mirror, read by argo_profiles_gs.<site>.yaml
+  ARGO_GDAC          local Argo GDAC copy, read by argo_profiles_gs.gdac.yaml
   GLORYS_YEARS       first:last, used by `concat` for the output label (default 2010:2020)
   OCEANML3D_TARGET_RES  target grid step in degrees (or --res). Unset: native grid. Set, the data
                      root becomes $OCEANML3D_DATA/res<step> for every step, training included.
@@ -75,11 +78,39 @@ export OCEANML3D_DATA
 say() { echo "[prepare] $*"; }
 say "site=$SITE  data=$OCEANML3D_DATA  resolution=${OCEANML3D_TARGET_RES:-native}"
 
+glorys_recipe() {
+    local recipe="$RECIPES/glorys_gs_multidepth.$SITE.yaml"
+    [[ -f "$recipe" ]] || recipe="$RECIPES/glorys_gs_multidepth.yaml"
+    echo "$recipe"
+}
+
+step_download() {
+    local year="${1:?download <year>}"
+    export YEAR="$year" NEXT="$((year + 1))"
+    local recipe
+    recipe="$(glorys_recipe)"
+    # A site that mirrors GLORYS has a recipe without a `download:` block; running the download
+    # script on it would fail on a missing dataset_id, which says nothing about why.
+    if ! grep -q '^download:' "$recipe"; then
+        say "nothing to download: $SITE reads GLORYS from ${GLORYS_SRC:-its mirror} ($recipe)"
+        return 0
+    fi
+    say "downloading GLORYS $YEAR -> $GLORYS_SRC/$YEAR (network needed; \`copernicusmarine login\` once)"
+    mkdir -p "$GLORYS_SRC/$YEAR"
+    container_exec python scripts/prepare/download_copernicus.py --config "$recipe"
+}
+
 step_glorys() {
     local year="${1:?glorys <year>}"
     export YEAR="$year" NEXT="$((year + 1))"
-    local recipe="$RECIPES/glorys_gs_multidepth.$SITE.yaml"
-    [[ -f "$recipe" ]] || recipe="$RECIPES/glorys_gs_multidepth.yaml"
+    local recipe
+    recipe="$(glorys_recipe)"
+    # Download first when the recipe can and the year is not there. On Jean Zay the array already runs
+    # on a pre/post node, which has the network, so the same two commands as on Datarmor -- this
+    # step, then `concat` -- do the whole preparation.
+    if grep -q '^download:' "$recipe" && ! compgen -G "$GLORYS_SRC/$YEAR/*.nc" >/dev/null; then
+        step_download "$year"
+    fi
     say "GLORYS $YEAR from ${GLORYS_SRC:-the input: in the recipe} -> $OCEANML3D_DATA/by_year" \
         "(resolution ${OCEANML3D_TARGET_RES:-native})"
     container_exec python scripts/prepare/regrid.py --config "$recipe"
@@ -93,9 +124,14 @@ step_concat() {
 }
 
 step_argo() {
+    # A site-specific recipe if there is one; otherwise the local GDAC copy when ARGO_GDAC says where
+    # it is (Datarmor, or any site with an rsync of the GDAC); otherwise a download.
     local recipe="$RECIPES/argo_profiles_gs.$SITE.yaml"
     if [[ -f "$recipe" ]]; then
-        say "ARGO profiles and coverage table from ${ARGO_GDAC:-the gdac_dir in $recipe}"
+        say "ARGO profiles and coverage table, site recipe $recipe"
+    elif [[ -n "${ARGO_GDAC:-}" ]]; then
+        recipe="$RECIPES/argo_profiles_gs.gdac.yaml"
+        say "ARGO profiles and coverage table from $ARGO_GDAC"
     else
         recipe="$RECIPES/argo_profiles_gs.yaml"
         say "ARGO profiles and coverage table, downloaded with argopy (needs outbound network)"
@@ -110,6 +146,7 @@ step_obs() {
 }
 
 case "$STEP" in
+    download) step_download "$@" ;;
     glorys) step_glorys "$@" ;;
     concat) step_concat ;;
     argo)   step_argo ;;

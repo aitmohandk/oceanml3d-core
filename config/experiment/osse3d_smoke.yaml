@@ -26,7 +26,9 @@ data:
     uo: {depth_indices: *d3}
     vo: {depth_indices: *d3}
   domain: {lat: [-10, 10], lon: [-10, 10]}
-  eval_domain: {lat: [-9, 9], lon: [-9, 9]}
+  # 2 deg in from the domain, not 1: the synthetic grid is ~0.43 deg, so the default crop of 4 cells
+  # leaves a 1.7 deg rim of the product empty, and eval_domain has to exclude it (check_export_rim).
+  eval_domain: {lat: [-8, 8], lon: [-8, 8]}
   splits:
     train: {time: ["2019-01-01", "2019-01-31"]}
     val:   {time: ["2019-02-01", "2019-02-14"]}

@@ -6,9 +6,9 @@
 #PBS -j oe
 #PBS -o logs/
 #
-# A CPU queue, not `ftp`: Datarmor mirrors the Argo GDAC under /home/ref-argo/gdac and
-# scripts/prepare/recipes/argo_profiles_gs.datarmor.yaml reads it, so nothing is downloaded. Only a
-# site without a mirror falls back to argopy and needs outbound network (`-q ftp` on the qsub line).
+# A CPU queue, not `ftp`: Datarmor mirrors the Argo GDAC under /home/ref-argo/gdac, jobs/env/datarmor.sh
+# sets ARGO_GDAC to it, and scripts/prepare/recipes/argo_profiles_gs.gdac.yaml reads it -- nothing is
+# downloaded. Only a site without ARGO_GDAC falls back to argopy and needs outbound network (`-q ftp`).
 #     qsub -v OCEANML3D_SITE=datarmor jobs/pbs/prepare_argo.pbs
 #
 # Reading a few hundred float files off a shared mirror can outlast the walltime. The recipe's

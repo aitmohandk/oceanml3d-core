@@ -55,7 +55,9 @@ oceanml3d experiment=osse3d_smoke training=debug # OSSE-3D shape, synthetic
 ```
 
 They rely on `scripts/make_synthetic_data.py`. Use them to check that an edit did not break the
-plumbing before spending a GPU-hour.
+plumbing before spending a GPU-hour. To exercise the whole chain — preparation tools included — on the
+real task configuration, run [`tutorial.md` Part 1](tutorial.md#part-1--a-rehearsal-on-your-machine)
+(`experiment=tutorial`).
 
 ---
 
