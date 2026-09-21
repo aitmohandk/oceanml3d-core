@@ -1,5 +1,48 @@
 # Changelog
 
+## 2026-09-21: Training stops on an empty input instead of learning from it; TensorBoard optional
+
+**Summary:** the first training run on Datarmor crashed on a missing `tensorboard` — and that crash
+was the lucky part. Before it, the log printed 42 lines of `argo_thetao_dNN: 3662/3662 time steps
+(100.0%) are absent from the file`: the virtual ARGO file shared no date with the truth, so every ARGO
+channel would have been zero for the whole run. Nothing would have stopped it, and no metric would
+have flagged it — a model learns to ignore a channel that never carries information. Both are fixed,
+and a derived file is now checked before `prepare-obs` reuses it.
+
+**Files modified:**
+- `oceanml3d/data/open.py`:
+  - time gaps are reported **once per file** (worst count, number of channels, the first names)
+    instead of once per channel;
+  - a file sharing **no** date with the task is refused by name, with both time axes described and
+    the remedy (delete the derived file, it is rebuilt);
+  - `compute_norm_stats`: a channel with no finite value in the train window got a NaN mean, which
+    normalised all of it to NaN (the `invalid value encountered in divide` in the log). Now mean 0,
+    std 1, and a warning naming the channels.
+- `oceanml3d/cli.py`:
+  - `stale_derived_file(output, truth, newer_than=)`: an existing `prepare-obs` output is reused only
+    if it is on the truth's time axis and grid, and — for the virtual ARGO — newer than the coverage
+    table. Otherwise it is rebuilt, with the reason in the log. Pseudo-obs and virtual ARGO alike.
+  - the log always says what happened to the virtual ARGO file (`reusing …` / built / `no profile
+    table … using it as it is`). The failing run printed neither `virtual ARGO:` nor `skipped`.
+  - `_loggers`: TensorBoard when installed, CSV always. A viewer is not a training dependency, and
+    its absence used to fail the job after the data had been opened and the model built.
+- `pyproject.toml` — a `logging` extra with `tensorboard`; `container/oceanml3d.def` installs it and
+  checks the import at build time. `environment.yml` always had it; the image did not.
+- docs: `docs/pipeline_3d.md` §3.3 (idempotent is not "reuse whatever is there"),
+  `docs/platforms/datarmor.md` (two troubleshooting rows).
+
+**Rationale:** the tensorboard crash cost a job; the empty ARGO input would have cost a result —
+a model trained, validated and exported, with its in-situ input silently absent, and a comparison
+against the surface-only ablation that would have said ARGO brings nothing. The reindexing already
+knew, and said so 42 times, and then carried on: a warning that cannot change the outcome is not a
+check. Existence-based skipping is what makes `prepare-obs` idempotent, and it is also what let a file
+built against something else stand in for the real one.
+
+**Verification:** `pytest -m "not slow"` — 912 passed, 9 skipped. New: a virtual ARGO file on another
+time axis is rebuilt; a valid one is reused and the log says so; a file sharing no date with the task
+stops `open_variable_set` with its path in the message; a channel with no finite value gets mean 0 /
+std 1 and a warning; training falls back to CSV without TensorBoard; the image installs it.
+
 ## 2026-09-21: `jobs/run.sh` had its own copy of the container line, and missed every fix
 
 **Summary:** training failed on `Primary config directory not found. Check that the config directory

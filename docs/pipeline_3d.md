@@ -212,6 +212,15 @@ twice — once without the catalog, then `prepare-obs`, then once with it — an
 Idempotent and rank-safe: under DDP one process simulates while the others wait, and the writes go
 through a temporary name plus `os.replace`, so a waiting rank never reads a half-written file.
 
+**Idempotent does not mean "reuse whatever is there".** An existing output is checked before it is
+skipped: it must be on the truth's time axis and grid, and the virtual ARGO file must be newer than
+the coverage table it was simulated from. Otherwise it is rebuilt, and the log says why
+(`rebuilding …: its time axis is …, the truth's is …`). The log always says which of the two
+happened — `virtual ARGO: reusing …` or `virtual ARGO: <path>` — because the failure this guards
+against was silent: a virtual ARGO file with no date in common with the truth was reused, and a
+training run went ahead on an ARGO input that was zero everywhere. Should such a file still reach
+training, `open_variable_set` refuses it by name instead of filling 42 channels with zeros.
+
 What it produces, and why each part is not a toy:
 
 * **Altimeter tracks** — a closed-form repeat ground-track model, six real missions (Jason-3,

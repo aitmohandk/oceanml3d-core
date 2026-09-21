@@ -372,3 +372,27 @@ def test_run_sh_goes_through_container_exec_and_not_its_own_apptainer_line():
     assert "CONTAINER exec" in out and "oceanml3d command=validate" in out
     repo = __import__("pathlib").Path.cwd().resolve()
     assert f"--bind {repo}:{repo}" in out
+
+
+def test_training_falls_back_to_csv_when_tensorboard_is_missing(tmp_path, capsys):
+    """An image built without tensorboard failed the job in build_trainer, after the data had been
+    opened and the model built. TensorBoard is a viewer; the CSV log has every scalar it would show."""
+    from oceanml3d.cli import _loggers
+
+    class NoTensorBoard:
+        def __init__(self, *a, **k):
+            raise ModuleNotFoundError("Neither `tensorboard` nor `tensorboardX` is available.")
+
+    class CSV:
+        def __init__(self, *a, **k):
+            pass
+
+    loggers = _loggers(str(tmp_path), NoTensorBoard, CSV)
+    assert len(loggers) == 1 and isinstance(loggers[0], CSV)
+    assert "TensorBoard logging off" in capsys.readouterr().out
+
+
+def test_the_image_installs_tensorboard():
+    """environment.yml always had it; pyproject.toml, which the image installs from, did not."""
+    assert "logging" in open("container/oceanml3d.def").read().split("pip install --no-cache-dir -e")[1].split("\n")[0]
+    assert "tensorboard" in open("pyproject.toml").read()

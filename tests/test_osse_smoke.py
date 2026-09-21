@@ -142,3 +142,77 @@ def test_auto_patch_is_read_from_the_data(osse_dir):
     assert cfg.data.patch.lat == (n // 8) * 8 and cfg.data.stride.lat == cfg.data.patch.lat - 2 * 4
     dm.setup("fit")
     assert tuple(dm.datasets["train"][0].shape[-2:]) == (cfg.data.patch.lat, cfg.data.patch.lon)
+
+
+# --- a derived file that does not match the truth is rebuilt, not reused ----------------------------
+# The run that exposed this reused a virtual ARGO file with no date in common with the truth: 42 lines
+# of "100% absent", then training went ahead on an ARGO input that was zero everywhere.
+
+def _fresh(tmp_path_factory):
+    from make_synthetic_data import make, make_osse
+
+    out = tmp_path_factory.mktemp("osse_stale")
+    make(out, days=40, n=48)
+    make_osse(out, days=40, n=48, n_depth=3)
+    with initialize_config_dir(version_base="1.3", config_dir=CONFIG_DIR):
+        cfg = compose(config_name="main", overrides=["experiment=osse3d_smoke", f"paths.root={out}",
+                                                     "data.splits.train.time=[2019-01-01,2019-01-20]",
+                                                     "data.splits.val.time=[2019-01-21,2019-01-30]",
+                                                     "data.splits.test.time=[2019-01-31,2019-02-09]"])
+    # A coverage table, as scripts/prepare/argo_profiles.py writes it: without one, prepare-obs uses
+    # the synthetic ARGO file as it is and there is nothing to rebuild from.
+    import pandas as pd
+
+    rng = np.random.default_rng(0)
+    n = 60
+    table = pd.DataFrame({"time": pd.to_datetime("2019-01-01") + pd.to_timedelta(rng.integers(0, 39, n), "D"),
+                          "lat": rng.uniform(-9, 9, n), "lon": rng.uniform(-9, 9, n),
+                          "profile_id": [f"19000{i}_{i}" for i in range(n)],
+                          "d00": 1.0, "d01": 1.0, "d02": 1.0})
+    (out / "argo").mkdir(exist_ok=True)
+    table.to_csv(out / "argo" / "argo_profiles_gs.csv", index=False)
+    return out, cfg, build_catalog(cfg)
+
+
+def test_a_virtual_argo_file_on_another_time_axis_is_rebuilt(tmp_path_factory, capsys):
+    import pandas as pd
+    import xarray as xr
+
+    out, cfg, catalog = _fresh(tmp_path_factory)
+    prepare_observations(cfg, catalog)
+    argo = out / "synthetic_argo_virtual.nc"
+    good = xr.open_dataset(argo).load()
+    good.close()
+    good.assign_coords(time=good.time + pd.Timedelta(days=3650)).to_netcdf(argo)   # a decade off
+    capsys.readouterr()
+
+    prepare_observations(cfg, catalog)
+    log = capsys.readouterr().out
+    assert "rebuilding" in log and "time axis" in log, log
+    with xr.open_dataset(argo) as rebuilt:
+        assert pd.DatetimeIndex(rebuilt.time.values).equals(pd.DatetimeIndex(good.time.values))
+
+
+def test_a_valid_virtual_argo_file_is_reused_and_the_log_says_so(tmp_path_factory, capsys):
+    out, cfg, catalog = _fresh(tmp_path_factory)
+    prepare_observations(cfg, catalog)
+    capsys.readouterr()
+    prepare_observations(cfg, catalog)
+    assert "virtual ARGO: reusing" in capsys.readouterr().out
+
+
+def test_a_file_sharing_no_date_with_the_task_stops_the_run(tmp_path_factory):
+    import pandas as pd
+    import xarray as xr
+
+    out, cfg, catalog = _fresh(tmp_path_factory)
+    prepare_observations(cfg, catalog)
+    argo = out / "synthetic_argo_virtual.nc"
+    ds = xr.open_dataset(argo).load()
+    ds.close()
+    ds.assign_coords(time=ds.time + pd.Timedelta(days=3650)).to_netcdf(argo)
+    variables = build_variables(cfg)
+    with pytest.raises(ValueError, match="share no date with the rest of the task") as err:
+        open_variable_set(variables, catalog, {"lat": slice(-5, 5), "lon": slice(-5, 5),
+                                               "time": slice("2019-01-01", "2019-01-10")})
+    assert "synthetic_argo_virtual.nc" in str(err.value) and "delete it" in str(err.value)
