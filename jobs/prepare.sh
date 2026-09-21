@@ -27,8 +27,8 @@ steps:
   glorys <year>   subset one year of GLORYS truth from the site's source into by_year/, after
                   downloading it first if the recipe can and the year is not there yet
   concat          merge the per-year files into the consolidated file the configs expect
-  argo            ARGO coverage table: from the site's GDAC mirror if it has one
-                  (argo_profiles_gs.<site>.yaml), else downloaded   (then needs network)
+  argo            ARGO coverage table: from a local GDAC copy when ARGO_GDAC is set
+                  (argo_profiles_gs.gdac.yaml), else downloaded with argopy (needs network)
   obs             simulate the observing system: pseudo-obs and virtual ARGO
   all             argo, then obs -- the steps that do not need a year loop
 
@@ -38,7 +38,7 @@ environment:
   GLORYS_SRC         where GLORYS comes from. On Datarmor the read-only mirror
                      /home/ref-ocean-reanalysis/global-reanalysis-phy-001-030-daily -- there is no
                      reason to download what the centre already stores.
-  ARGO_GDAC          local Argo GDAC mirror, read by argo_profiles_gs.<site>.yaml
+  ARGO_GDAC          local Argo GDAC copy, read by argo_profiles_gs.gdac.yaml
   GLORYS_YEARS       first:last, used by `concat` for the output label (default 2010:2020)
   OCEANML3D_TARGET_RES  target grid step in degrees (or --res). Unset: native grid. Set, the data
                      root becomes $OCEANML3D_DATA/res<step> for every step, training included.
@@ -124,9 +124,14 @@ step_concat() {
 }
 
 step_argo() {
+    # A site-specific recipe if there is one; otherwise the local GDAC copy when ARGO_GDAC says where
+    # it is (Datarmor, or any site with an rsync of the GDAC); otherwise a download.
     local recipe="$RECIPES/argo_profiles_gs.$SITE.yaml"
     if [[ -f "$recipe" ]]; then
-        say "ARGO profiles and coverage table from ${ARGO_GDAC:-the gdac_dir in $recipe}"
+        say "ARGO profiles and coverage table, site recipe $recipe"
+    elif [[ -n "${ARGO_GDAC:-}" ]]; then
+        recipe="$RECIPES/argo_profiles_gs.gdac.yaml"
+        say "ARGO profiles and coverage table from $ARGO_GDAC"
     else
         recipe="$RECIPES/argo_profiles_gs.yaml"
         say "ARGO profiles and coverage table, downloaded with argopy (needs outbound network)"

@@ -1,16 +1,20 @@
 # Data preparation
 
-Which recipe produces which catalog key. The steps themselves are run through `jobs/prepare.sh`
-(`glorys <year>`, `concat`, `argo`, `obs`), which is what the PBS and Slurm wrappers call; the
+Which recipe produces which catalog key; [`tutorial.md`](tutorial.md) runs them in order, with what each
+writes and how to check it. The steps themselves are run through `jobs/prepare.sh`
+(`download <year>`, `glorys <year>`, `concat`, `argo`, `obs`), which is what the PBS and Slurm wrappers call; the
 runbooks [`platforms/datarmor.md`](platforms/datarmor.md) and
 [`platforms/jeanzay.md`](platforms/jeanzay.md) walk through it step by step, and
 [`pipeline_3d.md`](pipeline_3d.md) explains the task end to end.
 
 All recipes are YAML files under `scripts/prepare/recipes/` and can also be run directly with
-`python scripts/prepare/<tool>.py --config <recipe>`. Paths use `${OCEANML3D_RAW}` (downloads) and
-`${OCEANML3D_DATA}` (catalog root). A recipe named `<name>.<site>.yaml` is preferred over
-`<name>.yaml` when that site is selected — that is how Datarmor reads its local mirrors instead of
-downloading.
+`python scripts/prepare/<tool>.py --config <recipe>`. Paths use `${OCEANML3D_DATA}` (catalog root),
+`${OCEANML3D_RAW}` (downloads; `$OCEANML3D_DATA/raw` unless the site says otherwise) and
+`${GLORYS_SRC}` (where GLORYS is read; `$OCEANML3D_RAW/glorys` unless the site has a mirror).
+A recipe named `<name>.<site>.yaml` is preferred over `<name>.yaml` when that site is selected — that is
+how Datarmor reads its GLORYS mirror instead of downloading. For Argo, the choice is made by
+`ARGO_GDAC`: set, `argo_profiles_gs.gdac.yaml` reads that GDAC copy; unset, `argo_profiles_gs.yaml`
+downloads with argopy.
 
 Three things decide where the files land and what they are:
 
@@ -34,11 +38,11 @@ Three things decide where the files land and what they are:
 
 | Step | How | Output (catalog key) |
 |---|---|---|
-| GLORYS12 truth, one year | `jobs/prepare.sh glorys <year>` → `by_year/glorys_gs_multidepth_<year>.zarr` | — |
+| GLORYS12 truth, one year | `jobs/prepare.sh glorys <year>` → `by_year/glorys_gs_multidepth_<year>.zarr`; downloads the year into `$GLORYS_SRC/<year>` first on a site without a mirror (`download <year>` alone) | — |
 | GLORYS12 truth, merged | `jobs/prepare.sh concat` | `glorys_gs_multidepth` |
 | GLORYS12 truth, surface | the same Zarr store (`zos` has no depth axis, `lat` is a coordinate) | `glorys_gs_surface` |
 | Bathymetry on the GLORYS grid | **not prepared, and not needed**: the task ships with `bathy: null`. When you want it, GEBCO with `regrid.py` and `reference:` pointing at the prepared truth, then `ablation=bathy` | `bathy_gs` |
-| ARGO coverage table | `jobs/prepare.sh argo` — from the site's GDAC mirror when it has one (`source: gdac`, Datarmor's `/home/ref-argo/gdac`, read through its global index), else downloaded with `argopy` | `argo_profiles_gs` |
+| ARGO coverage table | `jobs/prepare.sh argo` — from a local GDAC copy when `ARGO_GDAC` is set (`argo_profiles_gs.gdac.yaml`, `source: gdac`; Datarmor's `/home/ref-argo/gdac`, read through its global index), else downloaded with `argopy` | `argo_profiles_gs` |
 
 On Datarmor neither GLORYS nor ARGO is downloaded: both are mirrored under `/home/ref-*`. The
 per-year step reads the mirror directly, cuts the Gulf Stream box in each file before any read, and

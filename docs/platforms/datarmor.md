@@ -4,7 +4,8 @@ From building the image to a first training run, in order. Validate each step be
 
 Datarmor is Ifremer's cluster (Pôle de Calcul et de Données Marines, Brest). This runbook covers the
 3D multivariate gridded model; `docs/pipeline_3d.md` describes what the model *is* and what the data
-means, and is worth reading first.
+means, and is worth reading first. [`docs/tutorial.md`](../tutorial.md) walks through the same steps
+generically — rehearse its Part 1 on your own machine before the first job here.
 
 **Three properties of Datarmor govern everything below:**
 
@@ -346,7 +347,7 @@ ls /home/ref-argo/gdac/                                  # dac/ and ar_index_glo
 head -12 /home/ref-argo/gdac/ar_index_global_prof.txt
 ```
 
-`scripts/prepare/recipes/argo_profiles_gs.datarmor.yaml` reads it (`source: gdac`,
+`scripts/prepare/recipes/argo_profiles_gs.gdac.yaml` reads it, since `jobs/env/datarmor.sh` sets `ARGO_GDAC` (`source: gdac`,
 `gdac_dir: ${ARGO_GDAC}`, set to `/home/ref-argo/gdac` in `jobs/env/datarmor.sh`, which also binds
 `/home/ref-argo`). So this runs on a **CPU queue, not `ftp`**, with no `argopy`:
 

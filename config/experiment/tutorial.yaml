@@ -1,0 +1,31 @@
+# @package _global_
+# The rehearsal of docs/tutorial.md: the real OSSE-3D task, osse3d_gs21_multivar_unet, shrunk to run on
+# a laptop CPU in minutes on the miniature sources of scripts/make_tutorial_sources.py (2018 and 2019,
+# 45 days each, at 0.5 deg). Everything else -- variables, domain, observing system, losses, export --
+# is the real configuration, which is the point: a rehearsal on a toy config would not rehearse much.
+defaults:
+  - osse3d_gs21_multivar_unet
+  - _self_
+
+data:
+  # Inside the fabricated years, with gaps longer than the 11-day window, as the validator requires.
+  splits:
+    train: {time: ["2018-01-01", "2018-02-14"]}
+    val:   {time: ["2019-01-01", "2019-01-20"]}
+    test:  {time: ["2019-02-02", "2019-02-14"]}
+
+model: {widths: [16, 32]}          # 0.4 M parameters instead of the reference's 15 M
+
+training:
+  num_workers: 2                   # as the real task: the workers are part of what is rehearsed
+  # At 0.5 deg the default crop of 4 cells leaves a 2 deg rim of the product empty, wider than the 1 deg
+  # eval_domain excludes; check_export_rim refuses it. 2 cells = 1 deg.
+  rec_weight: {crop: {time: 0, lat: 2, lon: 2}}
+  trainer:
+    accelerator: auto
+    max_epochs: 2
+    limit_train_batches: 4
+    limit_val_batches: 2
+    limit_test_batches: 2
+
+export: {time: null}               # the whole test split

@@ -15,8 +15,9 @@ traps — are separate, because the two kinds of knowledge go stale on different
 * **`docs/platforms/datarmor.md`** — Ifremer, PBS Pro, V100 32 GB
 * **`docs/platforms/jeanzay.md`** — IDRIS, Slurm, V100 / A100 / H100
 
-Companions: `docs/gridded_models.md` (configuration reference — the `variables:` block, the catalog,
-patching, losses), `jobs/README.md` (how the scheduler layer works), `docs/data_preparation.md`
+Companions: [`tutorial.md`](tutorial.md) (the same pipeline as a step-by-step manual, with the check
+after each step), `docs/gridded_models.md` (configuration reference — the `variables:` block, the
+catalog, patching, losses), `jobs/README.md` (how the scheduler layer works), `docs/data_preparation.md`
 (every recipe, including the surface-current tasks this page does not cover).
 
 ---
@@ -149,7 +150,7 @@ jobs/prepare.sh --site <site> argo
 ```
 
 Reads real ARGO profiles — from a local GDAC mirror when the site has one
-(`argo_profiles_gs.<site>.yaml`, `source: gdac`: Datarmor's `/home/ref-argo/gdac`, read through its
+(`argo_profiles_gs.gdac.yaml`, picked whenever `ARGO_GDAC` is set, `source: gdac`: Datarmor's `/home/ref-argo/gdac`, read through its
 global index so only the floats in the box are opened), otherwise downloaded with `argopy`, which
 needs outbound network. Then it applies QC on the standard flags, interpolates vertically, and writes
 the **coverage table**: where and when a float was, and how deep it reached. The values are thrown
@@ -158,7 +159,7 @@ geometry, simulated values.
 
 **This is the step that gets killed on walltime**, because it opens a few hundred float files off a
 shared, read-only mirror and that is slow in a way no amount of code can fix. Three things make it
-survivable, all on by default in `argo_profiles_gs.datarmor.yaml`:
+survivable, all on by default in `argo_profiles_gs.gdac.yaml`:
 
 | | What it does |
 |---|---|
@@ -391,6 +392,11 @@ Inherited from NOSC's `GUIDE_UTILISATION.md` §8, re-verified against this code.
 ---
 
 ## 8. Checking that it works, without any data
+
+The fullest check is [`tutorial.md` Part 1](tutorial.md#part-1--a-rehearsal-on-your-machine): every
+stage above on the real tools and the real configuration, on miniature sources fabricated in the
+GLORYS and GDAC layouts, in about ten minutes — and `pytest tests/test_tutorial.py` runs it. For a
+quicker look at the model path alone:
 
 ```bash
 oceanml3d command=list-models                                   # the registry loads

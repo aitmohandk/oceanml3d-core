@@ -82,7 +82,7 @@ Each entry in `CHANGELOG.md` should follow this format:
 
 - **Lint:** `ruff check .` — check code quality
 - **Type check:** `mypy .` — static type analysis
-- **Tests:** `pytest tests/ -v` — run full test suite (885 pass, 9 skip, ~5 min without `slow`)
+- **Tests:** `pytest tests/ -v` — run full test suite (944 pass, 9 skip, ~7 min without `slow`)
 - **Quick test:** `pytest tests/ -v -m "not slow"` — skip slow tests
 - **Coverage:** `pytest tests/ --cov=oceanml3d --cov-report=term`
 

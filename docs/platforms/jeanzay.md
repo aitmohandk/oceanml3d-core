@@ -4,7 +4,8 @@ From building the image to a first training run, in order. Validate each step be
 
 Jean Zay is IDRIS's national cluster. This runbook covers the 3D multivariate gridded model;
 `docs/pipeline_3d.md` describes what the model *is* and what the data means, and is worth reading
-first.
+first. [`docs/tutorial.md`](../tutorial.md) walks through the same steps generically — rehearse its
+Part 1 on your own machine before the first job here.
 
 **Two constraints of Jean Zay govern everything below:**
 

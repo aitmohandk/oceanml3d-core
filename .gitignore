@@ -91,3 +91,6 @@ reviewer-token
 *.pem
 *.key
 .netrc
+
+# docs/tutorial.md, Part 1: the rehearsal data and runs
+tutorial/

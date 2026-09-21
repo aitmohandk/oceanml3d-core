@@ -1,5 +1,57 @@
 # Changelog
 
+## 2026-09-21: A README that lists everything, and a tutorial that is also a test
+
+**Summary:** the documentation is restructured around two entry points. `README.md` now gives the
+overview, the **complete** list of what the repository does (tasks, experiments, models, ablations,
+observing-system simulation, data layer, training, export, preparation tools, cluster layer, the
+safeguards), how a pipeline runs step by step with the files each step reads and writes, where
+everything lives (repository, data directory, run directory), the commands, and a map of the detailed
+documents. `docs/tutorial.md` is the step-by-step manual from the sources to a scored product: a
+ten-minute rehearsal on your own machine with the real tools and the real task configuration, then
+the same steps on Datarmor and Jean Zay, then how to make it your own.
+
+The rehearsal is not a description of the chain, it is the chain: `tests/test_tutorial.py` extracts
+the `bash` blocks of the tutorial's Part 1 from the page and runs them in order. Running it that way
+before writing a word of it is what found the three defects of the previous entry, and two in
+`oceanml3d-eval`.
+
+**Files modified:**
+- `README.md` — rewritten (the entry point described above).
+- `docs/tutorial.md` — new.
+- `docs/README.md` — the index now starts from the README and the tutorial, and says which tests keep
+  the documentation true.
+- `docs/pipeline_3d.md`, `docs/gridded_models.md`, `docs/data_preparation.md`,
+  `docs/platforms/{datarmor,jeanzay}.md` — pointers to the tutorial; `data_preparation.md` states how
+  recipes and the Argo source are now chosen.
+- `scripts/make_tutorial_sources.py` (new) — a miniature GLORYS mirror (daily CMEMS-named files, one
+  directory per year, the 26 upper levels) and a miniature Argo GDAC (the global index and
+  `<dac>/<wmo>/<wmo>_prof.nc` with char QC flags), in their real layouts.
+- `config/experiment/tutorial.yaml` (new) — `osse3d_gs21_multivar_unet` shrunk to a laptop: splits
+  inside the fabricated years, a 0.4 M-parameter U-Net, two epochs, crop 2 for 0.5°. Everything else is
+  the real task.
+- `scripts/prepare/recipes/argo_profiles_gs.datarmor.yaml` → `argo_profiles_gs.gdac.yaml`, and
+  `jobs/prepare.sh argo` picks it whenever `ARGO_GDAC` is set: any site with a GDAC copy reads it, not
+  only Datarmor. Datarmor's site file sets `ARGO_GDAC`, so nothing changes there. A site-specific
+  `argo_profiles_gs.<site>.yaml` still wins if one exists.
+- `tests/test_tutorial.py` (new) — steps 0–4 of Part 1 in the fast suite (~20 s), steps 5–6 (training,
+  inference) marked slow (~1 min); run directories it creates are removed.
+- `tests/test_docs.py` (new) — every relative link and anchor of the maintained documents resolves
+  (GitHub's slug rule, 91 links in 15 documents); the README names every `config/data`,
+  `config/experiment`, `config/model`, `config/ablation` and `config/paths` entry, every CLI command
+  and every `jobs/prepare.sh` step.
+- `.gitignore` — `tutorial/`.
+- `AGENTS.md` — the test count.
+
+**Rationale:** the README was a layout and five commands; what the project *does* was spread over
+756 lines of `gridded_models.md` and 405 of `pipeline_3d.md`, and the only end-to-end walk-throughs
+were the two cluster runbooks, which nobody can rehearse without a cluster account. A manual whose
+commands have never been run together is a list of hopes; this one is run by the test suite.
+
+**Verification:** `pytest -m "not slow"` — 944 passed, 9 skipped; `tests/test_tutorial.py -m slow`
+passes (train, test, export, predict, contract check). The scoring step (Part 1 step 7) was run by hand
+against `oceanml3d-eval` with its two fixes applied.
+
 ## 2026-09-21: Three defects found by running the whole chain — a deadlock, an empty rim, a dead path
 
 **Summary:** before documenting the pipeline end to end, it was run end to end here — the real tools

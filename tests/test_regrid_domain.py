@@ -238,7 +238,7 @@ def test_the_glorys_chain_paths_meet():
     merged = concat["output"].replace("${YEAR}-${NEXT}", "2010-2020")
     assert merged == "${OCEANML3D_DATA}/" + catalog["glorys_gs_multidepth"]["path"]
     assert argo["truth"] == merged
-    datarmor_argo = yaml.safe_load((rec / "argo_profiles_gs.datarmor.yaml").read_text())
+    datarmor_argo = yaml.safe_load((rec / "argo_profiles_gs.gdac.yaml").read_text())
     assert datarmor_argo["source"] == "gdac" and datarmor_argo["truth"] == merged
     for r in (argo, datarmor_argo):
         assert r["output"] == "${OCEANML3D_DATA}/" + catalog["argo_profiles_gs"]["path"]
