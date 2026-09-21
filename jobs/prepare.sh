@@ -22,7 +22,10 @@ usage() {
 usage: jobs/prepare.sh [--site <name>] [--res <deg>] <step> [args]
 
 steps:
-  glorys <year>   subset one year of GLORYS truth from the site's source into by_year/
+  download <year> download one year of GLORYS into $GLORYS_SRC/<year> (needs network; nothing
+                  to do on a site that mirrors GLORYS, e.g. Datarmor)
+  glorys <year>   subset one year of GLORYS truth from the site's source into by_year/, after
+                  downloading it first if the recipe can and the year is not there yet
   concat          merge the per-year files into the consolidated file the configs expect
   argo            ARGO coverage table: from the site's GDAC mirror if it has one
                   (argo_profiles_gs.<site>.yaml), else downloaded   (then needs network)
@@ -75,11 +78,39 @@ export OCEANML3D_DATA
 say() { echo "[prepare] $*"; }
 say "site=$SITE  data=$OCEANML3D_DATA  resolution=${OCEANML3D_TARGET_RES:-native}"
 
+glorys_recipe() {
+    local recipe="$RECIPES/glorys_gs_multidepth.$SITE.yaml"
+    [[ -f "$recipe" ]] || recipe="$RECIPES/glorys_gs_multidepth.yaml"
+    echo "$recipe"
+}
+
+step_download() {
+    local year="${1:?download <year>}"
+    export YEAR="$year" NEXT="$((year + 1))"
+    local recipe
+    recipe="$(glorys_recipe)"
+    # A site that mirrors GLORYS has a recipe without a `download:` block; running the download
+    # script on it would fail on a missing dataset_id, which says nothing about why.
+    if ! grep -q '^download:' "$recipe"; then
+        say "nothing to download: $SITE reads GLORYS from ${GLORYS_SRC:-its mirror} ($recipe)"
+        return 0
+    fi
+    say "downloading GLORYS $YEAR -> $GLORYS_SRC/$YEAR (network needed; \`copernicusmarine login\` once)"
+    mkdir -p "$GLORYS_SRC/$YEAR"
+    container_exec python scripts/prepare/download_copernicus.py --config "$recipe"
+}
+
 step_glorys() {
     local year="${1:?glorys <year>}"
     export YEAR="$year" NEXT="$((year + 1))"
-    local recipe="$RECIPES/glorys_gs_multidepth.$SITE.yaml"
-    [[ -f "$recipe" ]] || recipe="$RECIPES/glorys_gs_multidepth.yaml"
+    local recipe
+    recipe="$(glorys_recipe)"
+    # Download first when the recipe can and the year is not there. On Jean Zay the array already runs
+    # on a pre/post node, which has the network, so the same two commands as on Datarmor -- this
+    # step, then `concat` -- do the whole preparation.
+    if grep -q '^download:' "$recipe" && ! compgen -G "$GLORYS_SRC/$YEAR/*.nc" >/dev/null; then
+        step_download "$year"
+    fi
     say "GLORYS $YEAR from ${GLORYS_SRC:-the input: in the recipe} -> $OCEANML3D_DATA/by_year" \
         "(resolution ${OCEANML3D_TARGET_RES:-native})"
     container_exec python scripts/prepare/regrid.py --config "$recipe"
@@ -110,6 +141,7 @@ step_obs() {
 }
 
 case "$STEP" in
+    download) step_download "$@" ;;
     glorys) step_glorys "$@" ;;
     concat) step_concat ;;
     argo)   step_argo ;;

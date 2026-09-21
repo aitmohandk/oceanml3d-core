@@ -1,17 +1,33 @@
-# 1) download:  python scripts/prepare/download_copernicus.py --config <this file>   (uses the `download:` block)
-# 2) subset:    python scripts/prepare/regrid.py --config <this file>                (keeps the depth axis)
+# GLORYS12 truth, one year, on a site WITHOUT a local mirror (Jean Zay unless $DSDIR has it, a
+# workstation). The Datarmor twin, glorys_gs_multidepth.datarmor.yaml, reads the centre's read-only
+# mirror instead and has no `download:` block.
+#
+#     jobs/prepare.sh --site <site> glorys <year>    # downloads the year if it is not there, then subsets it
+#     jobs/prepare.sh --site <site> download <year>  # the download alone (needs network)
+#     jobs/prepare.sh --site <site> concat           # merges by_year/ into the store the catalog reads
+#
+# Per year, like the Datarmor recipe, and for the same reason: eleven years in one job is what kills a
+# walltime, and a per-year output is what makes a killed job resumable. This file used to be a single
+# 2010-2020 job with no ${YEAR} in it -- every task of the array rewrote (or skipped) the same store,
+# nothing ever reached by_year/ for `concat` to merge, it read from ${OCEANML3D_RAW}, which no site
+# set, and it dropped `zos`, which the `glorys_gs_surface` key reads from this very store.
 download:
   dataset_id: cmems_mod_glo_phy_my_0.083deg_P1D-m
   variables: [thetao, uo, vo, zos]
   bbox: [-66, -54, 32, 44]
-  time: ["2010-01-01", "2020-01-11"]
-  depth: [0, 200]
-  output: ${OCEANML3D_RAW}/glorys_gs
-input: ${OCEANML3D_RAW}/glorys_gs/*.nc
-output: ${OCEANML3D_DATA}/glorys/glorys_gs_multidepth_2010-2020.zarr
-variables: {thetao: thetao, uo: uo, vo: vo}
-keep_depth: true
+  time: ["${YEAR}-01-01", "${YEAR}-12-31"]
+  depth: [0, 200]            # the 26 upper levels, 0.5 .. 186 m: the task's depth_indices stop at 25
+  output: ${GLORYS_SRC}/${YEAR}
+
+input: ${GLORYS_SRC}/${YEAR}/*.nc
+output: ${OCEANML3D_DATA}/by_year/glorys_gs_multidepth_${YEAR}.zarr
+zarr_chunks: {time: 32}
+
+variables: {thetao: thetao, uo: uo, vo: vo, zos: zos}
+time: ["${YEAR}-01-01", "${YEAR}-12-31"]
 domain: {lat: [32, 44], lon: [-66, -54]}
+max_gb: 20
+keep_depth: true
+
 resolution: ${OCEANML3D_TARGET_RES}   # unset -> native 1/12 deg; e.g. 0.25 -> bilinear on the domain grid
 method: none
-time: ["2010-01-01", "2020-01-11"]

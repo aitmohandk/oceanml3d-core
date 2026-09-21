@@ -55,7 +55,9 @@ plots = ["matplotlib>=3.8"]
 # NetCDF alone works without it.
 zarr = ["zarr>=2.16"]
 # only `scripts/prepare/` needs these, and only to *download* — nothing in the package imports them.
-prepare = ["copernicusmarine>=1.0", "cdsapi>=0.7", "xesmf>=0.8"]
+# argopy is the ARGO download on a site with no GDAC mirror (Jean Zay); it used to be only in
+# environment.yml, so the image could not run that step at all.
+prepare = ["copernicusmarine>=1.0", "cdsapi>=0.7", "xesmf>=0.8", "argopy>=0.1.15"]
 dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4"]
 # The TensorBoard logger. Optional -- training falls back to CSV without it -- but the image
 # installs it, and environment.yml always has: the two used to disagree, and the image lost.

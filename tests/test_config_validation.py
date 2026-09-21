@@ -396,3 +396,80 @@ def test_the_image_installs_tensorboard():
     """environment.yml always had it; pyproject.toml, which the image installs from, did not."""
     assert "logging" in open("container/oceanml3d.def").read().split("pip install --no-cache-dir -e")[1].split("\n")[0]
     assert "tensorboard" in open("pyproject.toml").read()
+
+
+def test_the_generic_glorys_recipe_is_per_year_and_keeps_zos():
+    """The recipe for sites without a mirror had no ${YEAR}: every task of the array rewrote the same
+    2010-2020 store, nothing reached by_year/ for `concat`, it read ${OCEANML3D_RAW} which no site set,
+    and it dropped `zos`, which the `glorys_gs_surface` key reads from this very store."""
+    import glob
+
+    import yaml
+
+    for path in glob.glob("scripts/prepare/recipes/glorys_gs_multidepth*.yaml"):
+        r = yaml.safe_load(open(path))
+        assert "${YEAR}" in r["output"] and "/by_year/" in r["output"], path
+        assert "zos" in r["variables"], f"{path} drops zos"
+        assert "${GLORYS_SRC}" in r["input"], f"{path} does not read through GLORYS_SRC"
+        if "download" in r:
+            assert "zos" in r["download"]["variables"] and "${YEAR}" in r["download"]["output"], path
+
+
+def test_every_variable_a_recipe_uses_is_set_by_the_job_layer():
+    """`${OCEANML3D_RAW}` appeared in five recipes and no site file set it: the pattern stayed
+    literal and matched nothing. Every `${VAR}` in a recipe must be set by load_site, a site file, or
+    jobs/prepare.sh -- or be one of the per-run variables the job wrappers export."""
+    import glob
+    import re
+
+    provided = set()
+    for f in glob.glob("jobs/env/*.sh") + ["jobs/prepare.sh"]:
+        provided |= set(re.findall(r"export\s+([A-Z_][A-Z0-9_]*)=", open(f).read()))
+        provided |= set(re.findall(r"export\s+([A-Z_][A-Z0-9_]*)\s", open(f).read()))
+    provided |= {"YEAR", "NEXT", "OCEANML3D_TARGET_RES"}
+    for path in glob.glob("scripts/prepare/recipes/*.yaml"):
+        used = set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*)\}", open(path).read()))
+        assert used <= provided, f"{path} uses {sorted(used - provided)}, which nothing sets"
+
+
+def test_prepare_download_is_a_no_op_on_a_site_that_mirrors_glorys(tmp_path):
+    """A mirror site's recipe has no `download:` block; running the download script on it failed on
+    a missing dataset_id. On a copy of jobs/ with a fabricated mirror site, since the real site files
+    load modules that do not exist here."""
+    import shutil
+    import subprocess
+
+    repo = tmp_path / "repo"
+    shutil.copytree("jobs", repo / "jobs")
+    (repo / "scripts/prepare/recipes").mkdir(parents=True)
+    (repo / "jobs/env/mirror.sh").write_text(
+        'export OCEANML3D_DATA="${OCEANML3D_DATA:-/tmp}"\nexport OCEANML3D_PATHS=local\n'
+        'source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"\n')
+    (repo / "scripts/prepare/recipes/glorys_gs_multidepth.mirror.yaml").write_text(
+        "input: /mirror/*_${YEAR}*.nc\noutput: ${OCEANML3D_DATA}/by_year/g_${YEAR}.zarr\n")
+    out = subprocess.run(["bash", "-c", f"OCEANML3D_DATA={tmp_path}/data OCEANML3D_USER_ENV=/dev/null "
+                          f"{repo}/jobs/prepare.sh --site mirror download 2015"],
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert "nothing to download" in out.stdout
+
+
+def test_load_site_sets_raw_and_glorys_src_ahead_of_the_resolution_suffix(tmp_path):
+    import subprocess
+
+    script = (f"source jobs/env/_lib.sh; OCEANML3D_USER_ENV=/dev/null OCEANML3D_DATA={tmp_path} "
+              f"OCEANML3D_TARGET_RES=0.5 load_site local $PWD >/dev/null; "
+              f'echo "RAW=$OCEANML3D_RAW"; echo "SRC=$GLORYS_SRC"; echo "DATA=$OCEANML3D_DATA"')
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout
+    assert f"RAW={tmp_path}/raw" in out and f"SRC={tmp_path}/raw/glorys" in out, out
+    assert f"DATA={tmp_path}/res0.5" in out, "a download is the same whatever grid it is put on"
+
+
+def test_the_image_installs_the_download_tools():
+    """Jean Zay has no GLORYS or Argo mirror, so its only paths are copernicusmarine and argopy --
+    neither of which the image installed, while the runbook said copernicusmarine was in it."""
+    text = open("container/oceanml3d.def").read()
+    install = text.split("pip install --no-cache-dir -e")[1].split("\n")[0]
+    assert "prepare" in install
+    assert "copernicusmarine" in text and "argopy" in text
+    assert "argopy" in open("pyproject.toml").read()

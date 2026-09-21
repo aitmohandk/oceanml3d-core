@@ -133,7 +133,8 @@ class OceanDataModule(LightningDataModule):
     def _loader(self, split: str, shuffle: bool, evaluation: bool = False) -> DataLoader:
         ds = self.eval_datasets[split] if evaluation else self.datasets[split]
         return DataLoader(ds, batch_size=self.batch_size, shuffle=shuffle,
-                          num_workers=self.num_workers, pin_memory=True)
+                          num_workers=self.num_workers, pin_memory=True,
+                          worker_init_fn=_single_threaded_dask if self.num_workers else None)
 
     def train_dataloader(self):
         return self._loader("train", True)
@@ -147,6 +148,22 @@ class OceanDataModule(LightningDataModule):
 
     def predict_dataloader(self):
         return self._loader("test", False)
+
+
+def _single_threaded_dask(_worker_id: int) -> None:
+    """Each DataLoader worker reads its patches with dask's synchronous scheduler.
+
+    Workers are *forked* from a process that has already run dask's threaded scheduler -- setup
+    computes the normalisation statistics before any loader exists. A fork copies the scheduler's
+    thread pool object but not its threads, so the first ``.values`` in a worker queues its tasks on a
+    pool nobody serves and waits forever: the run froze at "Sanity Checking" with the workers asleep
+    on a futex and the parent polling them, which on a cluster means until the walltime. The
+    parallelism is the workers themselves; a thread pool inside each of them would only oversubscribe
+    the cores, so synchronous costs nothing.
+    """
+    import dask
+
+    dask.config.set(scheduler="synchronous")
 
 
 def _cached(da, path: str):

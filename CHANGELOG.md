@@ -1,5 +1,60 @@
 # Changelog
 
+## 2026-09-21: Three defects found by running the whole chain — a deadlock, an empty rim, a dead path
+
+**Summary:** before documenting the pipeline end to end, it was run end to end here — the real tools
+and the real `osse3d_gs21_multivar_unet` config, on a miniature GLORYS mirror and Argo GDAC fabricated
+in their exact layouts, at 0.5° as on Datarmor. Three defects came out, each of which would have cost
+a job on a cluster.
+
+**1. Training froze at "Sanity Checking", forever.** DataLoader workers are forked after setup has run
+dask's threaded scheduler (the normalisation statistics). A fork copies the pool object and not its
+threads, so the first read in a worker queued its tasks on a pool nobody served: workers asleep on a
+futex, the parent polling them, no error — on a cluster, until the walltime. It happens with any
+`num_workers > 0`, and `osse3d_gs21_multivar_unet` sets 2: every real run of the task. Workers now read
+with dask's synchronous scheduler (`_single_threaded_dask`, `worker_init_fn`); the parallelism is the
+workers themselves.
+
+**2. At 0.5°, a 2° rim of the product was empty.** `training.rec_weight.crop` is in cells (4), and no
+neighbouring patch covers the domain's outer edge, so the product is NaN over `crop x step`: 0.33° at
+1/12°, inside the 1° `eval_domain` excludes; 2° at 0.5°, so the exported field covered 34–42 °N of a
+32–44 °N box and a band the metrics score was empty. `auto` had fitted the patch and the stride to the
+resolution, not the crop. `check_export_rim` now reports the rim on every run and refuses a crop whose
+rim reaches into `eval_domain`, naming the crop that fits (2 at 0.5°). Which remedy is right — a crop
+in cells, a wider eval margin, a truth prepared over a larger box — is a design choice left open in
+`PLAN.md`. `osse3d_smoke` had the same defect (1.7° rim, 1° margin): its `eval_domain` is now 2° in.
+
+**3. GLORYS could not be prepared on any site but Datarmor.** The generic recipe, used everywhere
+without a mirror, had no `${YEAR}` (every array task rewrote one 2010–2020 store), never wrote
+`by_year/` (so `concat` found nothing), read `${OCEANML3D_RAW}` (which no site set) and dropped `zos`
+(which `glorys_gs_surface` reads from that store). Nothing called the download either, and neither
+`copernicusmarine` nor `argopy` was in the image — while the Jean Zay runbook said the first was.
+
+**Files modified:**
+- `oceanml3d/data/datamodule.py` — `worker_init_fn=_single_threaded_dask` whenever `num_workers > 0`.
+- `oceanml3d/cli.py` — `check_export_rim`, called by `validate` and before training.
+- `scripts/prepare/recipes/glorys_gs_multidepth.yaml` — per year, into `by_year/`, from
+  `${GLORYS_SRC}/${YEAR}`, with `zos`, and a per-year `download:` block writing there.
+- `jobs/env/_lib.sh` — `load_site` defaults `OCEANML3D_RAW=$OCEANML3D_DATA/raw` and
+  `GLORYS_SRC=$OCEANML3D_RAW/glorys`, set before the `res<step>` suffix (a download is the same
+  whatever grid it is later put on).
+- `jobs/prepare.sh` — a `download <year>` step (a no-op, said so, on a site whose recipe has no
+  `download:` block); `glorys <year>` downloads first when it can and the year is absent, so on Jean
+  Zay the array and `concat` do the whole preparation, as on Datarmor.
+- `pyproject.toml` — `argopy` in the `prepare` extra; `container/oceanml3d.def` installs `prepare` and
+  checks both imports at build time.
+- `config/experiment/osse3d_smoke.yaml` — `eval_domain` 2° in.
+- `docs/platforms/jeanzay.md` (G.1, G.2), `docs/platforms/datarmor.md` (two troubleshooting rows).
+
+**Verification:** the chain above ran to a contract-valid 64-variable product through `jobs/run.sh`
+and `jobs/prepare.sh` exactly as a job calls them. `pytest -m "not slow"` — 919 passed, 9 skipped.
+New tests: workers do not deadlock after dask has used threads (in a subprocess with a timeout; it
+times out on the previous `datamodule.py`), the rim check (0.5° refused with the fitting crop, 0.5° with
+crop 2 accepted, native accepted, no `eval_domain` accepted), every GLORYS recipe is per year and keeps
+`zos`, every `${VAR}` a recipe uses is set by the job layer, `download` is a no-op on a mirror site,
+`load_site` sets RAW and GLORYS_SRC ahead of the resolution suffix, the image installs the download
+tools.
+
 ## 2026-09-21: Training stops on an empty input instead of learning from it; TensorBoard optional
 
 **Summary:** the first training run on Datarmor crashed on a missing `tensorboard` — and that crash

@@ -106,6 +106,47 @@ def resolve_auto_patch(cfg: DictConfig, catalog: Catalog, variables: VariableSet
         f"{dim}: {sizes[dim]} cells -> patch {d.patch[dim]}, stride {d.stride[dim]}" for dim in wanted) + ")")
 
 
+def check_export_rim(cfg: DictConfig, catalog: Catalog, variables: VariableSet) -> None:
+    """Refuse a crop whose uncovered rim reaches into ``eval_domain``.
+
+    ``training.rec_weight.crop`` is in *cells*, and no neighbouring patch covers the outer edge of
+    the domain, so the exported product is NaN over a rim ``crop x grid step`` wide. At 1/12 deg the
+    default 4 cells is 0.33 deg, well inside the 1 deg rim ``eval_domain`` excludes. At 0.5 deg it is
+    2 deg: the product covered 34-42 N of a 32-44 N box, and a band the metrics score was empty.
+    ``auto`` fitted the patch and the stride to the resolution; the crop it did not.
+    """
+    import numpy as np
+
+    from oceanml3d.data.open import open_variable
+
+    ev = cfg.data.get("eval_domain")
+    crop = OmegaConf.to_container(cfg.training.rec_weight.get("crop", {}), resolve=True)
+    if not ev or not any(int(crop.get(dim, 0)) for dim in ("lat", "lon")):
+        return
+    dom = OmegaConf.to_container(cfg.data.domain, resolve=True)
+    da = open_variable(variables.targets[0], catalog, {k: slice(*v) for k, v in dom.items()})
+    problems, rims = [], []
+    for dim in ("lat", "lon"):
+        cells = int(crop.get(dim, 0))
+        if not cells or dim not in da.coords or da.sizes.get(dim, 0) < 2 or dim not in ev:
+            continue
+        step = float(np.median(np.abs(np.diff(np.asarray(da[dim].values, float)))))
+        rim = cells * step
+        margin = min(float(ev[dim][0]) - float(dom[dim][0]), float(dom[dim][1]) - float(ev[dim][1]))
+        rims.append(f"{dim} {rim:.3g} deg ({cells} cells x {step:.3g})")
+        if rim > margin + 0.5 * step:
+            fit = max(0, int((margin + 0.5 * step) // step))
+            problems.append(f"{dim}: the crop leaves a {rim:.3g} deg rim of the product empty ({cells} cells "
+                            f"x {step:.3g} deg), wider than the {margin:.3g} deg that eval_domain excludes. "
+                            f"Either training.rec_weight.crop.{dim}={fit} (the stride follows when it is "
+                            f"`auto`), or an eval_domain at least {rim:.3g} deg inside the domain, or a finer "
+                            f"resolution.")
+    if rims:
+        print("[oceanml3d] exported product empty over the outer rim: " + ", ".join(rims))
+    if problems:
+        raise SystemExit("invalid configuration:\n  - " + "\n  - ".join(problems))
+
+
 def build_model(cfg: DictConfig, variables: VariableSet, norm_stats):
     import inspect
 
@@ -193,6 +234,7 @@ def main(cfg: DictConfig) -> None:
         catalog, variables = build_catalog(cfg), build_variables(cfg)
         resolve_auto_patch(cfg, catalog, variables)
         check_config(cfg, catalog, variables)
+        check_export_rim(cfg, catalog, variables)
         print(f"configuration '{cfg.experiment_name}' is valid")
         return
     if cmd == "prepare-obs":
@@ -211,6 +253,7 @@ def main(cfg: DictConfig) -> None:
         prepare_observations(cfg, catalog)
     resolve_auto_patch(cfg, catalog, variables)
     check_config(cfg, catalog, variables)
+    check_export_rim(cfg, catalog, variables)
     dm = build_datamodule(cfg, variables, catalog)
     dm.setup("fit")
     model = build_model(cfg, variables, dm.norm_stats())

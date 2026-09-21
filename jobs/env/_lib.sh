@@ -140,5 +140,13 @@ load_site() {
     fi
     # shellcheck source=/dev/null
     source "$env_file"
+    # Where downloads land, and where GLORYS is read from when the site has no mirror of its own.
+    # Before the res<step> suffix: a download is the same whatever grid it is later put on. The
+    # recipes used ${OCEANML3D_RAW} and no site file set it, so the pattern stayed literal and
+    # matched nothing.
+    if [[ -n "${OCEANML3D_DATA:-}" ]]; then
+        export OCEANML3D_RAW="${OCEANML3D_RAW:-$OCEANML3D_DATA/raw}"
+        export GLORYS_SRC="${GLORYS_SRC:-$OCEANML3D_RAW/glorys}"
+    fi
     resolve_data_dir
 }
